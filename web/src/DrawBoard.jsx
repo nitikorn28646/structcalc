@@ -1,0 +1,432 @@
+﻿// Large drawing workspace: walls → columns → wall plates → interior plates, all by clicking on a snapped grid.
+// Nothing is drawn automatically; each layer has an "auto" button that only runs when pressed.
+import { useEffect, useRef, useState } from "react";
+import { CircleDot, Columns3, Eraser, FileUp, Hand, Magnet, MousePointer2, Redo2, Ruler, Square, Undo2, Wand2 } from "lucide-react";
+import { fmt } from "./beamModel.js";
+import { autoInnerPlates } from "../engine/roofMembers.js";
+import { LINE_COLORS } from "./Roof3D.jsx";
+import { guessRole, parseDxf, toPlan } from "./dxfImport.js";
+
+const TOOLS = [
+  ["select", "เลือก/ย้าย", MousePointer2, "ลากมุมผนังหรือเสาเพื่อย้าย · ลากพื้นที่ว่างเพื่อเลื่อนภาพ · หมุนล้อเมาส์เพื่อซูม"],
+  ["wall", "1 ผนัง", Square, "คลิกทีละมุม · คลิกจุดแรกหรือดับเบิลคลิกเพื่อปิดรูป (ร่างใหม่ทับของเดิม) · คลิกป้ายกลางขอบเพื่อสลับ ปั้นหยา/จั่ว"],
+  ["column", "2 เสา", Columns3, "คลิกวางเสา (ดูดเข้ามุมผนัง/แนวผนัง/กริด)"],
+  ["plate", "3 อะเส", Ruler, "คลิกเสาต้น → เสาปลาย · ต่อเส้นต่อไปได้เลย · Esc/คลิกขวา เพื่อจบเส้น"],
+  ["inner", "4 อะเสรับดั้ง", Ruler, "คลิกจุดเริ่มบนอะเส → จุดปลาย · ล็อคแนวแกน X/Y เสมอ · ผ่านดั้ง (วงกลมเขียว)"],
+  ["dang", "ดั้ง", CircleDot, "คลิกวางดั้ง (ดูดเข้าแนวอกไก่/โหนด) · ลบด้วยเครื่องมือลบ · ย้ายด้วยเครื่องมือเลือก"],
+  ["erase", "ลบ", Eraser, "คลิกเสา อะเส หรืออะเสรับดั้งที่ต้องการลบ"],
+];
+const PLATE = "#465fff", INNER = "#f79009", COL = "#1d2939";
+
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+function segDist(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2));
+  return { d: Math.hypot(a[0] + dx * t - p[0], a[1] + dy * t - p[1]), q: [a[0] + dx * t, a[1] + dy * t] };
+}
+
+// grid from the distinct wall-corner coordinates (each corner then sits on a grid node)
+function autoGrid(pts) {
+  const u = (a) => [...new Set(a.map((v) => +v.toFixed(3)))].sort((x, y) => x - y), xs = u(pts.map((p) => p[0])), ys = u(pts.map((p) => p[1]));
+  const gaps = (v) => v.slice(1).map((x, i) => +(x - v[i]).toFixed(3));
+  return { x0: xs[0], y0: ys[0], dx: gaps(xs), dy: gaps(ys), sub: 1 };
+}
+
+export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark }) {
+  const svg = useRef(null), [tool, setTool] = useState("column"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true);
+  const [start, setStart] = useState(null), [draft, setDraft] = useState([]), [cur, setCur] = useState(null), [drag, setDrag] = useState(null);
+  const [hist, setHist] = useState({ undo: [], redo: [] }), [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null);
+  const cols = roof.columns ?? [], plates = roof.plates ?? [], inner = roof.innerPlates ?? [];
+  const posts = fr?.posts.filter((p) => p.kind === "ดั้ง") ?? [], dangList = roof.dang ?? posts.map((p) => [+p.x.toFixed(3), +p.y.toFixed(3)]);
+  const ridgeSegs = (g?.lines ?? []).filter((l) => l.type === "ridge" || l.type === "hip" || l.type === "valley").map((l) => [[l.p[0], l.p[1]], [l.q[0], l.q[1]], "แนวอกไก่/ตะเข้"]);
+  // view box in model metres (y up): fit the eave once, then free pan / zoom
+  const fit = () => {
+    const P = g?.eave ?? roof.pts, xs = P.map((p) => p[0]), ys = P.map((p) => p[1]), pad = 2;
+    const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad;
+    return { x: x0, y: y0, w: Math.max(...xs) - x0 + pad, h: Math.max(...ys) - y0 + pad };
+  };
+  const [vb, setVb] = useState(fit);
+  // structural grid (STAAD-style): axis spacings → grid lines A, B, … / 1, 2, …, optional subdivision of every bay
+  const G = roof.grid ?? autoGrid(roof.pts), nsub = G.sub || 1;
+  const axis = (o, ds) => ds.reduce((a, d) => [...a, +(a[a.length - 1] + d).toFixed(4)], [o]);
+  const GX = axis(G.x0, G.dx), GY = axis(G.y0, G.dy);
+  const subdiv = (P) => P.flatMap((v, i) => (i ? Array.from({ length: nsub }, (_, k) => +(P[i - 1] + ((v - P[i - 1]) * (k + 1)) / nsub).toFixed(4)) : [v]));
+  // extra grid lines at any coordinate (plates or columns off the main axes)
+  const merge = (A, extra = []) => [...new Set([...A, ...extra.map((v) => +(+v).toFixed(4))])].sort((p, q) => p - q);
+  const SX = merge(subdiv(GX), G.ax), SY = merge(subdiv(GY), G.ay);
+  const xName = (i) => String.fromCharCode(65 + i), yName = (i) => String(GY.length - i); // 1 at the top, like the drawings
+  const nodeName = (p) => { const i = GX.findIndex((x) => Math.abs(x - p[0]) < 1e-6), j = GY.findIndex((y) => Math.abs(y - p[1]) < 1e-6); return i >= 0 && j >= 0 ? `โหนด ${xName(i)}-${yName(j)}` : `โหนด (${fmt(p[0], 2)}, ${fmt(p[1], 2)})`; };
+  const setGrid = (patch) => set("grid", { ...G, ...patch });
+  const px = () => vb.w / (svg.current?.clientWidth || 1000); // metres per screen pixel
+  const toModel = (e) => {
+    const p = svg.current.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+    const q = p.matrixTransform(svg.current.getScreenCTM().inverse());
+    return [q.x, -q.y];
+  };
+
+  // ---- state changes with undo
+  const snapshot = () => ({ pts: roof.pts, edges: roof.edges, columns: roof.columns ?? null, plates: roof.plates ?? null, innerPlates: roof.innerPlates ?? null, dang: roof.dang ?? null });
+  const commit = (patch) => {
+    setHist((h) => ({ undo: [...h.undo.slice(-50), snapshot()], redo: [] }));
+    for (const [k, v] of Object.entries(patch)) set(k, v);
+  };
+  const restore = (from, to) => {
+    if (!hist[from].length) return;
+    const s = hist[from][hist[from].length - 1];
+    setHist((h) => ({ [from]: h[from].slice(0, -1), [to]: [...h[to], snapshot()] }));
+    for (const [k, v] of Object.entries(s)) set(k, v);
+  };
+
+  // ---- snapping: columns, plate ends, wall corners, posts, crossings of walls / plates, points on lines, then grid
+  const wallSegs = roof.pts.map((a, i) => [a, roof.pts[(i + 1) % roof.pts.length], "แนวผนัง"]);
+  const allSegs = [...wallSegs, ...plates.map((l) => [l.a, l.b]), ...inner.map((l) => [l.a, l.b]), ...ridgeSegs], crossings = [];
+  for (let i = 0; i < allSegs.length; i++) for (let j = i + 1; j < allSegs.length; j++) {
+    const [a, b] = allSegs[i], [c, e] = allSegs[j], rx = b[0] - a[0], ry = b[1] - a[1], sx = e[0] - c[0], sy = e[1] - c[1], den = rx * sy - ry * sx;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den, u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den;
+    if (t > -1e-6 && t < 1 + 1e-6 && u > -1e-6 && u < 1 + 1e-6) crossings.push([a[0] + rx * t, a[1] + ry * t]);
+  }
+  // where grid lines cross walls, plates, beams and ridges (e.g. a ดั้ง on the ridge at grid line x = 8.75)
+  for (const [a, b] of allSegs) {
+    for (const x of SX) { const dx = b[0] - a[0]; if (Math.abs(dx) > 1e-9) { const t = (x - a[0]) / dx; if (t > 1e-6 && t < 1 - 1e-6) crossings.push([x, +(a[1] + (b[1] - a[1]) * t).toFixed(4)]); } }
+    for (const y of SY) { const dy = b[1] - a[1]; if (Math.abs(dy) > 1e-9) { const t = (y - a[1]) / dy; if (t > 1e-6 && t < 1 - 1e-6) crossings.push([+(a[0] + (b[0] - a[0]) * t).toFixed(4), y]); } }
+  }
+  const snap = (raw, from, forceOrtho) => {
+    let p = raw;
+    if ((ortho || forceOrtho) && from) p = Math.abs(raw[0] - from[0]) >= Math.abs(raw[1] - from[1]) ? [raw[0], from[1]] : [from[0], raw[1]];
+    if (!snapOn) return { p, kind: null };
+    const r = 22 * px(), axis = (ortho || forceOrtho) && from ? (Math.abs(p[1] - from[1]) < 1e-9 ? 1 : 0) : -1; // -1 free, 1 horizontal, 0 vertical
+    const keep = (q) => (axis < 0 ? q : axis === 1 ? [q[0], from[1]] : [from[0], q[1]]); // stay on the locked axis
+    const pts = [...cols.map((c) => [c, "เสา"]), ...plates.flatMap((l) => [[l.a, "ปลายอะเส"], [l.b, "ปลายอะเส"]]), ...roof.pts.map((c) => [c, "มุมผนัง"]),
+      ...inner.flatMap((l) => [[l.a, "ปลายอะเสรับดั้ง"], [l.b, "ปลายอะเสรับดั้ง"]]), ...posts.map((c) => [[c.x, c.y], "ดั้ง"]), ...crossings.map((c) => [c, "จุดตัด"]),
+      ...ridgeSegs.flatMap(([a, b]) => [[a, "ปลายอกไก่/ตะเข้"], [b, "ปลายอกไก่/ตะเข้"]]), ...SX.flatMap((x) => SY.map((y) => [[x, y], null]))];
+    let best = null;
+    for (const [c, kind] of pts) { const q = keep(c), d = dist(q, p); if (d < r && dist(q, c) < r && (!best || d < best.d - 1e-9)) best = { d, p: axis < 0 ? c : q, kind: kind ?? nodeName(c) }; }
+    if (best) return best;
+    if (axis >= 0) { // locked axis: where it meets walls, plates, beams, ridges and grid lines
+      let hit = null;
+      const take = (q, kind) => { const dd = dist(q, p); if (dd < r && (!hit || dd < hit.d)) hit = { d: dd, p: q, kind }; };
+      for (const [a, b, kind] of [...wallSegs, ...plates.map((l) => [l.a, l.b, "แนวอะเส"]), ...inner.map((l) => [l.a, l.b, "แนวอะเสรับดั้ง"]), ...ridgeSegs]) {
+        const den = axis === 1 ? b[1] - a[1] : b[0] - a[0];
+        if (Math.abs(den) < 1e-9) continue;
+        const t = axis === 1 ? (from[1] - a[1]) / den : (from[0] - a[0]) / den;
+        if (t >= -1e-6 && t <= 1 + 1e-6) take([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], `ชน${kind ?? "แนวอกไก่/ตะเข้"}`);
+      }
+      for (const v of axis === 1 ? SX : SY) take(axis === 1 ? [v, from[1]] : [from[0], v], "ชนเส้นกริด");
+      if (hit) return hit;
+    }
+    return { p: null, kind: "ไม่มีโหนด — ขยับใกล้จุดตัดกริด" }; // nodes only, like STAAD's snap grid
+  };
+  const round = (p) => p.map((v) => +v.toFixed(3));
+
+  // ---- pointer handling
+  const lineTool = tool === "plate" || tool === "inner";
+  const onMove = (e) => {
+    const raw = toModel(e);
+    lastRaw.current = raw;
+    if (drag?.pan) { const k = px(); setVb((v) => ({ ...v, x: drag.vb.x - (e.clientX - drag.sx) * k, y: drag.vb.y + (e.clientY - drag.sy) * k })); return; }
+    if (drag?.what) {
+      const s = snap(raw).p;
+      if (!s) return;
+      const p = round(s);
+      if (drag.what === "dang") set("dang", drag.list.map((v, i) => (i === drag.i ? p : v)));
+      else if (drag.what === "pt") set("pts", roof.pts.map((v, i) => (i === drag.i ? p : v)));
+      else set("columns", cols.map((v, i) => (i === drag.i ? p : v)));
+      return;
+    }
+    const from = lineTool ? start : tool === "wall" ? draft[draft.length - 1] : null;
+    setCur(snap(raw, from, tool === "inner"));
+  };
+  const onDown = (e) => {
+    if (e.button === 2) { setStart(null); setDraft([]); return; }
+    const raw = toModel(e), r = 12 * px();
+    if (e.button === 1 || tool === "select") {
+      if (tool === "select" && e.button === 0) {
+        const di = dangList.findIndex((c) => dist(c, raw) < r);
+        if (di >= 0) { setHist((h) => ({ undo: [...h.undo.slice(-50), snapshot()], redo: [] })); setDrag({ what: "dang", i: di, list: dangList }); return; }
+        const ci = cols.findIndex((c) => dist(c, raw) < r), pi = roof.pts.findIndex((c) => dist(c, raw) < r);
+        if (ci >= 0 || pi >= 0) { setHist((h) => ({ undo: [...h.undo.slice(-50), snapshot()], redo: [] })); setDrag({ what: ci >= 0 ? "col" : "pt", i: ci >= 0 ? ci : pi }); return; }
+      }
+      setDrag({ pan: true, sx: e.clientX, sy: e.clientY, vb }); return;
+    }
+    // snap from the click position itself (a click may arrive without a preceding move)
+    const sp = tool === "erase" ? raw : snap(raw, lineTool ? start : tool === "wall" ? draft[draft.length - 1] : null, tool === "inner").p;
+    if (!sp) return;
+    if (tool !== "erase") return place(round(sp), r);
+    const di = dangList.findIndex((c) => dist(c, raw) < r);
+    if (di >= 0) return commit({ dang: dangList.filter((_, i) => i !== di) });
+    const ci = cols.findIndex((c) => dist(c, raw) < r);
+    if (ci >= 0) return commit({ columns: cols.filter((_, i) => i !== ci) });
+    const ii = inner.findIndex((l) => segDist(raw, l.a, l.b).d < r);
+    if (ii >= 0) return commit({ innerPlates: inner.filter((_, i) => i !== ii) });
+    const pi = plates.findIndex((l) => segDist(raw, l.a, l.b).d < r);
+    if (pi >= 0) commit({ plates: plates.filter((_, i) => i !== pi) });
+  };
+  // put one point with the current tool (from a click or from a typed length)
+  const place = (p, r = 0.05) => {
+    if (tool === "column") { if (!cols.some((c) => dist(c, p) < 0.05)) commit({ columns: [...cols, p] }); return; }
+    if (tool === "dang") { if (!dangList.some((c) => dist(c, p) < 0.05)) commit({ dang: [...dangList, p] }); return; }
+    if (lineTool) {
+      if (!start) { setStart(p); return; }
+      if (dist(start, p) < 0.1) return;
+      const key = tool === "plate" ? "plates" : "innerPlates", list = tool === "plate" ? plates : inner;
+      commit({ [key]: [...list, { a: start, b: p }] });
+      setStart(tool === "plate" ? p : null); // plates chain on, interior plates are single lines
+    } else if (tool === "wall") {
+      if (draft.length >= 3 && dist(draft[0], p) < r) return closeWall();
+      setDraft([...draft, p]);
+    }
+  };
+  // typed length (CAD-style direct distance): after the first point type e.g. 2.35 then Enter;
+  // the point goes that far from the last point towards the mouse, along the locked axis
+  const typedPoint = () => {
+    const from = lineTool ? start : tool === "wall" ? draft[draft.length - 1] : null, L = parseFloat(typed), m = lastRaw.current;
+    if (!from || !(L > 0) || !m) return null;
+    let v = [m[0] - from[0], m[1] - from[1]];
+    if (ortho || tool === "inner") v = Math.abs(v[0]) >= Math.abs(v[1]) ? [Math.sign(v[0]) || 1, 0] : [0, Math.sign(v[1]) || 1];
+    const n = Math.hypot(...v) || 1;
+    return round([from[0] + (v[0] / n) * L, from[1] + (v[1] / n) * L]);
+  };  const closeWall = () => {
+    if (draft.length < 3) return;
+    commit({ pts: draft, edges: draft.map(() => ({ type: "hip" })), supports: null });
+    setDraft([]);
+  };
+  useEffect(() => {
+    const k = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      const drawing = (lineTool && start) || (tool === "wall" && draft.length);
+      if (e.key === "Escape") { setStart(null); setDraft([]); setTyped(""); }
+      else if (drawing && /^[0-9.]$/.test(e.key)) setTyped((t) => t + e.key);
+      else if (drawing && e.key === "Backspace") setTyped((t) => t.slice(0, -1));
+      else if (e.key === "Enter" && typed) { const p = typedPoint(); setTyped(""); if (p) place(p); }
+      else if (e.key === "Enter" && tool === "wall") closeWall();
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); restore("undo", "redo"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); restore("redo", "undo"); }
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  });
+  const onWheel = (e) => {
+    const m = toModel(e), f = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+    setVb((v) => ({ x: m[0] - (m[0] - v.x) * f, y: m[1] - (m[1] - v.y) * f, w: v.w * f, h: v.h * f }));
+  };
+  useEffect(() => { // wheel must be non-passive to stop the page from scrolling
+    const el = svg.current, h = (e) => e.preventDefault();
+    el.addEventListener("wheel", h, { passive: false });
+    return () => el.removeEventListener("wheel", h);
+  }, []);
+
+  // ---- automatic layouts (only on request)
+  const autoColumns = () => {
+    const out = [];
+    roof.pts.forEach((a, i) => {
+      const b = roof.pts[(i + 1) % roof.pts.length], n = Math.max(1, Math.ceil(dist(a, b) / (roof.design?.plateSpan || 4) - 1e-9));
+      for (let k = 0; k < n; k++) { const p = round([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]); if (!out.some((c) => dist(c, p) < 0.05)) out.push(p); }
+    });
+    commit({ columns: out });
+  };
+  const autoPlates = () => commit({ plates: roof.pts.map((a, i) => ({ a, b: roof.pts[(i + 1) % roof.pts.length] })) });
+  const autoInner = () => g && fr && commit({ innerPlates: autoInnerPlates(g, fr) });
+
+  // ---- drawing helpers (svg y = −y)
+  const k = px(), S = (p) => `${p[0]},${-p[1]}`, ring = (P) => P.map(S).join(" ");
+  // structural grid: axis lines dash-dot with bubbles (A, B… along X, 1, 2… along Y), subdivision lines faint
+  const ext = { x0: Math.min(...SX) - 1.5, x1: Math.max(...SX) + 1.5, y0: Math.min(...SY) - 1.5, y1: Math.max(...SY) + 1.5 };
+  const grid = [
+    ...SX.filter((x) => !GX.some((v) => Math.abs(v - x) < 1e-6)).map((x, i) => <line key={`sx${i}`} x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} strokeWidth={0.6 * k} />),
+    ...SY.filter((y) => !GY.some((v) => Math.abs(v - y) < 1e-6)).map((y, i) => <line key={`sy${i}`} y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} strokeWidth={0.6 * k} />),
+  ];
+  grid.push(...(G.ax ?? []).map((x, i) => <g key={`ax${i}`}><line x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} stroke="#f79009" strokeOpacity={0.55} strokeWidth={1 * k} strokeDasharray={`${6 * k} ${4 * k}`} />
+    <text x={x} y={-(ext.y0 - 14 * k)} fontSize={10 * k} textAnchor="middle" fill="#f79009" stroke="none">{fmt(x, 2)}</text></g>));
+  grid.push(...(G.ay ?? []).map((y, i) => <g key={`ay${i}`}><line y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} stroke="#f79009" strokeOpacity={0.55} strokeWidth={1 * k} strokeDasharray={`${6 * k} ${4 * k}`} />
+    <text x={ext.x0 - 4 * k} y={-y} fontSize={10 * k} textAnchor="end" dominantBaseline="middle" fill="#f79009" stroke="none">{fmt(y, 2)}</text></g>));
+  const bubble = (key, p, t) => (
+    <g key={key}><circle cx={p[0]} cy={-p[1]} r={11 * k} fill={dark ? "#181c30" : "#fff"} stroke={dark ? "#9097b1" : "#667085"} strokeWidth={1.2 * k} />
+      <text x={p[0]} y={-p[1]} fontSize={11 * k} textAnchor="middle" dominantBaseline="central" stroke="none" fill={dark ? "#cdd1e2" : "#344054"}>{t}</text></g>
+  );
+  const axes = [
+    ...GX.flatMap((x, i) => [<line key={`gx${i}`} x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} strokeWidth={1.1 * k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />,
+      bubble(`bx${i}`, [x, ext.y1 + 12 * k], xName(i))]),
+    ...GY.flatMap((y, i) => [<line key={`gy${i}`} y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} strokeWidth={1.1 * k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />,
+      bubble(`by${i}`, [ext.x1 + 12 * k, y], yName(i))]),
+    ...GX.slice(1).map((x, i) => <text key={`dx${i}`} x={(x + GX[i]) / 2} y={-(ext.y1 - 4 * k)} fontSize={10 * k} textAnchor="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(x - GX[i], 2)}</text>),
+    ...GY.slice(1).map((y, i) => <text key={`dy${i}`} x={ext.x1 - 4 * k} y={-(y + GY[i]) / 2} fontSize={10 * k} textAnchor="end" dominantBaseline="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(y - GY[i], 2)}</text>),
+  ];
+  const from = lineTool ? start : tool === "wall" ? draft[draft.length - 1] : null, live = cur?.p && from ? dist(from, cur.p) : null;
+  const txt = (p, s, color, size = 12, anchor = "middle") => <text x={p[0]} y={-p[1]} fontSize={size * k} fill={color} textAnchor={anchor} dominantBaseline="middle">{s}</text>;
+  const btn = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1";
+  const info = TOOLS.find((t) => t[0] === tool);
+
+  return (
+    <main className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-5">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2">
+        {TOOLS.map(([key, label, Icon]) => (
+          <button key={key} onClick={() => { setTool(key); setStart(null); setDraft([]); }}
+            className={`${btn} ${tool === key ? "bg-brand-500 text-[#fff] ring-brand-500" : "text-gray-700 ring-gray-300 hover:bg-gray-50"}`}><Icon className="h-3.5 w-3.5" />{label}</button>
+        ))}
+        <span className="mx-1 h-6 w-px bg-gray-200" />
+        <button onClick={() => setOrtho(!ortho)} className={`${btn} ${ortho ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}>ล็อคแกน X/Y</button>
+        <button onClick={() => setSnapOn(!snapOn)} className={`${btn} ${snapOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Magnet className="h-3.5 w-3.5" />ล็อคโหนด</button>
+        <select value={nsub} onChange={(e) => setGrid({ sub: Number(e.target.value) })} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2 text-xs">
+          {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v === 1 ? "โหนดเฉพาะแกน" : `แบ่งช่องละ ${v}`}</option>)}
+        </select>
+        <button onClick={() => restore("undo", "redo")} disabled={!hist.undo.length} title="ย้อนกลับ (Ctrl+Z)" className={`${btn} text-gray-600 ring-gray-300 disabled:opacity-40`}><Undo2 className="h-3.5 w-3.5" /></button>
+        <button onClick={() => restore("redo", "undo")} disabled={!hist.redo.length} title="ทำซ้ำ (Ctrl+Y)" className={`${btn} text-gray-600 ring-gray-300 disabled:opacity-40`}><Redo2 className="h-3.5 w-3.5" /></button>
+        <button onClick={() => setVb(fit())} title="พอดีจอ" className={`${btn} text-gray-600 ring-gray-300`}><Hand className="h-3.5 w-3.5" />พอดีจอ</button>
+        <div className="ml-auto">{modeBar}</div>
+      </div>
+
+      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_260px]">
+        <div className="relative min-h-[480px] overflow-hidden rounded-2xl border border-gray-200 bg-white">
+          <svg ref={svg} viewBox={`${vb.x} ${-(vb.y + vb.h)} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet"
+            className={`h-full w-full select-none ${tool === "select" ? "cursor-grab" : "cursor-crosshair"}`}
+            onPointerMove={onMove} onPointerDown={onDown} onPointerUp={() => setDrag(null)} onPointerLeave={() => { setDrag(null); setCur(null); }}
+            onDoubleClick={() => tool === "wall" && closeWall()} onContextMenu={(e) => e.preventDefault()} onWheel={onWheel}>
+            <g stroke={dark ? "#323a5c" : "#e4e7ec"}>{grid}</g>
+            <g stroke={dark ? "#6e7591" : "#98a2b3"}>{axes}</g>
+            {g && <polygon points={ring(g.eave)} fill={dark ? "#7b8cff0d" : "#465fff08"} stroke="#8b8d98" strokeWidth={1.2 * k} strokeDasharray={`${6 * k} ${4 * k}`} />}
+            {g?.lines.filter((l) => l.type !== "eave").map((l, i) => <line key={`r${i}`} x1={l.p[0]} y1={-l.p[1]} x2={l.q[0]} y2={-l.q[1]} stroke={LINE_COLORS[l.type]} strokeWidth={1.5 * k} opacity={0.45} />)}
+            <polygon points={ring(roof.pts)} fill="none" stroke={dark ? "#cdd1e2" : "#344054"} strokeWidth={2.5 * k} />
+            {tool === "wall" && roof.pts.map((a, i) => {
+              const b = roof.pts[(i + 1) % roof.pts.length], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], gable = roof.edges[i]?.type === "gable";
+              return (
+                <g key={`e${i}`} className="cursor-pointer" onPointerDown={(e) => { e.stopPropagation(); commit({ edges: roof.edges.map((x, j) => (j === i ? { type: gable ? "hip" : "gable" } : x)) }); }}>
+                  <rect x={m[0] - 26 * k} y={-m[1] - 9 * k} width={52 * k} height={18 * k} rx={4 * k} fill={gable ? LINE_COLORS.rake : dark ? "#3a4163" : "#fff"} stroke="#98a2b3" strokeWidth={k} />
+                  {txt(m, gable ? "จั่ว" : "ปั้นหยา", gable ? "#fff" : dark ? "#e3e6f0" : "#344054", 11)}
+                  {txt([m[0], m[1] - 18 * k], `${fmt(dist(a, b), 2)} ม.`, "#667085", 11)}
+                </g>
+              );
+            })}
+            {plates.map((l, i) => <line key={`p${i}`} x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={PLATE} strokeWidth={5 * k} strokeLinecap="round" />)}
+            {inner.map((l, i) => (
+              <g key={`i${i}`}>
+                <line x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={INNER} strokeWidth={4 * k} strokeLinecap="round" />
+                {txt([(l.a[0] + l.b[0]) / 2 + 10 * k, (l.a[1] + l.b[1]) / 2 + 10 * k], `B${i + 1}`, INNER, 12, "start")}
+              </g>
+            ))}
+            {posts.map((p, i) => {
+              // red = no interior plate carries this ดั้ง (its load would be lost)
+              const bad = loose.some((q) => Math.abs(q[0] - p.x) < 0.01 && Math.abs(q[1] - p.y) < 0.01);
+              return (
+                <g key={`d${i}`}>
+                  {bad && <circle cx={p.x} cy={-p.y} r={13 * k} fill="#f0443833" stroke="#f04438" strokeWidth={1.5 * k} />}
+                  <circle cx={p.x} cy={-p.y} r={7 * k} fill={bad ? "#f04438" : "none"} stroke={bad ? "#f04438" : "#12b76a"} strokeWidth={2 * k} />
+                  {bad && txt([p.x + 16 * k, p.y + 12 * k], "! ไม่มีอะเสรับ", "#f04438", 11, "start")}
+                </g>
+              );
+            })}
+            {cols.map((c, i) => <rect key={`c${i}`} x={c[0] - 6 * k} y={-c[1] - 6 * k} width={12 * k} height={12 * k} fill={dark ? "#f2f4fa" : COL} stroke={dark ? "#0f1222" : "#fff"} strokeWidth={1.5 * k} />)}
+            {tool === "select" && roof.pts.map((c, i) => <circle key={`v${i}`} cx={c[0]} cy={-c[1]} r={6 * k} fill={dark ? "#0f1222" : "#fff"} stroke="#465fff" strokeWidth={2 * k} />)}
+            {draft.length > 0 && <polyline points={[...draft, ...(cur?.p ? [cur.p] : [])].map(S).join(" ")} fill="none" stroke="#344054" strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />}
+            {from && cur?.p && lineTool && <line x1={from[0]} y1={-from[1]} x2={cur.p[0]} y2={-cur.p[1]} stroke={tool === "plate" ? PLATE : INNER} strokeWidth={4 * k} opacity={0.6} />}
+            {cur?.p && tool !== "select" && (
+              <g pointerEvents="none">
+                <circle cx={cur.p[0]} cy={-cur.p[1]} r={5 * k} fill="none" stroke="#f04438" strokeWidth={2 * k} />
+                {txt([cur.p[0] + 12 * k, cur.p[1] + 14 * k], `${cur.kind ?? ""}${live !== null ? ` · ${fmt(live, 2)} ม.` : ""}${typed ? ` · พิมพ์ระยะ ${typed} ม. ↵` : ""}`, "#f04438", 12, "start")}
+              </g>
+            )}
+          </svg>
+          <div className="pointer-events-none absolute bottom-2 left-3 rounded-lg bg-white/90 px-2 py-1 text-[12px] text-gray-600 shadow-theme-xs">{info[3]}</div>
+          {cur && <div className={`pointer-events-none absolute right-3 top-2 rounded-lg bg-white/90 px-2 py-1 text-[12px] tabular-nums shadow-theme-xs ${cur.p ? "text-gray-600" : "text-red-600"}`}>
+            {cur.p ? `${cur.kind ?? ""} · X ${fmt(cur.p[0], 2)} · Y ${fmt(cur.p[1], 2)}` : cur.kind}</div>}
+        </div>
+
+        <div className="space-y-3 overflow-y-auto">
+          <section className="rounded-2xl border border-gray-200 bg-white p-3 text-[13px]">
+            <label className={`${btn} w-full cursor-pointer justify-center bg-brand-500 text-[#fff] ring-brand-500`}><FileUp className="h-3.5 w-3.5" />นำเข้าจาก CAD (DXF)
+              <input type="file" accept=".dxf" className="hidden" onChange={async (e) => {
+                const f = e.target.files[0]; e.target.value = "";
+                if (!f) return;
+                const dxf = parseDxf(await f.text()), all = Object.values(dxf.layers).flat().flatMap((x) => x.pts);
+                const span = all.length ? Math.max(...all.map((p) => p[0])) - Math.min(...all.map((p) => p[0])) : 0;
+                setImp({ name: f.name, dxf, scale: dxf.unit ?? (span > 300 ? 0.001 : 1), roles: Object.fromEntries(Object.keys(dxf.layers).map((l) => [l, guessRole(l)])) });
+              }} />
+            </label>
+            <p className="mt-1 text-[11px] text-gray-400">วาดใน AutoCAD แยกเลเยอร์ ผนัง / เสา / อะเส / อะเสรับดั้ง แล้ว Save As DXF</p>
+          </section>
+          <section className="space-y-2 rounded-2xl border border-gray-200 bg-white p-3 text-[13px]">
+            <div className="font-semibold text-gray-800">กริดโครงสร้าง (ระยะแกน ม.)</div>
+            {[["dx", "แกน X (A, B, …)"], ["dy", "แกน Y (ล่าง → บน)"]].map(([key, label]) => (
+              <label key={key + G[key].join()} className="block text-[11px] text-gray-500">{label}
+                <input defaultValue={G[key].join("  ")} onBlur={(e) => { const v = e.target.value.split(/[\s,]+/).map(Number).filter((x) => x > 0); if (v.length) setGrid({ [key]: v }); }}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} className="mt-0.5 h-8 w-full rounded-lg border border-gray-300 bg-transparent px-2 text-[13px] text-gray-800 tabular-nums" />
+              </label>
+            ))}
+            <div className="grid grid-cols-2 gap-2">
+              {[["x0", "เริ่มแกน X"], ["y0", "เริ่มแกน Y"]].map(([key, label]) => (
+                <label key={key + G[key]} className="block text-[11px] text-gray-500">{label}
+                  <input type="number" step="0.1" defaultValue={G[key]} onBlur={(e) => setGrid({ [key]: Number(e.target.value) || 0 })}
+                    className="compact-num mt-0.5 h-8 w-full rounded-lg border border-gray-300 bg-transparent px-2 text-[13px] text-gray-800" />
+                </label>
+              ))}
+            </div>
+            {[["ax", "เส้นกริดเสริม X (พิกัด)"], ["ay", "เส้นกริดเสริม Y (พิกัด)"]].map(([key, label]) => (
+              <label key={key + (G[key] ?? []).join()} className="block text-[11px] text-[#f79009]">{label}
+                <input defaultValue={(G[key] ?? []).join("  ")} placeholder="เช่น 5.25  8.7" onBlur={(e) => setGrid({ [key]: e.target.value.split(/[\s,]+/).filter(Boolean).map(Number).filter(Number.isFinite) })}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} className="mt-0.5 h-8 w-full rounded-lg border border-gray-300 bg-transparent px-2 text-[13px] text-gray-800 tabular-nums" />
+              </label>
+            ))}
+            <button onClick={() => set("grid", null)} className={`${btn} w-full justify-center text-gray-700 ring-gray-300 hover:bg-gray-50`}><Wand2 className="h-3.5 w-3.5" />สร้างกริดจากมุมผนัง</button>
+            <p className="text-[11px] text-gray-400">ใส่ระยะช่วงแกนตามแบบ เช่น 3.5 2.5 0.9 3.6 3.5 แล้วกด Enter · คลิกได้เฉพาะจุดตัดกริด (โหนด) · ระหว่างวาดพิมพ์ระยะแล้วกด Enter ได้</p>
+          </section>
+          <section className="rounded-2xl border border-gray-200 bg-white p-3 text-[13px]">
+            <div className="mb-2 font-semibold text-gray-800">ขั้นตอน</div>
+            {[["1 ผนัง", `${roof.pts.length} มุม`, dark ? "#cdd1e2" : "#344054"], ["2 เสา", `${cols.length} ต้น`, dark ? "#f2f4fa" : COL], ["3 อะเส", `${plates.length} เส้น`, PLATE], ["4 อะเสรับดั้ง", `${inner.length} เส้น`, INNER]].map(([t, n, c]) => (
+              <div key={t} className="flex items-center gap-2 py-0.5"><i className="h-2 w-4 rounded-full" style={{ background: c }} />{t}<span className="ml-auto text-gray-500">{n}</span></div>
+            ))}
+            <div className="flex items-center gap-2 py-0.5"><i className="h-2.5 w-2.5 rounded-full border-2 border-[#12b76a]" />ดั้ง (จากโครงหลังคา)<span className="ml-auto text-gray-500">{posts.length} ต้น</span></div>
+          </section>
+          <section className="space-y-1.5 rounded-2xl border border-gray-200 bg-white p-3">
+            <div className="mb-1 text-[13px] font-semibold text-gray-800">วาดอัตโนมัติ (กดเมื่อต้องการ)</div>
+            {[["ดั้งตามอกไก่ (ทุก ~ระยะดั้ง)", () => commit({ dang: null })], ["เสาตามมุมผนัง + ทุก ~ระยะเสา", autoColumns], ["อะเสตามแนวผนังทั้งหมด", autoPlates], ["อะเสรับดั้งผ่านดั้งทุกต้น", autoInner]].map(([t, f]) => (
+              <button key={t} onClick={f} className={`${btn} w-full justify-start text-gray-700 ring-gray-300 hover:bg-gray-50`}><Wand2 className="h-3.5 w-3.5" />{t}</button>
+            ))}
+            <div className="pt-2 text-[11px] text-gray-400">ล้างชั้น</div>
+            <div className="flex gap-1.5">
+              {[["ดั้ง", "dang"], ["เสา", "columns"], ["อะเส", "plates"], ["รับดั้ง", "innerPlates"]].map(([t, key]) => (
+                <button key={key} onClick={() => commit({ [key]: [] })} className={`${btn} flex-1 justify-center text-red-600 ring-red-200 hover:bg-red-50`}>{t}</button>
+              ))}
+            </div>
+          </section>
+          <p className="px-1 text-[11px] text-gray-400">ความชัน ชายคา ระดับอะเส ตั้งในแท็บ "รูปทรง" · ผลคำนวณอะเสดูในแท็บ "อะเส"</p>
+        </div>
+      </div>
+      {imp && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setImp(null)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-theme-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 text-base font-semibold text-gray-800">นำเข้า {imp.name}</div>
+            <p className="mb-3 text-[12px] text-gray-500">เลือกว่าแต่ละเลเยอร์คืออะไร · ข้อมูลชั้นที่เลือกจะแทนที่ของเดิม (ย้อนกลับได้ด้วย Ctrl+Z)</p>
+            <label className="mb-3 flex items-center gap-2 text-[13px] text-gray-600">หน่วยในแบบ CAD
+              <select value={imp.scale} onChange={(e) => setImp({ ...imp, scale: Number(e.target.value) })} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">
+                {[[0.001, "มิลลิเมตร"], [0.01, "เซนติเมตร"], [1, "เมตร"]].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+              </select>
+            </label>
+            <div className="max-h-[50vh] space-y-1.5 overflow-auto">
+              {Object.entries(imp.dxf.layers).map(([layer, ents]) => (
+                <div key={layer} className="grid grid-cols-[1fr_80px_150px] items-center gap-2 text-[13px]">
+                  <span className="truncate font-medium text-gray-800">{layer}</span>
+                  <span className="text-gray-400">{ents.length} ชิ้น</span>
+                  <select value={imp.roles[layer]} onChange={(e) => setImp({ ...imp, roles: { ...imp.roles, [layer]: e.target.value } })} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">
+                    {[["skip", "— ไม่ใช้ —"], ["walls", "ผนัง (รูปปิด)"], ["columns", "เสา"], ["plates", "อะเส"], ["inner", "อะเสรับดั้ง"]].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setImp(null)} className={`${btn} text-gray-600 ring-gray-300`}>ยกเลิก</button>
+              <button onClick={() => {
+                const r = toPlan(imp.dxf, imp.roles, imp.scale), used = new Set(Object.values(imp.roles));
+                if (!r) return setImp(null);
+                const patch = {};
+                if (used.has("walls") && r.walls) Object.assign(patch, { pts: r.walls, edges: r.walls.map(() => ({ type: "hip" })), supports: null, grid: null });
+                if (used.has("columns")) patch.columns = r.columns;
+                if (used.has("plates")) patch.plates = r.plates;
+                if (used.has("inner")) patch.innerPlates = r.inner;
+                commit(patch); setImp(null); setTimeout(() => setVb(fit()), 50);
+              }} className={`${btn} bg-brand-500 text-[#fff] ring-brand-500`}>นำเข้า</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

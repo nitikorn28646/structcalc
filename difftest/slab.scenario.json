@@ -1,0 +1,425 @@
+{
+ "name": "structcalc-slab-wsd",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\excel_slab.py",
+    "D:\\001_NITIKORN WONGSRILA\\011_รายการคำนวน\\RC Design WSD & Steel roof Design ASD(New) ไผ่ ขอนเเก่น .xlsm"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\slab.mjs"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "one-example",
+   "type": "cli",
+   "args": [
+    "oneway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"support\": \"simple\", \"t\": 0.1, \"L\": 1.3, \"extra\": 120, \"live\": 200, \"mainBar\": \"RB 9\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "one-one-end",
+   "type": "cli",
+   "args": [
+    "oneway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"support\": \"one_end\", \"t\": 0.1, \"L\": 3, \"extra\": 120, \"live\": 300, \"mainBar\": \"RB 9\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "one-both-ends-db12",
+   "type": "cli",
+   "args": [
+    "oneway",
+    "{\"fcPrime\": 180, \"F\": 0.45, \"capFc\": true, \"fy\": 4000, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"support\": \"both_ends\", \"t\": 0.12, \"L\": 3.5, \"extra\": 120, \"live\": 200, \"mainBar\": \"DB 12\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "one-sd30-thin-fail",
+   "type": "cli",
+   "args": [
+    "oneway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"support\": \"simple\", \"t\": 0.08, \"L\": 4, \"extra\": 120, \"live\": 400, \"mainBar\": \"DB 10\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "one-cap-off",
+   "type": "cli",
+   "args": [
+    "oneway",
+    "{\"fcPrime\": 180, \"F\": 0.45, \"capFc\": false, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"support\": \"simple\", \"t\": 0.1, \"L\": 2.5, \"extra\": 120, \"live\": 200, \"mainBar\": \"RB 9\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "can-example",
+   "type": "cli",
+   "args": [
+    "cantilever",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.1, \"L\": 0.4, \"P\": 100, \"a\": 1, \"extra\": 50, \"live\": 100, \"mainBar\": \"RB 9\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "can-long",
+   "type": "cli",
+   "args": [
+    "cantilever",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 4000, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.15, \"L\": 1.5, \"P\": 300, \"a\": 1.5, \"extra\": 50, \"live\": 300, \"mainBar\": \"DB 12\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "can-rb12",
+   "type": "cli",
+   "args": [
+    "cantilever",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.12, \"L\": 1.0, \"P\": 0, \"a\": 0, \"extra\": 50, \"live\": 100, \"mainBar\": \"RB 12\", \"tempBar\": \"RB 6\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-example",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 5, \"t\": 0.1, \"S\": 1.7, \"L\": 3.3, \"extra\": 120, \"live\": 200, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case1-m0.55",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 1, \"t\": 0.12, \"S\": 2.2, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case1-m0.73",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 1, \"t\": 0.12, \"S\": 2.92, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case1-m0.9",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 1, \"t\": 0.12, \"S\": 3.6, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case1-m1.0",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 1, \"t\": 0.12, \"S\": 4.0, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case2-m0.55",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 2, \"t\": 0.12, \"S\": 2.2, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case2-m0.73",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 2, \"t\": 0.12, \"S\": 2.92, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case2-m0.9",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 2, \"t\": 0.12, \"S\": 3.6, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case2-m1.0",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 2, \"t\": 0.12, \"S\": 4.0, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case3-m0.55",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 3, \"t\": 0.12, \"S\": 2.2, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case3-m0.73",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 3, \"t\": 0.12, \"S\": 2.92, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case3-m0.9",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 3, \"t\": 0.12, \"S\": 3.6, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case3-m1.0",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 3, \"t\": 0.12, \"S\": 4.0, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case4-m0.55",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 4, \"t\": 0.12, \"S\": 2.2, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case4-m0.73",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 4, \"t\": 0.12, \"S\": 2.92, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case4-m0.9",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 4, \"t\": 0.12, \"S\": 3.6, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case4-m1.0",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 4, \"t\": 0.12, \"S\": 4.0, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case5-m0.55",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 5, \"t\": 0.12, \"S\": 2.2, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case5-m0.73",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 5, \"t\": 0.12, \"S\": 2.92, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case5-m0.9",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 5, \"t\": 0.12, \"S\": 3.6, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-case5-m1.0",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 5, \"t\": 0.12, \"S\": 4.0, \"L\": 4, \"extra\": 120, \"live\": 300, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-db12-sd40",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 180, \"F\": 0.45, \"capFc\": true, \"fy\": 4000, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 3, \"t\": 0.13, \"S\": 4, \"L\": 5, \"extra\": 120, \"live\": 200, \"shortBar\": \"DB 12\", \"longBar\": \"DB 10\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "two-very-long",
+   "type": "cli",
+   "args": [
+    "twoway",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"case\": 2, \"t\": 0.1, \"S\": 2, \"L\": 6, \"extra\": 120, \"live\": 200, \"shortBar\": \"RB 9\", \"longBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  }
+ ]
+}

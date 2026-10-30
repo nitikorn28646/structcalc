@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Sarabun", "Leelawadee UI", "Tahoma", sans-serif;
+  --color-brand-50: rgb(236, 243, 255);
+  --color-brand-100: rgb(221, 233, 255);
+  --color-brand-500: rgb(70, 95, 255);
+  --color-brand-600: rgb(54, 65, 245);
+  --shadow-theme-xs: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+}
+
+body { @apply bg-gray-50 text-gray-800 antialiased; }
+
+/* Dark theme (ECharts-dark navy palette): the gray scale is inverted so every component follows. Screen only. */
+@media screen {
+  html.dark {
+    color-scheme: dark;
+    --color-white: #181c30;
+    --color-gray-50: #0f1222;
+    --color-gray-100: #22273d;
+    --color-gray-200: #2c3250;
+    --color-gray-300: #3a4163;
+    --color-gray-400: #6e7591;
+    --color-gray-500: #9097b1;
+    --color-gray-600: #b4b9cf;
+    --color-gray-700: #cdd1e2;
+    --color-gray-800: #e3e6f0;
+    --color-gray-900: #f2f4fa;
+    --color-brand-50: #232a55;
+    --color-green-50: #11302a;
+    --color-green-600: #4ade80;
+    --color-red-50: #3a1b26;
+    --color-red-600: #f87171;
+  }
+  /* native dropdown lists: selects are bg-transparent, so the popup would be white with the light dark-theme text */
+  html.dark select { background-color: #181c30; }
+  html.dark select option, html.dark select optgroup { background-color: #181c30; color: #e3e6f0; }
+  html.dark select optgroup { color: #9097b1; }
+  html.dark .drawing #OUTLINE { stroke: #b4b9cf; }
+  html.dark .drawing #SUPPORT { stroke: #6e7591; }
+  html.dark .drawing #DIM { stroke: #9097b1; }
+  html.dark .drawing #BAR { stroke: #e3e6f0; fill: #e3e6f0; }
+  html.dark .drawing #TEXT { fill: #cdd1e2; }
+  html.dark .drawing #BOTTOM { stroke: #7b8cff; }
+}
+
+.report { display: none; }
+
+.drawing svg { width: 100%; height: 100%; max-height: inherit; font-family: "Sarabun", sans-serif; }
+
+/* Printing goes through Paged.js into #print-root (see ReportKit.printReport). */
+#print-root { display: none; }
+html.printing #print-root { display: block; position: fixed; inset: 0; z-index: 100; overflow: auto; background: #e4e7ec; }
+html.printing #print-root .pagedjs_page { background: white; margin: 12px auto; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+@media print {
+  html.printing { --color-white: #fff; color-scheme: light; }
+  body { background: white; }
+  .app, .report { display: none !important; }
+  html.printing #print-root { position: static; overflow: visible; background: white; }
+  html.printing #print-root .pagedjs_page { margin: 0; box-shadow: none; }
+}
+
+/* compact numeric cells (vertex table): no spinner, tight padding */
+.compact-num { padding-left: 6px; padding-right: 4px; -moz-appearance: textfield; }
+.compact-num::-webkit-inner-spin-button, .compact-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+

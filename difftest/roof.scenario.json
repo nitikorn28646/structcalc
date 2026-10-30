@@ -1,0 +1,282 @@
+{
+ "name": "structcalc-roof-asd",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\excel_roof.py",
+    "D:\\001_NITIKORN WONGSRILA\\011_รายการคำนวน\\RC Design WSD & Steel roof Design ASD(New) ไผ่ ขอนเเก่น .xlsm"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\roof.mjs"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "purlin-example",
+   "type": "cli",
+   "args": [
+    "purlin",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"100x50x20x2.3\", \"roofing\": 7, \"selfW\": 4.06, \"live\": 30, \"wind\": 50, \"extra\": 15, \"rise\": 1, \"width\": 6, \"s\": 1, \"D\": 1, \"sagRows\": 1, \"rodFy\": 2400}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "purlin-no-sag",
+   "type": "cli",
+   "args": [
+    "purlin",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"100x50x20x2.3\", \"roofing\": 7, \"selfW\": 4.06, \"live\": 30, \"wind\": 50, \"extra\": 15, \"rise\": 1, \"width\": 6, \"s\": 1, \"D\": 1, \"sagRows\": 0, \"rodFy\": 2400}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "purlin-no-wind",
+   "type": "cli",
+   "args": [
+    "purlin",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"100x50x20x2.3\", \"roofing\": 7, \"selfW\": 4.06, \"live\": 30, \"wind\": 0, \"extra\": 15, \"rise\": 1, \"width\": 6, \"s\": 1, \"D\": 1.2, \"sagRows\": 0, \"rodFy\": 2400}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "purlin-sag2-tile",
+   "type": "cli",
+   "args": [
+    "purlin",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"125x50x20x2.3\", \"roofing\": 50, \"selfW\": 4.06, \"live\": 30, \"wind\": 50, \"extra\": 15, \"rise\": 2.5, \"width\": 8, \"s\": 0.8, \"D\": 1.5, \"sagRows\": 2, \"rodFy\": 2400}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "purlin-shs-fe30",
+   "type": "cli",
+   "args": [
+    "purlin",
+    "{\"grade\": \"Fe-30\", \"E\": 2100000, \"type\": \"SHS\", \"name\": \"50x50x2.3\", \"roofing\": 7, \"selfW\": 4.06, \"live\": 30, \"wind\": 50, \"extra\": 15, \"rise\": 1, \"width\": 6, \"s\": 1, \"D\": 1.1, \"sagRows\": 0, \"rodFy\": 2400}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "purlin-rhs-sag3",
+   "type": "cli",
+   "args": [
+    "purlin",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"RHS\", \"name\": \"75x45x2.3\", \"roofing\": 7, \"selfW\": 4.06, \"live\": 30, \"wind\": 80, \"extra\": 15, \"rise\": 1, \"width\": 6, \"s\": 1, \"D\": 2.0, \"sagRows\": 3, \"rodFy\": 2400}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rafter-example",
+   "type": "cli",
+   "args": [
+    "rafter",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"100x50x20x2.3\", \"roofing\": 50, \"purlinW\": 1, \"live\": 50, \"wind\": 60, \"extra\": 15, \"selfW\": 4.06, \"rise\": 1, \"overhang\": 1, \"run\": 3, \"D\": 1, \"s\": 1}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rafter-no-wind",
+   "type": "cli",
+   "args": [
+    "rafter",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"100x50x20x2.3\", \"roofing\": 50, \"purlinW\": 1, \"live\": 50, \"wind\": 0, \"extra\": 15, \"selfW\": 4.06, \"rise\": 1, \"overhang\": 1, \"run\": 3, \"D\": 1, \"s\": 1}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rafter-long",
+   "type": "cli",
+   "args": [
+    "rafter",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"150x50x20x2.3\", \"roofing\": 50, \"purlinW\": 1, \"live\": 50, \"wind\": 60, \"extra\": 15, \"selfW\": 4.06, \"rise\": 2.2, \"overhang\": 0.8, \"run\": 4.5, \"D\": 1.2, \"s\": 0.9}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rafter-rhs",
+   "type": "cli",
+   "args": [
+    "rafter",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"RHS\", \"name\": \"100x50x2.3\", \"roofing\": 15, \"purlinW\": 1, \"live\": 50, \"wind\": 60, \"extra\": 15, \"selfW\": 4.06, \"rise\": 1.5, \"overhang\": 0.6, \"run\": 3.5, \"D\": 1, \"s\": 1}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "hip-example",
+   "type": "cli",
+   "args": [
+    "hip",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"125x50x20x2.3\", \"selfW\": 4.06, \"transfer\": 300, \"rise\": 1.8, \"overhang\": 1, \"run\": 2.15, \"count\": 2}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "hip-single",
+   "type": "cli",
+   "args": [
+    "hip",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"125x50x20x2.3\", \"selfW\": 4.06, \"transfer\": 180, \"rise\": 1.8, \"overhang\": 1, \"run\": 2.15, \"count\": 1}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "valley-example",
+   "type": "cli",
+   "args": [
+    "valley",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"125x50x20x2.3\", \"selfW\": 4.06, \"transfer\": 300, \"rise\": 1.8, \"overhang\": 1.1, \"run\": 3.14, \"count\": 2}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "valley-rhs",
+   "type": "cli",
+   "args": [
+    "valley",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"RHS\", \"name\": \"150x50x3.2\", \"selfW\": 4.06, \"transfer\": 300, \"rise\": 2.4, \"overhang\": 0.7, \"run\": 4, \"count\": 1}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "ridge-example",
+   "type": "cli",
+   "args": [
+    "ridge",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"125x50x20x2.3\", \"selfW\": 4.51, \"transfer\": 300, \"L\": 3, \"count\": 2}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "ridge-single",
+   "type": "cli",
+   "args": [
+    "ridge",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"125x50x20x2.3\", \"selfW\": 4.51, \"transfer\": 220, \"L\": 2.5, \"count\": 1}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "plate-example",
+   "type": "cli",
+   "args": [
+    "plate",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"C\", \"name\": \"150x50x20x2.3\", \"selfW\": 4.96, \"transfer\": 140, \"L\": 5, \"count\": 2}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "purlin-channel",
+   "type": "cli",
+   "args": [
+    "purlin",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"CH\", \"name\": \"100x50x5x7.5\", \"roofing\": 7, \"selfW\": 4.06, \"live\": 30, \"wind\": 50, \"extra\": 15, \"rise\": 1, \"width\": 6, \"s\": 1, \"D\": 3.0, \"sagRows\": 0, \"rodFy\": 2400}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "ridge-channel",
+   "type": "cli",
+   "args": [
+    "ridge",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"CH\", \"name\": \"150x75x6.5x10\", \"selfW\": 4.51, \"transfer\": 300, \"L\": 5, \"count\": 1}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "plate-shs",
+   "type": "cli",
+   "args": [
+    "plate",
+    "{\"grade\": \"Fe-24\", \"E\": 2100000, \"type\": \"SHS\", \"name\": \"100x100x3.2\", \"selfW\": 4.51, \"transfer\": 250, \"L\": 4, \"count\": 1}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  }
+ ]
+}

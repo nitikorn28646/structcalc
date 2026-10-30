@@ -1,0 +1,238 @@
+{
+ "name": "structcalc-beam-wsd",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\excel_beam.py",
+    "D:\\001_NITIKORN WONGSRILA\\011_รายการคำนวน\\RC Design WSD & Steel roof Design ASD(New) ไผ่ ขอนเเก่น .xlsm"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\beam.mjs"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "b6-example",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 4500, \"V\": 9000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "singly-low-moment",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 2000, \"V\": 4000, \"Mt\": 0, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "simple-span",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"simple\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 4.5, \"M\": 3000, \"V\": 3500, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "one-end",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"one_end\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 5200, \"V\": 7000, \"Mt\": 120, \"s\": 0.15, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "cantilever",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"cantilever\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.4, \"L\": 1.5, \"M\": 2500, \"V\": 4000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "fy4000",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 180, \"F\": 0.45, \"capFc\": true, \"fy\": 4000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 6000, \"V\": 9000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "fy5000",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 5000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 7000, \"V\": 12000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "fc-cap-off",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 180, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 6500, \"V\": 9000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "fc-cap-on",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 180, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 6500, \"V\": 9000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "high-shear",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 4500, \"V\": 16000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "shear-too-high",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 4500, \"V\": 30000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "wide-deep",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.3, \"h\": 0.8, \"L\": 7, \"M\": 15000, \"V\": 14000, \"Mt\": 300, \"s\": 0.15, \"stirrup\": {\"bar\": \"RB 12\", \"sets\": 2}, \"top\": [{\"main\": {\"n\": 3, \"bar\": \"DB 20\"}}], \"bottom\": [{\"main\": {\"n\": 3, \"bar\": \"DB 20\"}, \"special\": {\"n\": 1, \"bar\": \"DB 25\"}}, {\"main\": {\"n\": 2, \"bar\": \"DB 20\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "narrow-beam",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.15, \"h\": 0.45, \"L\": 5, \"M\": 2500, \"V\": 3000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "deep-check-fail",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"one_end\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.9, \"L\": 2, \"M\": 3000, \"V\": 9000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "spacing-too-wide",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 2000, \"V\": 3000, \"Mt\": 50, \"s\": 0.35, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "three-layers",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 9000, \"V\": 9000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 9\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 20\"}}, {\"main\": {\"n\": 2, \"bar\": \"DB 16\"}}, {\"main\": {\"n\": 2, \"bar\": \"DB 12\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rb-bars",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 2500, \"V\": 3000, \"Mt\": 50, \"s\": 0.1, \"stirrup\": {\"bar\": \"RB 6\", \"sets\": 1}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"RB 15\"}}], \"bottom\": [{\"main\": {\"n\": 3, \"bar\": \"RB 19\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "db10-stirrup-2sets",
+   "type": "cli",
+   "args": [
+    "{\"type\": \"both_ends\", \"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"fys\": 2400, \"Es\": 2040000, \"cover\": 2.5, \"b\": 0.2, \"h\": 0.5, \"L\": 5, \"M\": 4500, \"V\": 6000, \"Mt\": 50, \"s\": 0.2, \"stirrup\": {\"bar\": \"DB 10\", \"sets\": 2}, \"top\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}], \"bottom\": [{\"main\": {\"n\": 2, \"bar\": \"DB 16\"}, \"special\": {\"n\": 1, \"bar\": \"DB 16\"}}, {\"special\": {\"n\": 2, \"bar\": \"DB 16\"}}]}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  }
+ ]
+}

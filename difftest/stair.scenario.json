@@ -1,0 +1,113 @@
+{
+ "name": "structcalc-stair-wsd",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\excel_slab.py",
+    "D:\\001_NITIKORN WONGSRILA\\011_รายการคำนวน\\RC Design WSD & Steel roof Design ASD(New) ไผ่ ขอนเเก่น .xlsm"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\slab.mjs"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "example",
+   "type": "cli",
+   "args": [
+    "stair",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.2, \"L\": 2.85, \"tread\": 0.25, \"riser\": 0.2, \"width\": 1.25, \"extra\": 120, \"live\": 200, \"mainBar\": \"DB 12\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "residential",
+   "type": "cli",
+   "args": [
+    "stair",
+    "{\"fcPrime\": 180, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.15, \"L\": 3.0, \"tread\": 0.27, \"riser\": 0.17, \"width\": 1.25, \"extra\": 120, \"live\": 300, \"mainBar\": \"DB 12\", \"tempBar\": \"RB 6\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "steep",
+   "type": "cli",
+   "args": [
+    "stair",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.13, \"L\": 2.4, \"tread\": 0.22, \"riser\": 0.2, \"width\": 1.25, \"extra\": 120, \"live\": 200, \"mainBar\": \"DB 12\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "long-sd30",
+   "type": "cli",
+   "args": [
+    "stair",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.17, \"L\": 4.2, \"tread\": 0.25, \"riser\": 0.2, \"width\": 1.25, \"extra\": 120, \"live\": 400, \"mainBar\": \"DB 16\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "sd40",
+   "type": "cli",
+   "args": [
+    "stair",
+    "{\"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 4000, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.15, \"L\": 3.6, \"tread\": 0.25, \"riser\": 0.2, \"width\": 1.25, \"extra\": 120, \"live\": 200, \"mainBar\": \"DB 12\", \"tempBar\": \"DB 10\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rb-bars",
+   "type": "cli",
+   "args": [
+    "stair",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.12, \"L\": 2.5, \"tread\": 0.25, \"riser\": 0.2, \"width\": 1.25, \"extra\": 120, \"live\": 200, \"mainBar\": \"RB 12\", \"tempBar\": \"RB 6\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "thin-fail",
+   "type": "cli",
+   "args": [
+    "stair",
+    "{\"fcPrime\": 140, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 2, \"unitWeight\": 2400, \"t\": 0.1, \"L\": 4.0, \"tread\": 0.25, \"riser\": 0.2, \"width\": 1.25, \"extra\": 120, \"live\": 500, \"mainBar\": \"DB 12\", \"tempBar\": \"RB 9\"}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  }
+ ]
+}

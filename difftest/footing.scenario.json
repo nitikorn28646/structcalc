@@ -1,0 +1,118 @@
+{
+ "name": "structcalc-footing-wsd",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\excel_footing.py",
+    "D:\\001_NITIKORN WONGSRILA\\011_รายการคำนวน\\RC Design WSD & Steel roof Design ASD(New) ไผ่ ขอนเเก่น .xlsm"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\footing.mjs"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "example",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.2, \"Bx\": 1.4, \"By\": 1.4, \"Df\": 1, \"P\": 15000, \"Mx\": 100, \"My\": 180, \"qa\": 10000, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.2, \"by\": 0.2, \"D\": 0.2, \"longBar\": \"DB 12\", \"shortBar\": \"DB 12\", \"dowelBar\": \"DB 12\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "axial-only",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.3, \"Bx\": 1.6, \"By\": 1.6, \"Df\": 1, \"P\": 25000, \"Mx\": 0, \"My\": 0, \"qa\": 10000, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.2, \"by\": 0.2, \"D\": 0.2, \"longBar\": \"DB 12\", \"shortBar\": \"DB 12\", \"dowelBar\": \"DB 12\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rect-footing",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.35, \"Bx\": 2.0, \"By\": 1.5, \"Df\": 1, \"P\": 40000, \"Mx\": 800, \"My\": 1500, \"qa\": 10000, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.2, \"by\": 0.2, \"D\": 0.2, \"longBar\": \"DB 16\", \"shortBar\": \"DB 12\", \"dowelBar\": \"DB 12\", \"sLong\": 0.2, \"sShort\": 0.15, \"dowelN\": 8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "circle-pier",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.3, \"Bx\": 1.8, \"By\": 1.8, \"Df\": 1, \"P\": 30000, \"Mx\": 100, \"My\": 180, \"qa\": 10000, \"gamma\": 1600, \"pier\": \"circle\", \"bx\": 0.2, \"by\": 0.2, \"D\": 0.3, \"longBar\": \"DB 12\", \"shortBar\": \"DB 12\", \"dowelBar\": \"DB 12\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "sr24",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 2400, \"Es\": 2040000, \"cover\": 5, \"t\": 0.2, \"Bx\": 1.4, \"By\": 1.4, \"Df\": 1, \"P\": 12000, \"Mx\": 100, \"My\": 180, \"qa\": 10000, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.2, \"by\": 0.2, \"D\": 0.2, \"longBar\": \"RB 15\", \"shortBar\": \"RB 15\", \"dowelBar\": \"RB 15\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "heavy-thick",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 280, \"F\": 0.45, \"capFc\": true, \"fy\": 4000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.6, \"Bx\": 3.0, \"By\": 3.0, \"Df\": 1, \"P\": 120000, \"Mx\": 2000, \"My\": 3000, \"qa\": 15000, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"longBar\": \"DB 20\", \"shortBar\": \"DB 20\", \"dowelBar\": \"DB 12\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "uplift-edge",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.2, \"Bx\": 1.4, \"By\": 1.4, \"Df\": 1, \"P\": 8000, \"Mx\": 2500, \"My\": 200, \"qa\": 10000, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.2, \"by\": 0.2, \"D\": 0.2, \"longBar\": \"DB 12\", \"shortBar\": \"DB 12\", \"dowelBar\": \"DB 12\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "over-pressure",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 240, \"F\": 0.45, \"capFc\": true, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.2, \"Bx\": 1.2, \"By\": 1.2, \"Df\": 1, \"P\": 40000, \"Mx\": 100, \"My\": 180, \"qa\": 10000, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.2, \"by\": 0.2, \"D\": 0.2, \"longBar\": \"DB 12\", \"shortBar\": \"DB 12\", \"dowelBar\": \"DB 12\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  }
+ ]
+}

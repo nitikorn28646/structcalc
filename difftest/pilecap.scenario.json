@@ -1,0 +1,215 @@
+{
+ "name": "structcalc-pilecap4-wsd",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\excel_pilecap.py",
+    "D:\\001_NITIKORN WONGSRILA\\011_รายการคำนวน\\RC Design WSD & Steel roof Design ASD(New) ไผ่ ขอนเเก่น .xlsm"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\footing.mjs",
+    "pilecap"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "example",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.45, \"Df\": 1.5, \"P\": 75000, \"Mx\": 5000, \"My\": 15000, \"sx\": 0.9, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 16\", \"shortBar\": \"DB 16\", \"dowelBar\": \"DB 20\", \"sLong\": 0.1, \"sShort\": 0.1, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "axial",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.45, \"Df\": 1.5, \"P\": 100000, \"Mx\": 0, \"My\": 0, \"sx\": 0.9, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 16\", \"shortBar\": \"DB 16\", \"dowelBar\": \"DB 20\", \"sLong\": 0.1, \"sShort\": 0.1, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "no-test-load",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.45, \"Df\": 1.5, \"P\": 75000, \"Mx\": 5000, \"My\": 15000, \"sx\": 0.9, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 18, \"fcPile\": 350, \"Ptest\": 0, \"longBar\": \"DB 16\", \"shortBar\": \"DB 16\", \"dowelBar\": \"DB 20\", \"sLong\": 0.1, \"sShort\": 0.1, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "short-pile",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.45, \"Df\": 1.5, \"P\": 75000, \"Mx\": 5000, \"My\": 15000, \"sx\": 0.75, \"sy\": 0.75, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-22\", \"pileL\": 6, \"fcPile\": 350, \"Ptest\": 0, \"longBar\": \"DB 16\", \"shortBar\": \"DB 16\", \"dowelBar\": \"DB 20\", \"sLong\": 0.1, \"sShort\": 0.1, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "i-pile",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.45, \"Df\": 1.5, \"P\": 60000, \"Mx\": 1000, \"My\": 2000, \"sx\": 0.8, \"sy\": 0.8, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"I-26\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 16\", \"shortBar\": \"DB 16\", \"dowelBar\": \"DB 20\", \"sLong\": 0.1, \"sShort\": 0.1, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "bored",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.7, \"Df\": 1.5, \"P\": 200000, \"Mx\": 5000, \"My\": 15000, \"sx\": 1.5, \"sy\": 1.5, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"\\u00d80.50\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 0, \"longBar\": \"DB 20\", \"shortBar\": \"DB 20\", \"dowelBar\": \"DB 20\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rect-spacing",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.45, \"Df\": 1.5, \"P\": 90000, \"Mx\": 5000, \"My\": 15000, \"sx\": 1.2, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 16\", \"shortBar\": \"DB 16\", \"dowelBar\": \"DB 20\", \"sLong\": 0.1, \"sShort\": 0.1, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "thin-fail",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.3, \"Df\": 1.5, \"P\": 120000, \"Mx\": 5000, \"My\": 15000, \"sx\": 0.9, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 16\", \"shortBar\": \"DB 16\", \"dowelBar\": \"DB 20\", \"sLong\": 0.1, \"sShort\": 0.1, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "pile8",
+   "type": "cli",
+   "args": [
+    "{\"n\": 8, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.7, \"Df\": 1.5, \"P\": 180000, \"Mx\": 6000, \"My\": 9000, \"sx\": 1.0, \"sy\": 1.0, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 20\", \"shortBar\": \"DB 20\", \"dowelBar\": \"DB 20\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "pile6",
+   "type": "cli",
+   "args": [
+    "{\"n\": 6, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.6, \"Df\": 1.5, \"P\": 130000, \"Mx\": 4000, \"My\": 6000, \"sx\": 0.9, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 20\", \"shortBar\": \"DB 20\", \"dowelBar\": \"DB 20\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "pile5",
+   "type": "cli",
+   "args": [
+    "{\"n\": 5, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.6, \"Df\": 1.5, \"P\": 120000, \"Mx\": 3000, \"My\": 5000, \"sx\": 0.65, \"sy\": 0.65, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 20\", \"shortBar\": \"DB 20\", \"dowelBar\": \"DB 20\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "pile7",
+   "type": "cli",
+   "args": [
+    "{\"n\": 7, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.7, \"Df\": 1.5, \"P\": 170000, \"Mx\": 4000, \"My\": 7000, \"sx\": 1.0, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 20\", \"shortBar\": \"DB 20\", \"dowelBar\": \"DB 20\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "pile9",
+   "type": "cli",
+   "args": [
+    "{\"n\": 9, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.8, \"Df\": 1.5, \"P\": 220000, \"Mx\": 6000, \"My\": 6000, \"sx\": 1.0, \"sy\": 1.0, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 20\", \"shortBar\": \"DB 20\", \"dowelBar\": \"DB 20\", \"sLong\": 0.15, \"sShort\": 0.15, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "pile2",
+   "type": "cli",
+   "args": [
+    "{\"n\": 2, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.6, \"Df\": 1.5, \"P\": 60000, \"Mx\": 0, \"My\": 3000, \"sx\": 1.2, \"sy\": 0, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 20\", \"shortBar\": \"DB 12\", \"dowelBar\": \"DB 20\", \"sLong\": 0.09, \"sShort\": 0.15, \"dowelN\": 6, \"capWidth\": 0.8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "pile1",
+   "type": "cli",
+   "args": [
+    "{\"n\": 1, \"fcPrime\": 240, \"F\": 0.45, \"capFc\": false, \"fy\": 3000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.6, \"Df\": 1.5, \"P\": 25000, \"Mx\": 0, \"My\": 0, \"sx\": 0.9, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 8, \"fcPile\": 350, \"Ptest\": 20000, \"longBar\": \"DB 12\", \"shortBar\": \"DB 16\", \"dowelBar\": \"DB 20\", \"sLong\": 0.085, \"sShort\": 0.1, \"dowelN\": 12, \"capWidth\": 0.8}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "sd40-capped",
+   "type": "cli",
+   "args": [
+    "{\"n\": 4, \"fcPrime\": 180, \"F\": 0.45, \"capFc\": true, \"fy\": 4000, \"Es\": 2040000, \"cover\": 5, \"t\": 0.45, \"Df\": 1.5, \"P\": 75000, \"Mx\": 5000, \"My\": 15000, \"sx\": 0.9, \"sy\": 0.9, \"gamma\": 1600, \"pier\": \"rect\", \"bx\": 0.4, \"by\": 0.4, \"D\": 0.2, \"pile\": \"S-30\", \"pileL\": 24, \"fcPile\": 350, \"Ptest\": 35000, \"longBar\": \"DB 12\", \"shortBar\": \"DB 12\", \"dowelBar\": \"DB 20\", \"sLong\": 0.12, \"sShort\": 0.12, \"dowelN\": 12}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  }
+ ]
+}

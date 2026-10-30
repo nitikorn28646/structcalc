@@ -1,0 +1,214 @@
+{
+ "name": "structcalc-column-wsd",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\excel_column.py",
+    "D:\\001_NITIKORN WONGSRILA\\011_รายการคำนวน\\RC Design WSD & Steel roof Design ASD(New) ไผ่ ขอนเเก่น .xlsm"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\column.mjs"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "example",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 20, \"By\": 20, \"Es\": 2040000, \"P\": 20000, \"Mx\": 500, \"My\": 0, \"nx\": 6, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "axial-only",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 20, \"By\": 20, \"Es\": 2040000, \"P\": 30000, \"Mx\": 0, \"My\": 0, \"nx\": 6, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "biaxial-II",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 25, \"By\": 25, \"Es\": 2040000, \"P\": 25000, \"Mx\": 400, \"My\": 300, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 12\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "tension-ctrl-x",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 180, \"fy\": 4000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 25, \"By\": 30, \"Es\": 2040000, \"P\": 6000, \"Mx\": 300, \"My\": 2500, \"nx\": 6, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "tension-ctrl-y",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 180, \"fy\": 4000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 30, \"By\": 25, \"Es\": 2040000, \"P\": 6000, \"Mx\": 2500, \"My\": 300, \"nx\": 4, \"ny\": 6, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "big-section",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 240, \"fy\": 4000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 40, \"By\": 40, \"Es\": 2040000, \"P\": 90000, \"Mx\": 3000, \"My\": 1500, \"nx\": 8, \"ny\": 8, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 20\", \"tieBar\": \"RB 9\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "rect-30x50",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 30, \"By\": 50, \"Es\": 2040000, \"P\": 60000, \"Mx\": 4000, \"My\": 800, \"nx\": 6, \"ny\": 6, \"tieSets\": 2, \"frameCase\": 2, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "low-steel",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 30, \"By\": 30, \"Es\": 2040000, \"P\": 40000, \"Mx\": 600, \"My\": 200, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 12\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "slender-case1",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 4.5, \"Bx\": 25, \"By\": 25, \"Es\": 2040000, \"P\": 25000, \"Mx\": 700, \"My\": 500, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 1, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "slender-case2",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 4.5, \"Bx\": 25, \"By\": 25, \"Es\": 2040000, \"P\": 25000, \"Mx\": 700, \"My\": 500, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "slender-case3",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 4.5, \"Bx\": 25, \"By\": 25, \"Es\": 2040000, \"P\": 25000, \"Mx\": 700, \"My\": 500, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 3, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "slender-case4",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 4.5, \"Bx\": 25, \"By\": 25, \"Es\": 2040000, \"P\": 25000, \"Mx\": 700, \"My\": 500, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 4, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "slender-case5",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 4.5, \"Bx\": 25, \"By\": 25, \"Es\": 2040000, \"P\": 25000, \"Mx\": 700, \"My\": 500, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 5, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "slender-case1-axial",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 3000, \"fys\": 2400, \"cover\": 2.5, \"L\": 4.5, \"Bx\": 25, \"By\": 25, \"Es\": 2040000, \"P\": 25000, \"Mx\": 0, \"My\": 0, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 1, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "slender-tension",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 140, \"fy\": 4000, \"fys\": 2400, \"cover\": 2.5, \"L\": 4.0, \"Bx\": 25, \"By\": 25, \"Es\": 2040000, \"P\": 5000, \"Mx\": 200, \"My\": 2000, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 3, \"mainBar\": \"DB 16\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  },
+  {
+   "id": "sd50-db25",
+   "type": "cli",
+   "args": [
+    "{\"fcPrime\": 280, \"fy\": 5000, \"fys\": 2400, \"cover\": 2.5, \"L\": 3, \"Bx\": 35, \"By\": 35, \"Es\": 2040000, \"P\": 70000, \"Mx\": 2500, \"My\": 1000, \"nx\": 4, \"ny\": 4, \"tieSets\": 1, \"frameCase\": 2, \"mainBar\": \"DB 25\", \"tieBar\": \"RB 6\", \"beamTL\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamTR\": {\"L\": 450, \"b\": 20, \"t\": 40}, \"beamBL\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"beamBR\": {\"L\": 450, \"b\": 20, \"t\": 45}, \"colTop\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colThis\": {\"L\": 400, \"bx\": 45, \"by\": 45}, \"colThisB\": {\"L\": 700, \"bx\": 45, \"by\": 45}, \"colBot\": {\"L\": 150, \"bx\": 45, \"by\": 45}}"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "timeout": 120
+  }
+ ]
+}
