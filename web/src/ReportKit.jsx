@@ -17,7 +17,8 @@ const PAGE_CSS = `
 
 // Paginate the hidden report into #print-root, print, then clean up.
 export async function printReport({ dialog = true } = {}) {
-  const src = document.querySelector(".report");
+  // every report block of the hidden print area (the workflow prints roof + structure); not the on-screen preview in <main>
+  const blocks = [...document.querySelectorAll(".report")].filter((e) => !e.closest("main")), src = { innerHTML: blocks.map((e) => e.innerHTML).join("") };
   let root = document.getElementById("print-root");
   if (!root) {
     root = Object.assign(document.createElement("div"), { id: "print-root" });

@@ -573,3 +573,32 @@ export function plateModel(g, plates, posts = []) {
   d.dim(Math.min(...ys), Math.max(...ys), Math.min(...g.eave.map((p) => p[0] * 100)) - 60, `${num((Math.max(...ys) - Math.min(...ys)) / 100, 2)} ม.`, true, 16);
   return d.framed(60);
 }
+// ---------------------------------------------------------------- RC floor framing plan: grid, beams (true width, coloured by type), columns, slab panels
+export function framePlanModel(floor, an, beamTypes, cols = []) {
+  const d = new Draw(9), c = ([x, y]) => [x * 100, y * 100];
+  const pts = [...floor.columns, ...floor.beams.flatMap((b) => [b.a, b.b])];
+  if (!pts.length) return d.framed(60);
+  const G = floor.grid, axis = (o, ds) => ds.reduce((a, v) => [...a, a[a.length - 1] + v], [o]), GX = axis(G.x0, G.dx), GY = axis(G.y0, G.dy);
+  const x0 = Math.min(...GX, ...pts.map((p) => p[0])) * 100 - 120, x1 = Math.max(...GX, ...pts.map((p) => p[0])) * 100 + 120;
+  const y0 = Math.min(...GY, ...pts.map((p) => p[1])) * 100 - 120, y1 = Math.max(...GY, ...pts.map((p) => p[1])) * 100 + 120;
+  GX.forEach((x, i) => { d.line([x * 100, y0], [x * 100, y1], "DIM"); d.circle([x * 100, y1 + 40], 28, "DIM"); d.text(String.fromCharCode(65 + i), x * 100, y1 + 40); });
+  GY.forEach((y, i) => { d.line([x0, y * 100], [x1, y * 100], "DIM"); d.circle([x1 + 40, y * 100], 28, "DIM"); d.text(String(GY.length - i), x1 + 40, y * 100); });
+  GX.slice(1).forEach((x, i) => d.dim(GX[i] * 100, x * 100, y0 - 40, `${num(x - GX[i], 2)}`, false, 10));
+  GY.slice(1).forEach((y, i) => d.dim(GY[i] * 100, y * 100, x0 - 40, `${num(y - GY[i], 2)}`, true, 10));
+  an?.panels.forEach((p, i) => {
+    const m = p.P.reduce((s, q) => [s[0] + (q[0] * 100) / p.P.length, s[1] + (q[1] * 100) / p.P.length], [0, 0]);
+    d.text(p.open ? `P${i + 1} ช่องเปิด` : `P${i + 1} (${p.kind === "twoway" ? "2 ทาง" : p.kind === "oneway" ? "1 ทาง" : "อื่นๆ"}) t=${num(p.t * 100, 0)} ซม.`, m[0], m[1]);
+  });
+  floor.beams.forEach((b, i) => {
+    const sp = an?.spans.find((s) => s.member === i), ti = sp?.typeIdx ?? b.type ?? 0, t = beamTypes[ti] ?? beamTypes[0], layer = `PLATE${ti % PLATE_COLORS.length}`;
+    const a = c(b.a), e = c(b.b), L = Math.hypot(e[0] - a[0], e[1] - a[1]), n = [-(e[1] - a[1]) / L, (e[0] - a[0]) / L], w = (t.b * 100) / 2;
+    for (const s of [-1, 1]) d.line([a[0] + n[0] * w * s, a[1] + n[1] * w * s], [e[0] + n[0] * w * s, e[1] + n[1] * w * s], layer);
+    const vert = Math.abs(n[0]) > 0.7;
+    d.text(`${t.name} ${num(t.b * 100, 0)}x${num(t.h * 100, 0)}`, (a[0] + e[0]) / 2 - n[0] * (w + 26), (a[1] + e[1]) / 2 - n[1] * (w + 26), vert);
+  });
+  floor.columns.forEach((p, i) => {
+    const col = cols.find((x) => x.i === i), B = col?.lv?.Bx ?? 20, D = col?.lv?.By ?? 20, q = c(p);
+    d.rect(q[0] - B / 2, q[1] - D / 2, B, D, "COLUMN");
+  });
+  return d.framed(60);
+}

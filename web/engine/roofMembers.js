@@ -130,7 +130,7 @@ export function designRoof(g, fr, roof, d) {
   const ra = pick("rafter", (section) => rafter({ ...base, ...loads, section, selfW: section.w, purlinW: pu.section.w,
     rise: (span + cant) * cos * tan, run: span * cos, overhang: cant * cos, D, s }));
   rows.push({ key: "rafter", label: "จันทัน", span: ra.L, r: ra, count: 1, len: fr.totals.rafter });
-  const lineLoad = (2 * ra.Rridge) / D; // load per metre delivered by rafters to the member at their upper end
+  const lineLoad = Math.max(0, 2 * ra.Rridge) / D; // load per metre delivered by rafters to their upper end (an uplifting end adds nothing)
 
   // Members designed span by span: each may carry its own section ("memberPick") and single/double ("memberCount").
   const members = [];
@@ -259,6 +259,8 @@ export function designRoof(g, fr, roof, d) {
     const P = [pt.x, pt.y];
     if (lines.some((ln) => along(ln, P) !== null)) continue;
     if (g.pts.some((a, i) => onLine(P, a, g.pts[(i + 1) % g.pts.length]))) continue;
+    if ((roof.columns ?? []).some((c) => near(c, P))) continue; // stands on a column: the column takes it
+    if ((roof.plates ?? []).some((pl) => onLine(P, pl.a, pl.b))) continue; // on a drawn wall plate
     const ends = lines.map((ln, j) => (near(ln.a, P) || near(ln.b, P) ? `B${j + 1}` : null)).filter(Boolean);
     loose.push(P);
     warnings.push(`ดั้งที่ (${pt.x.toFixed(2)}, ${pt.y.toFixed(2)}) ไม่มีอะเสรับ${ends.length ? ` — อยู่ที่ปลาย ${ends.join(", ")} ซึ่งไม่มีอะไรรองรับรอยต่อ ให้วาดอะเสรับดั้งยาวต่อเนื่องผ่านดั้ง` : " — วาดอะเสรับดั้งผ่านตำแหน่งนี้"}`);

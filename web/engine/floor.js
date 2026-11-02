@@ -1,0 +1,482 @@
+// One floor of an RC frame (WSD): drawn beams → continuous beam lines, slab panels from closed beam loops,
+// slab / wall / self weight → beam loads, secondary beams onto the beams carrying them, beam types auto-selected.
+// Units: m, kg. Section checks reuse engine/beam.js (diff-tested); analysis is engine/contBeam.js.
+import { designSection } from "./beam.js";
+import { solveBeam } from "./contBeam.js";
+import { BARS } from "./tables.js";
+
+export const WALLS = { brick: ["อิฐมอญครึ่งแผ่น", 180], brick2: ["อิฐมอญเต็มแผ่น", 360], block: ["คอนกรีตบล็อก", 120], light: ["อิฐมวลเบา", 90] };
+export const CONC = 2400; // kg/m³
+// load groups, kept apart from input to report (all act together in the analysis: WSD, service loads)
+export const GROUPS = { DL: ["โครงสร้าง (DL)", "#667085"], SDL: ["ปูผิว/ฝ้า/งานระบบ (SDL)", "#0e9384"], WALL: ["ผนัง", "#b54708"], LL: ["น้ำหนักจร (LL)", "#3e63dd"], SP: ["พิเศษ / จากชั้นบน", "#d6409f"] };
+export const STAIR_KINDS = { long: "ท้องเรียบ พาดตามยาว", side: "พาดข้าง (คานแม่บันได/ผนัง)", cant: "บันไดยื่น (ยื่นจากด้านข้าง)", landing: "มีชานพัก (รูป U / L)" };
+// stair load on plan (kg/m²): inclined waist t/cosθ + half the step + finish + live
+export function stairLoads(st) {
+  const th = Math.atan((st.riser ?? 0.17) / (st.tread ?? 0.25)), t = st.t ?? 0.12;
+  return { th, flight: { DL: CONC * (t / Math.cos(th) + (st.riser ?? 0.17) / 2), SDL: st.finish ?? 100, LL: st.live ?? 300 }, landing: { DL: CONC * t, SDL: st.finish ?? 100, LL: st.live ?? 300 } };
+}
+export const SLAB_KINDS = { S: "S พื้นหล่อในที่", PS: "PS พื้นสำเร็จ", GS: "GS พื้นวางบนดิน" };
+export const DEFAULT_WALL_TYPES = [
+  { id: "brick", name: "อิฐมอญครึ่งแผ่น", w: 180 }, { id: "brick2", name: "อิฐมอญเต็มแผ่น", w: 360 }, { id: "block", name: "คอนกรีตบล็อก", w: 120 },
+  { id: "light", name: "อิฐมวลเบา", w: 90 }, { id: "gypsum", name: "ผนังเบา ยิปซัม", w: 30 },
+];
+// kg/m of one wall line: unit weight × height × (1 − openings) × layers (2 = double wall)
+export const wallLoad = (w, wt) => (wt.find((x) => x.id === w.kind) ?? wt[0]).w * w.h * (1 - (w.open ?? 0) / 100) * (w.layers ?? 1);
+// walls of a floor; files from before the wall layer kept the wall on the beam (beam.wall)
+export const wallsOf = (floor) => floor.walls ?? (floor.beams ?? []).filter((b) => b.wall?.h > 0).map((b) => ({ a: b.a, b: b.b, kind: b.wall.kind ?? "brick", h: b.wall.h, open: 0, layers: 1 }));
+
+// top / bot = through bars; topX = extra top bars at the supports (L/4), botX = extra bottom bars at mid-span (3L/5);
+// stirrup bar with spacing at the supports / mid-span (m)
+const T = (name, b, h, top, bot, topX, botX, st, sSup, sMid) => ({ name, b, h, top, bot, topX, botX, st, sSup, sMid });
+export const DEFAULT_BEAM_TYPES = [ // the user's standard beam schedule (drawing 26546466)
+  T("B1", 0.2, 0.4, "2-DB12", "2-DB12", "1-DB12", "1-DB12", "RB 6", 0.15, 0.15),
+  T("B2", 0.2, 0.4, "2-DB12", "2-DB12", "2-DB12", "2-DB12", "RB 6", 0.15, 0.15),
+  T("B3", 0.2, 0.4, "2-DB12", "2-DB12", "3-DB12", "3-DB12", "RB 6", 0.1, 0.1),
+  T("B4", 0.2, 0.4, "2-DB16", "2-DB16", "3-DB16", "3-DB16", "RB 6", 0.1, 0.15),
+  T("B5", 0.2, 0.5, "2-DB16", "2-DB16", "3-DB16", "3-DB16", "RB 6", 0.15, 0.15),
+  T("B6", 0.2, 0.5, "2-DB16", "2-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.1),
+];
+
+// Column types by level, bottom up (level k = the column under floor k): Bx/By cm, n bars, ties. The user's schedule C1.
+const CT = (level, B, n, s) => ({ level, Bx: B, By: B, n, mainBar: "DB 12", tieBar: "RB 6", s });
+export const DEFAULT_COLUMN_TYPES = [
+  { name: "C1", levels: [CT("ตอม่อ", 30, 8, 0.15), CT("ชั้น 1", 20, 6, 0.2), CT("ชั้น 2", 20, 4, 0.2)] },
+];
+// n bars → bars on the x / y faces incl. corners as tiedColumn counts them (4 → 4/4, 6 → 6/4, 8 → 6/6, 10 → 8/6, 12 → 8/8)
+export const faceBars = (n) => (n % 4 === 0 ? [(n + 4) / 2, (n + 4) / 2] : [(n + 6) / 2, (n + 2) / 2]);
+
+// "2-DB16" → { n: 2, bar: "DB 16" } (null when empty / unknown)
+export function parseBars(s) {
+  const m = /^\s*(\d+)\s*-\s*([A-Za-z]+)\s*(\d+)\s*$/.exec(s ?? "");
+  if (!m) return null;
+  const bar = `${m[2].toUpperCase()} ${m[3]}`;
+  return BARS[bar] ? { n: +m[1], bar } : null;
+}
+
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+const segDist = (p, a, b) => { const d = sub(b, a), L2 = d[0] ** 2 + d[1] ** 2 || 1, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / L2)); return dist(p, [a[0] + d[0] * t, a[1] + d[1] * t]); };
+const cross = (a, b) => a[0] * b[1] - a[1] * b[0];
+const TOL = 0.03;
+
+// position of p along a line (start A, unit u, length L): t, or null when off the line / outside it
+function along(ln, p, inside = false) {
+  const d = sub(p, ln.A), t = d[0] * ln.u[0] + d[1] * ln.u[1];
+  if (Math.abs(cross(ln.u, d)) > TOL || t < -TOL || t > ln.L + TOL) return null;
+  if (inside && (t < TOL || t > ln.L - TOL)) return null;
+  return Math.min(ln.L, Math.max(0, t));
+}
+
+// merge drawn beams that are collinear and share an end into one continuous line — over a column, or where no other beam
+// meets that point (a joint on a girder without a column keeps two secondary beams resting on the girder)
+function buildLines(beams, cols = []) {
+  const lines = beams.map((b, i) => ({ A: b.a, B: b.b, members: [i] })).filter((l) => dist(l.A, l.B) > 0.05);
+  for (let changed = true; changed;) {
+    changed = false;
+    outer: for (let i = 0; i < lines.length; i++) for (let j = i + 1; j < lines.length; j++) {
+      const p = lines[i], q = lines[j], d = sub(p.B, p.A), e = sub(q.B, q.A);
+      if (Math.abs(cross(d, e)) > 1e-6 * Math.hypot(...d) * Math.hypot(...e) || Math.abs(cross(d, sub(q.A, p.A))) / Math.hypot(...d) > TOL) continue;
+      const shared = [[p.A, q.A], [p.A, q.B], [p.B, q.A], [p.B, q.B]].find(([x, y]) => dist(x, y) < TOL);
+      if (!shared) continue;
+      const J = shared[0], third = beams.some((b, k) => !p.members.includes(k) && !q.members.includes(k) && Math.abs(cross(sub(b.b, b.a), d)) > 1e-6 * Math.hypot(...d) * dist(b.a, b.b)
+        && (() => { const e = sub(b.b, b.a), L2 = e[0] ** 2 + e[1] ** 2, t = ((J[0] - b.a[0]) * e[0] + (J[1] - b.a[1]) * e[1]) / L2; return t > 0.01 && t < 0.99 && Math.abs(cross(e, sub(J, b.a))) / Math.sqrt(L2) < TOL; })()); // a girder passing through
+      if (third && !cols.some((c) => dist(c, J) < TOL)) continue;
+      const pts = [p.A, p.B, q.A, q.B], u = d.map((v) => v / Math.hypot(...d)), key = (x) => (x[0] - p.A[0]) * u[0] + (x[1] - p.A[1]) * u[1];
+      pts.sort((x, y) => key(x) - key(y));
+      lines[i] = { A: pts[0], B: pts[3], members: [...p.members, ...q.members] };
+      lines.splice(j, 1); changed = true; break outer;
+    }
+  }
+  return lines.map((l, k) => {
+    const L = dist(l.A, l.B), u = [(l.B[0] - l.A[0]) / L, (l.B[1] - l.A[1]) / L];
+    return { id: k, A: l.A, B: l.B, L, u, members: l.members };
+  });
+}
+
+// closed beam loops (bounded faces of the plan graph); dangling beams (cantilevers) are ignored
+function findPanels(lines) {
+  const V = [], vid = (p) => { let i = V.findIndex((q) => dist(p, q) < TOL); if (i < 0) { V.push(p); i = V.length - 1; } return i; };
+  const E = new Set();
+  for (const ln of lines) {
+    const ts = [0, ln.L];
+    for (const o of lines) if (o !== ln) {
+      for (const p of [o.A, o.B]) { const t = along(ln, p); if (t !== null) ts.push(t); }
+      const den = cross(ln.u, o.u);
+      if (Math.abs(den) > 1e-9) { const s = cross(sub(o.A, ln.A), o.u) / den, r = cross(sub(o.A, ln.A), ln.u) / den; if (s > -TOL && s < ln.L + TOL && r > -TOL && r < o.L + TOL) ts.push(s); }
+    }
+    const pts = [...new Set(ts.map((t) => +t.toFixed(4)))].sort((a, b) => a - b).map((t) => vid([ln.A[0] + ln.u[0] * t, ln.A[1] + ln.u[1] * t]));
+    for (let i = 0; i + 1 < pts.length; i++) if (pts[i] !== pts[i + 1]) E.add(pts[i] < pts[i + 1] ? `${pts[i]}-${pts[i + 1]}` : `${pts[i + 1]}-${pts[i]}`);
+  }
+  let edges = [...E].map((k) => k.split("-").map(Number));
+  for (let pruned = true; pruned;) { // drop dangling edges
+    const deg = new Map(); edges.forEach(([a, b]) => { deg.set(a, (deg.get(a) ?? 0) + 1); deg.set(b, (deg.get(b) ?? 0) + 1); });
+    const keep = edges.filter(([a, b]) => deg.get(a) > 1 && deg.get(b) > 1); pruned = keep.length < edges.length; edges = keep;
+  }
+  const out = new Map(); // vertex → neighbours sorted by angle
+  for (const [a, b] of edges) { (out.get(a) ?? out.set(a, []).get(a)).push(b); (out.get(b) ?? out.set(b, []).get(b)).push(a); }
+  const ang = (a, b) => Math.atan2(V[b][1] - V[a][1], V[b][0] - V[a][0]);
+  for (const [a, list] of out) list.sort((p, q) => ang(a, p) - ang(a, q));
+  const used = new Set(), panels = [];
+  for (const [a0, b0] of edges.flatMap(([a, b]) => [[a, b], [b, a]])) {
+    if (used.has(`${a0}>${b0}`)) continue;
+    const loop = []; let a = a0, b = b0;
+    while (!used.has(`${a}>${b}`)) {
+      used.add(`${a}>${b}`); loop.push(a);
+      const list = out.get(b), i = list.indexOf(a), c = list[(i - 1 + list.length) % list.length]; // next edge clockwise → face on the left
+      a = b; b = c;
+    }
+    const P = loop.map((i) => V[i]), area = P.reduce((s, p, i) => s + cross(p, P[(i + 1) % P.length]), 0) / 2;
+    if (area > 1e-6) panels.push(P);
+  }
+  // corners only (drop collinear vertices)
+  return panels.map((P) => P.filter((p, i) => Math.abs(cross(sub(p, P[(i - 1 + P.length) % P.length]), sub(P[(i + 1) % P.length], p))) > 1e-6));
+}
+
+const panelKey = (P) => { const c = P.reduce((s, p) => [s[0] + p[0] / P.length, s[1] + p[1] / P.length], [0, 0]); return `${c[0].toFixed(2)},${c[1].toFixed(2)}`; };
+
+// load on each panel edge as pieces { s0, s1, w0, w1 } (s from the edge start, kg/m)
+function panelLoads(P, w, dir) {
+  const n = P.length, sides = P.map((p, i) => dist(p, P[(i + 1) % n]));
+  const rect = n === 4 && P.every((p, i) => Math.abs((P[(i + 1) % n][0] - p[0]) * (P[(i + 3) % n][0] - p[0]) + (P[(i + 1) % n][1] - p[1]) * (P[(i + 3) % n][1] - p[1])) < 1e-4);
+  if (rect) {
+    const S = Math.min(sides[0], sides[1]), Lg = Math.max(sides[0], sides[1]), m = S / Lg, peak = (w * S) / 2;
+    if (dir) { // precast planks spanning along dir rest on the two edges across them
+      const v = dir === "x" ? [1, 0] : [0, 1], along_ = (i) => Math.abs(sub(P[(i + 1) % n], P[i])[0] * v[0] + sub(P[(i + 1) % n], P[i])[1] * v[1]) / sides[i];
+      const span = sides.find((_, i) => along_(i) > 0.7) ?? Lg;
+      return { kind: "oneway", m, S, L: Lg, span, edges: sides.map((len, i) => (along_(i) < 0.3 ? [{ s0: 0, s1: len, w0: (w * span) / 2, w1: (w * span) / 2 }] : [])) };
+    }
+    if (Lg / S > 2) return { kind: "oneway", m, S, L: Lg, edges: sides.map((len) => (Math.abs(len - Lg) < 1e-6 ? [{ s0: 0, s1: len, w0: peak, w1: peak }] : [])) };
+    return { kind: "twoway", m, S, L: Lg, edges: sides.map((len) => (len - S < 1e-6 ? [{ s0: 0, s1: len / 2, w0: 0, w1: peak }, { s0: len / 2, s1: len, w0: peak, w1: 0 }]
+      : [{ s0: 0, s1: S / 2, w0: 0, w1: peak }, { s0: S / 2, s1: len - S / 2, w0: peak, w1: peak }, { s0: len - S / 2, s1: len, w0: peak, w1: 0 }])) };
+  }
+  // other shapes: each edge takes the triangle it forms with the centroid, spread evenly (approximate)
+  const c = P.reduce((s, p) => [s[0] + p[0] / n, s[1] + p[1] / n], [0, 0]);
+  return { kind: "other", edges: P.map((p, i) => { const q = P[(i + 1) % n], A = Math.abs(cross(sub(p, c), sub(q, c))) / 2; return [{ s0: 0, s1: sides[i], w0: (w * A) / sides[i], w1: (w * A) / sides[i] }]; }) };
+}
+
+const layer = (main, special) => [{ ...(main ? { main } : {}), ...(special ? { special } : {}) }, {}, {}];
+// "lighter" type: smaller concrete section first, then less steel
+const steel = (s) => { const x = parseBars(s); return x ? x.n * BARS[x.bar].A : 0; };
+const typeWeight = (t) => t.b * t.h * 1e4 + (steel(t.top) + steel(t.bot) + steel(t.topX) + steel(t.botX)) / 100;
+
+// WSD checks of one span with one beam type (mid-span sagging + support hogging), like the beam module
+export function checkSpan(t, sp, mat) {
+  const top = parseBars(t.top), bot = parseBars(t.bot), topX = parseBars(t.topX), botX = parseBars(t.botX);
+  const base = { ...mat, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: sp.Mt ?? 0, stirrup: { bar: t.st, sets: 1 } };
+  const out = {};
+  try {
+    if (sp.kind !== "cantilever") out.mid = designSection({ ...base, M: sp.Mpos, s: t.sMid, top: layer(top), bottom: layer(bot, botX) });
+    out.sup = designSection({ ...base, M: sp.Mneg, s: t.sSup, top: layer(bot), bottom: layer(top, topX) }); // tension at the top
+  } catch (e) { return { error: e.message, ok: false }; }
+  // a short segment (span < 4h, e.g. between close columns) is a deep beam: its h/L ratio is reported, the WSD checks still apply
+  const deep = sp.len < 4 * t.h;
+  const ok1 = (r) => r.minDepthOk && (r.deepOk || deep) && r.nOk && r.AsMinOk !== false && r.doublyCheck === "OK" && r.VpOk && r.vtOk && r.vOk && r.AminOk !== false && r.stirrup !== "CHECK_SPACING" && r.topOk && r.botOk;
+  // tension steel, compression steel (doubly reinforced when M > Mc) and shear, as required / provided
+  const util = (r) => Math.max(typeof r.reqBot === "number" ? r.reqBot / r.provBot : 9, typeof r.reqTop === "number" && r.reqTop > 0 ? r.reqTop / (r.provTop || 1e-9) : 0, r.Vp > 0 ? r.Vp / r.Vc2 : 0);
+  // As,min applies to the sagging face; a support with no hogging moment only needs its shear checked
+  const supOk = sp.Mneg < 1 ? out.sup.VpOk && out.sup.stirrup !== "CHECK_SPACING" && out.sup.AminOk !== false : ok1(out.sup);
+  return { ...out, deep: deep && !(out.mid ?? out.sup).deepOk, ok: (!out.mid || ok1(out.mid)) && supOk, util: Math.max(out.mid ? util(out.mid) : 0, sp.Mneg < 1 ? 0 : util(out.sup)) };
+}
+
+// floor: { columns: [[x,y]], beams: [{ a, b, type (index | null = auto), wall: { h, kind } }], t, finish, live, panels: { key: { t, finish, live, open } } }
+// extra: point loads [{ p: [x,y], P, from }] from columns of the floor above that stand on a beam here
+// floor.panels[key] = { kind: S | PS | GS, dir: x | y (PS), t, finish, live, open }; floor.walls = [{ a, b, kind, h, open %, layers }];
+// floor.cants = [{ a, b (on a beam), L, side ±1, t, finish, live }] cantilever slabs
+// floor.stairs = [{ a, b (plan rectangle corners), up: +x|-x|+y|-y, kind, t, riser, tread, finish, live, landingL, landingTo: this|below, side ±1 (cant) }]
+// floor.lineLoads = [{ a, b, q kg/m, name }] railings etc.; floor.pointLoads = [{ p, P kg, name }]; panels[key].extra kg/m² (SDL)
+// downLines: line loads handed down by the floor above (stair bottoms) → [{ a, b, q, g, from }]
+export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = []) {
+  const warnings = [], cols = floor.columns ?? [];
+  const lines = buildLines(floor.beams ?? [], cols);
+  // members along each line (t range) and supports
+  for (const ln of lines) {
+    ln.parts = ln.members.map((i) => { const b = floor.beams[i], t0 = along(ln, b.a), t1 = along(ln, b.b); return { i, t0: Math.min(t0, t1), t1: Math.max(t0, t1) }; });
+    ln.cols = cols.map((c, ci) => ({ ci, t: along(ln, c) })).filter((x) => x.t !== null);
+  }
+  for (const ln of lines) { // an end with no column resting on another line → carried by that line
+    ln.carriers = [];
+    for (const [t, p] of [[0, ln.A], [ln.L, ln.B]]) {
+      if (ln.cols.some((c) => Math.abs(c.t - t) < TOL)) continue;
+      const host = lines.find((o) => o !== ln && along(o, p) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
+      if (host) ln.carriers.push({ t, host: host.id, at: along(host, p) });
+    }
+  }
+  // slab panels by kind: S cast in place (two-way / one-way), PS precast planks (one-way along dir), GS on ground (nothing to the beams)
+  const panels = findPanels(lines).map((P) => {
+    const key = panelKey(P), o = floor.panels?.[key] ?? {}, open = !!o.open, st = o.kind ?? "S", dir = st === "PS" ? o.dir ?? "x" : null;
+    const t = o.t ?? floor.t, finish = o.finish ?? floor.finish, live = o.live ?? floor.live;
+    const area = Math.abs(P.reduce((s, p, i) => s + cross(p, P[(i + 1) % P.length]), 0) / 2);
+    const g = open ? { DL: 0, SDL: 0, LL: 0, WALL: 0 } : { DL: CONC * t, SDL: finish + (o.extra ?? 0), LL: live, WALL: 0 };
+    return { key, P, st, dir, t, finish, live, extraSDL: o.extra ?? 0, open, area, g, ...panelLoads(P, 1, dir), ...(st === "GS" ? { kind: "ground" } : {}) };
+  });
+  const inPanel = (pt) => panels.find((pn) => { let c = false; for (let i = 0, j = pn.P.length - 1; i < pn.P.length; j = i++) { const [xi, yi] = pn.P[i], [xj, yj] = pn.P[j]; if (yi > pt[1] !== yj > pt[1] && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) c = !c; } return c; });
+  for (const ln of lines) { ln.slab = []; ln.torsion = []; }
+  // walls: on a beam → line load on that beam; on a slab → spread over that panel
+  const walls = wallsOf(floor).map((w, i) => {
+    const q = wallLoad(w, wallTypes), L = dist(w.a, w.b), u = sub(w.b, w.a).map((v) => v / (L || 1)), out = { i, q, len: L, on: [] };
+    for (const ln of lines) {
+      if (Math.abs(cross(ln.u, u)) > 1e-6 || Math.abs(cross(ln.u, sub(w.a, ln.A))) > TOL) continue;
+      const proj = (p) => (p[0] - ln.A[0]) * ln.u[0] + (p[1] - ln.A[1]) * ln.u[1], a = Math.max(0, Math.min(proj(w.a), proj(w.b))), b = Math.min(ln.L, Math.max(proj(w.a), proj(w.b)));
+      if (b - a > 0.05) { ln.slab.push({ a, b, wa: q, wb: q, g: "WALL", from: `ผนัง ${i + 1}` }); out.on.push({ line: ln.id, len: b - a }); }
+    }
+    if (!out.on.length && L > 0.05) {
+      const pn = inPanel([(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2]);
+      if (pn && pn.st !== "GS") { pn.g.WALL += (q * L) / pn.area; out.panel = pn.key; }
+      else if (!pn) warnings.push(`ผนัง ${i + 1} ไม่อยู่บนคานหรือพื้น — ไม่ได้นำน้ำหนักไปใช้`);
+      else out.ground = true;
+    }
+    return out;
+  });
+  panels.forEach((pn) => { pn.w = pn.st === "GS" ? 0 : pn.g.DL + pn.g.SDL + pn.g.LL + pn.g.WALL; });
+  // cantilever slabs along a beam: line load w·L and torsion w·L²/2 per metre on that beam
+  const cants = (floor.cants ?? []).map((c, i) => {
+    const t = c.t ?? floor.t, g = { DL: CONC * t, SDL: c.finish ?? floor.finish, LL: c.live ?? floor.live }, L = c.L, ab = dist(c.a, c.b);
+    const n = [(-(c.b[1] - c.a[1]) / ab) * (c.side ?? 1), ((c.b[0] - c.a[0]) / ab) * (c.side ?? 1)];
+    const P = [c.a, c.b, [c.b[0] + n[0] * L, c.b[1] + n[1] * L], [c.a[0] + n[0] * L, c.a[1] + n[1] * L]];
+    const ln = lines.find((o) => along(o, c.a) !== null && along(o, c.b) !== null);
+    if (ln) {
+      const a = Math.min(along(ln, c.a), along(ln, c.b)), b = Math.max(along(ln, c.a), along(ln, c.b));
+      for (const [k, v] of Object.entries(g)) if (v > 0) ln.slab.push({ a, b, wa: v * L, wb: v * L, g: k, from: `พื้นยื่น ${i + 1}` });
+      ln.torsion.push({ a, b, m: ((g.DL + g.SDL + g.LL) * L * L) / 2 });
+    } else warnings.push(`พื้นยื่น ${i + 1} ไม่ได้วางบนคาน`);
+    return { i, P, t, L, g, w: g.DL + g.SDL + g.LL, area: ab * L, line: ln?.id };
+  });
+  // a uniform load along segment a-b onto the beam line under it (false when no beam is there)
+  const onBeam = (a, b, q, g, from) => {
+    const L = dist(a, b), u = sub(b, a).map((v) => v / (L || 1));
+    const ln = lines.find((o) => Math.abs(cross(o.u, u)) < 1e-6 && along(o, a) !== null && along(o, b) !== null);
+    if (!ln || !(q > 0)) return !!ln;
+    const t0 = along(ln, a), t1 = along(ln, b);
+    ln.slab.push({ a: Math.min(t0, t1), b: Math.max(t0, t1), wa: q, wb: q, g, from });
+    return true;
+  };
+  // stairs: rectangle on plan; reactions per metre of width onto the beams at its edges; bottom edge onto the floor below
+  const down = [];
+  const stairs = (floor.stairs ?? []).map((st, i) => {
+    const x0 = Math.min(st.a[0], st.b[0]), x1 = Math.max(st.a[0], st.b[0]), y0 = Math.min(st.a[1], st.b[1]), y1 = Math.max(st.a[1], st.b[1]);
+    const ax = st.up?.[1] ?? "x", sg = st.up?.[0] === "-" ? -1 : 1, from = `บันได ${i + 1}`, { th, flight, landing } = stairLoads(st);
+    const Lr = ax === "x" ? x1 - x0 : y1 - y0, B = ax === "x" ? y1 - y0 : x1 - x0;
+    // edges: start (bottom of the run), end (far), sideA / sideB (along the run)
+    const E = ax === "x"
+      ? { start: sg > 0 ? [[x0, y0], [x0, y1]] : [[x1, y0], [x1, y1]], end: sg > 0 ? [[x1, y0], [x1, y1]] : [[x0, y0], [x0, y1]], sideA: [[x0, y0], [x1, y0]], sideB: [[x0, y1], [x1, y1]] }
+      : { start: sg > 0 ? [[x0, y0], [x1, y0]] : [[x0, y1], [x1, y1]], end: sg > 0 ? [[x0, y1], [x1, y1]] : [[x0, y0], [x1, y0]], sideA: [[x0, y0], [x0, y1]], sideB: [[x1, y0], [x1, y1]] };
+    const half = (e, k) => { const [p, q] = e, m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; return k === 0 ? [p, m] : [m, q]; };
+    const put = (edge, perM, where) => { // perM: { DL, SDL, LL } kg/m
+      for (const [g, q] of Object.entries(perM)) {
+        if (!(q > 0)) continue;
+        if (where === "below") down.push({ a: edge[0], b: edge[1], q, g, from });
+        else if (!onBeam(edge[0], edge[1], q, g, from)) { warnings.push(`${from}: ขอบ (${edge[0].map((v) => v.toFixed(2))})–(${edge[1].map((v) => v.toFixed(2))}) ไม่มีคานรับ`); break; }
+      }
+    };
+    const scale = (o, f) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v * f]));
+    const add = (a, b) => Object.fromEntries(Object.keys(a).map((k) => [k, a[k] + b[k]]));
+    const total = scale(flight, Lr * B);
+    if (st.kind === "side") { put(E.sideA, scale(flight, B / 2), "this"); put(E.sideB, scale(flight, B / 2), "this"); } // spans across the width: each side wB/2 per metre of run
+    else if (st.kind === "cant") put(st.side === -1 ? E.sideA : E.sideB, scale(flight, B), "this");
+    else if (st.kind === "landing") {
+      // U / L: flight 1 up on one half, landing at the far end, flight 2 back on the other half (simple span start → far edge)
+      const Ll = Math.min(st.landingL ?? 1.2, Lr), Lf = Lr - Ll, Rfar = add(scale(flight, (Lf * Lf) / 2 / Lr), scale(landing, (Ll * (Lf + Ll / 2)) / Lr)), Rst = add(scale(flight, Lf - (Lf * Lf) / 2 / Lr), scale(landing, Ll - (Ll * (Lf + Ll / 2)) / Lr));
+      put(half(E.start, 0), Rst, "below"); put(half(E.start, 1), Rst, "this");
+      put(E.end, Rfar, st.landingTo === "this" ? "this" : "below");
+      total.DL = flight.DL * Lf * B + landing.DL * Ll * B; total.SDL = flight.SDL * Lr * B; total.LL = flight.LL * Lr * B;
+    } else { put(E.start, scale(flight, Lr / 2), "below"); put(E.end, scale(flight, Lr / 2), "this"); } // long: simple span along the run
+    if (st.kind === "cant") { // the supporting beam also takes the torque wB²/2 per metre
+      const e = st.side === -1 ? E.sideA : E.sideB, ln = lines.find((o) => along(o, e[0]) !== null && along(o, e[1]) !== null);
+      if (ln) { const a = along(ln, e[0]), b = along(ln, e[1]); ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: ((flight.DL + flight.SDL + flight.LL) * B * B) / 2 }); }
+    }
+    return { i, P: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], kind: st.kind ?? "long", up: st.up ?? "+x", th, Lr, B, total, w: flight.DL + flight.SDL + flight.LL };
+  });
+  // a panel under a stair is its stair well: the stair replaces that slab
+  for (const pn of panels) {
+    const c = pn.P.reduce((s, q) => [s[0] + q[0] / pn.P.length, s[1] + q[1] / pn.P.length], [0, 0]);
+    if (stairs.some((st) => c[0] > st.P[0][0] && c[0] < st.P[2][0] && c[1] > st.P[0][1] && c[1] < st.P[2][1])) { pn.g = { DL: 0, SDL: 0, LL: 0, WALL: 0 }; pn.w = 0; pn.stairWell = true; }
+  }
+  // railings / line loads: on a cantilever slab tip → that slab's beam (+ torsion), on a beam → the beam, else spread over the panel
+  const lineLoads = (floor.lineLoads ?? []).map((l, i) => {
+    const from = l.name || `น้ำหนักเส้น ${i + 1}`, L = dist(l.a, l.b);
+    const tip = cants.find((c) => segDist(l.a, c.P[3], c.P[2]) < TOL && segDist(l.b, c.P[3], c.P[2]) < TOL);
+    if (tip && tip.line !== undefined) {
+      const ln = lines[tip.line], src = floor.cants[tip.i], a = along(ln, src.a), b = along(ln, src.b), f = L / dist(src.a, src.b);
+      ln.slab.push({ a: Math.min(a, b), b: Math.max(a, b), wa: l.q * f, wb: l.q * f, g: "SP", from });
+      ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: l.q * f * tip.L });
+      return { i, on: "cant" };
+    }
+    if (onBeam(l.a, l.b, l.q, "SP", from)) return { i, on: "beam" };
+    const pn = inPanel([(l.a[0] + l.b[0]) / 2, (l.a[1] + l.b[1]) / 2]);
+    if (pn && pn.st !== "GS") { pn.g.SP = (pn.g.SP ?? 0) + (l.q * L) / pn.area; pn.w += (l.q * L) / pn.area; return { i, on: "panel", panel: pn.key }; }
+    warnings.push(`${from} ไม่มีคานหรือพื้นรับ`); return { i, on: null };
+  });
+  // point loads: on a beam → point load; else spread over the panel
+  const pointLoads = (floor.pointLoads ?? []).map((pl, i) => {
+    const from = pl.name || `น้ำหนักจุด ${i + 1}`, ci = cols.findIndex((c) => dist(c, pl.p) < 0.05);
+    if (ci >= 0) return { i, on: "column", ci, P: pl.P }; // e.g. roof plates bearing on a column top
+    const ln = lines.find((o) => along(o, pl.p) !== null);
+    if (ln) { (ln.extra ??= []).push({ at: along(ln, pl.p), P: pl.P, from, g: "SP" }); return { i, on: "beam" }; }
+    const pn = inPanel(pl.p);
+    if (pn && pn.st !== "GS") { pn.g.SP = (pn.g.SP ?? 0) + pl.P / pn.area; pn.w += pl.P / pn.area; return { i, on: "panel", panel: pn.key }; }
+    warnings.push(`${from} ไม่มีคานหรือพื้นรับ`); return { i, on: null };
+  });
+  for (const d of downLines) if (!onBeam(d.a, d.b, d.q, d.g, d.from)) warnings.push(`${d.from}: ปลายล่างไม่มีคานรับที่ชั้นนี้`);
+  panels.forEach((pn, k) => pn.st !== "GS" && pn.edges.forEach((pieces, e) => {
+    const p = pn.P[e], q = pn.P[(e + 1) % pn.P.length], L = dist(p, q), u = sub(q, p).map((v) => v / L);
+    const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], ln = lines.find((o) => along(o, mid) !== null && Math.abs(cross(o.u, u)) < 1e-6);
+    if (!ln) return;
+    const t0 = along(ln, p), dir = u[0] * ln.u[0] + u[1] * ln.u[1] > 0 ? 1 : -1;
+    for (const pc of pieces) for (const [gk, gv] of Object.entries(pn.g)) {
+      if (!(gv > 0)) continue;
+      const a = t0 + dir * pc.s0, b = t0 + dir * pc.s1, w0 = pc.w0 * gv, w1 = pc.w1 * gv;
+      ln.slab.push(a < b ? { a, b, wa: w0, wb: w1, g: gk, from: `P${k + 1}` } : { a: b, b: a, wa: w1, wb: w0, g: gk, from: `P${k + 1}` });
+    }
+  }));
+  // columns from above standing on a beam: point load on the first line through that point
+  for (const e of extra) {
+    const ln = lines.find((o) => along(o, e.p) !== null);
+    if (ln) (ln.extra ??= []).push({ at: along(ln, e.p), P: e.P, from: e.from });
+    else warnings.push(`${e.from} ที่ (${e.p[0].toFixed(2)}, ${e.p[1].toFixed(2)}) ไม่มีเสาหรือคานรับที่ชั้นนี้ — แรงหายไป`);
+  }
+  // types: fixed per drawn beam, or auto (lightest passing); iterate because self weight and stiffness depend on the choice
+  const order = types.map((t, i) => ({ t, i })).sort((x, y) => typeWeight(x.t) - typeWeight(y.t));
+  const typeOf = new Map(); // drawn beam index → type index in use
+  (floor.beams ?? []).forEach((b, i) => typeOf.set(i, b.type ?? order[0]?.i ?? 0));
+  let result;
+  for (let pass = 0; pass < 4; pass++) {
+    result = solveFloor(floor, lines, types, mat, typeOf, warnings, pass === 3);
+    let changed = false;
+    // deflection with another type: δ · I(current) / I(type)
+    const deflWith = (sp, t) => { const cur = types[typeOf.get(sp.member)] ?? types[0], f = (cur.b * cur.h ** 3) / (t.b * t.h ** 3), d = sp.defl;
+      return { ...d, dL: d.dL * f, dT: d.dT * f, ok: d.dL * f <= d.limL + 1e-9 && d.dT * f <= d.limT + 1e-9 }; };
+    const withDefl = (c, sp, t) => { const d = deflWith(sp, t); return { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) }; };
+    for (const sp of result.spans) {
+      const b = floor.beams[sp.member];
+      if (b.type != null) { sp.check = withDefl(checkSpan(types[b.type], sp, mat), sp, types[b.type]); sp.typeIdx = b.type; sp.own = true; continue; }
+      let best = null;
+      for (const { t, i } of order) { const c = withDefl(checkSpan(t, sp, mat), sp, t); if (c.ok) { best = { c, i }; break; } if (!best || c.util < best.c.util) best = { c, i }; }
+      sp.check = best.c; sp.typeIdx = best.i;
+    }
+    // a drawn beam uses one type over all its spans: the heaviest its spans need
+    for (const [i] of typeOf) {
+      const need = result.spans.filter((s) => s.member === i).map((s) => s.typeIdx);
+      if (!need.length || floor.beams[i].type != null) continue;
+      const pick = need.reduce((a, b) => (typeWeight(types[b]) > typeWeight(types[a]) ? b : a));
+      if (pick !== typeOf.get(i)) { typeOf.set(i, pick); changed = true; }
+    }
+    if (!changed) break;
+  }
+  for (const sp of result.spans) {
+    const t = types[typeOf.get(sp.member)] ?? types[0], f = 1; // the last pass ran with these types: its deflections are current
+    sp.typeIdx = typeOf.get(sp.member); const c = checkSpan(t, sp, mat), d = sp.defl;
+    sp.check = { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) * f };
+  }
+  for (const sp of result.spans) Object.assign(sp, { type: types[sp.typeIdx], ok: sp.check.ok });
+  for (const pl of pointLoads) if (pl.on === "column") { result.columns[pl.ci].R += pl.P; result.columns[pl.ci].from.push({ point: pl.i, R: pl.P }); }
+  const groups = { DL: 0, SDL: 0, WALL: 0, LL: 0, SP: pointLoads.reduce((s, pl) => s + (pl.on === "column" ? pl.P : 0), 0) };
+  for (const ln of lines) {
+    for (const l of ln.slab) groups[l.g ?? "DL"] += ((l.wa + l.wb) / 2) * (l.b - l.a);
+    for (const e of ln.extra ?? []) groups[e.g ?? "SP"] += e.P;
+  }
+  for (const sp of result.spans) groups.DL += CONC * sp.type.b * sp.type.h * sp.len;
+  return { ...result, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
+}
+
+// largest |deflection| (m) of each element: v'' = −M/EI integrated twice, matched to the nodal deflections
+function elementDeflections(res, EI) {
+  return res.el.map((el, e) => {
+    const n = 40, h = el.L / n, I1 = [0], I2 = [0];
+    for (let i = 1; i <= n; i++) {
+      const k0 = -el.M((i - 1) * h) / EI[e], k1 = -el.M(i * h) / EI[e];
+      I1.push(I1[i - 1] + ((k0 + k1) / 2) * h); I2.push(I2[i - 1] + ((I1[i - 1] + I1[i]) / 2) * h);
+    }
+    const [d0, d1] = el.d, c1 = (d1 - d0 - I2[n]) / el.L;
+    return Math.max(...I2.map((v, i) => Math.abs(v + d0 + c1 * i * h)));
+  });
+}
+// Ec (kg/m²) as in the beam module: 4270·w^1.5·√f'c ksc
+const EcOf = (mat) => 2.323 ** 1.5 * 4270 * Math.sqrt(mat.fcPrime) * 1e4;
+
+function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
+  const done = new Map(), cols = (floor.columns ?? []).map((p) => ({ p, R: 0, from: [] }));
+  const spans = [];
+  for (let pass = 0; pass <= lines.length && done.size < lines.length; pass++) {
+    for (const ln of lines) {
+      if (done.has(ln.id)) continue;
+      const resting = lines.filter((o) => o.carriers.some((c) => c.host === ln.id));
+      if (resting.some((o) => !done.has(o.id)) && pass < lines.length) continue; // wait for the beams resting on this one
+      // loads: slab, wall, self weight per member, point loads from beams resting here
+      const loads = [...ln.slab], pts = [];
+      for (const pt of ln.parts) {
+        const t = types[typeOf.get(pt.i)] ?? types[0];
+        loads.push({ a: pt.t0, b: pt.t1, wa: CONC * t.b * t.h, wb: CONC * t.b * t.h, g: "DL", from: "self" });
+      }
+      for (const o of resting) for (const c of o.carriers.filter((c) => c.host === ln.id)) {
+        const R = done.get(o.id)?.reaction?.(c.t) ?? 0;
+        if (R > 0) { loads.push({ at: c.at, P: R, g: "SP" }); pts.push({ at: c.at, P: R, from: `แนว ${o.id + 1}` }); }
+      }
+      for (const e of ln.extra ?? []) { loads.push({ at: e.at, P: e.P, g: "SP" }); pts.push(e); }
+      // nodes: ends, member joints, supports, point loads
+      const sx = [...ln.cols.map((c) => c.t), ...ln.carriers.map((c) => c.t)];
+      const x = [...new Set([0, ln.L, ...sx, ...ln.parts.flatMap((p) => [p.t0, p.t1])].map((v) => +v.toFixed(4)))].sort((a, b) => a - b);
+      const sup = x.map((v) => sx.some((s) => Math.abs(s - v) < 1e-3));
+      // EI = Ec · 0.5 Ig (cracked section, for deflections; the reactions only depend on the ratios)
+      const Ec = EcOf(mat), EI = x.slice(1).map((v, k) => { const m = (v + x[k]) / 2, pt = ln.parts.find((p) => m >= p.t0 - 1e-6 && m <= p.t1 + 1e-6), t = types[typeOf.get(pt?.i)] ?? types[0]; return (Ec * 0.5 * t.b * t.h ** 3) / 12; });
+      const res = solveBeam({ x, sup, EI, loads });
+      if (res.error) {
+        if (last) warnings.push(`แนวคาน ${ln.id + 1}: ${res.error} — วางเสาหรือให้ปลายคานวางบนคานอื่น`);
+        done.set(ln.id, { reaction: () => 0 }); Object.assign(ln, { error: res.error, res: null, loads, pts }); continue;
+      }
+      const Rat = (t) => { const k = x.findIndex((v) => Math.abs(v - t) < 1e-3); return k >= 0 ? res.R[k] : 0; };
+      done.set(ln.id, { reaction: Rat });
+      // column loads: the larger of the continuous-beam reaction and the simple-span (tributary) reaction, so that a support
+      // lifted by a long neighbouring span (pinned model, no frame action) never takes load away from its column
+      const sk = sup.map((v, k) => (v ? k : -1)).filter((k) => k >= 0), Rs = new Array(x.length).fill(0);
+      for (let k = 0; k + 1 < sk.length; k++) {
+        const lo = k === 0 ? 0 : sk[k], hi = k === sk.length - 2 ? x.length - 1 : sk[k + 1], last = k === sk.length - 2;
+        const segLoads = loads.filter((l) => l.P === undefined || last || l.at < x[sk[k + 1]] - 1e-6);
+        const r = solveBeam({ x: x.slice(lo, hi + 1), sup: x.slice(lo, hi + 1).map((_, j) => lo + j === sk[k] || lo + j === sk[k + 1]), EI: EI.slice(lo, hi), loads: segLoads });
+        if (!r.error) r.R.forEach((v, j) => (Rs[lo + j] += v));
+      }
+      const RsAt = (t) => { const k = x.findIndex((v) => Math.abs(v - t) < 1e-3); return k >= 0 ? Rs[k] : 0; };
+      Object.assign(ln, { res, x, sup, loads, pts, error: null });
+      // spans between supports (cantilevers past the end supports)
+      const si = sup.map((s, k) => (s ? k : -1)).filter((k) => k >= 0), cut = [...new Set([0, ...si, x.length - 1])].sort((a, b) => a - b);
+      // live-load patterns: the dead part once plus the live load of each span on its own → max / min envelopes by superposition
+      const isLL = (l) => l.g === "LL", dead = solveBeam({ x, sup, EI, loads: loads.filter((l) => !isLL(l)) });
+      const liveBy = cut.slice(1).map((i1, k) => {
+        const x0 = x[cut[k]], x1 = x[i1], last = k === cut.length - 2;
+        const part = loads.filter(isLL).flatMap((l) => {
+          if (l.P !== undefined) return l.at >= x0 - 1e-9 && (l.at < x1 - 1e-9 || last) ? [l] : [];
+          const a = Math.max(l.a, x0), b = Math.min(l.b, x1), w = (t) => l.wa + ((l.wb - l.wa) * (t - l.a)) / (l.b - l.a || 1);
+          return b - a > 1e-9 ? [{ a, b, wa: w(a), wb: w(b), g: "LL" }] : [];
+        });
+        return part.length ? solveBeam({ x, sup, EI, loads: part }) : null;
+      }).filter((r) => r && !r.error);
+      const env = res.el.map((el, e) => {
+        const pts = Array.from({ length: 41 }, (_, i) => (el.L * i) / 40), Md = pts.map(dead.el[e].M), Vd = pts.flatMap((t) => [dead.el[e].V(t), dead.el[e].V(Math.min(el.L, t + 1e-6))]);
+        const Ms = liveBy.map((r) => pts.map(r.el[e].M)), Vs = liveBy.map((r) => pts.flatMap((t) => [r.el[e].V(t), r.el[e].V(Math.min(el.L, t + 1e-6))]));
+        const up = (base, list, f) => base.map((v, i) => v + list.reduce((t, l) => t + f(0, l[i]), 0));
+        const Mmax = up(Md, Ms, Math.max), Mmin = up(Md, Ms, Math.min), Vmax = up(Vd, Vs, Math.max), Vmin = up(Vd, Vs, Math.min);
+        return { Mmax: Math.max(0, ...Mmax), Mmin: Math.min(0, ...Mmin), ML: Math.min(Mmin[0], 0), MR: Math.min(Mmin[40], 0), Vmax: Math.max(...Vmax.map(Math.abs), ...Vmin.map(Math.abs)) };
+      });
+      const Renv = x.map((_, k) => dead.R[k] + liveBy.reduce((t, r) => t + Math.max(0, r.R[k]), 0));
+      // deflections: dead (sustained, ×3 for creep and shrinkage) and full live load
+      const live = solveBeam({ x, sup, EI, loads: loads.filter(isLL) }), dD = dead.error ? [] : elementDeflections(dead, EI), dL = live.error ? [] : elementDeflections(live, EI);
+      ln.env = { env, Renv };
+      const ReAt = (t) => { const k = x.findIndex((v) => Math.abs(v - t) < 1e-3); return k >= 0 ? Renv[k] : 0; };
+      ln.cols.forEach((c) => { const Rc = Rat(c.t), R = Math.max(Rc, RsAt(c.t), ReAt(c.t)); cols[c.ci].R += R; cols[c.ci].from.push({ line: ln.id, R, Rc }); });
+      const nIn = si.length - 1;
+      for (let k = 0; k + 1 < cut.length; k++) {
+        const i0 = cut[k], i1 = cut[k + 1], els = res.el.slice(i0, i1), cant = !sup[i0] || !sup[i1];
+        const j = si.indexOf(i0), kind = cant ? "cantilever" : nIn === 1 ? "simple" : j === 0 || j === nIn - 1 ? "one_end" : "both_ends";
+        const mid = (x[i0] + x[i1]) / 2, member = ln.parts.find((p) => mid >= p.t0 - 1e-6 && mid <= p.t1 + 1e-6)?.i ?? ln.members[0];
+        spans.push({ id: `${ln.id + 1}-${spans.filter((s) => s.line === ln.id).length + 1}`, line: ln.id, member, x0: x[i0], x1: x[i1], len: x[i1] - x[i0], kind,
+          a: [ln.A[0] + ln.u[0] * x[i0], ln.A[1] + ln.u[1] * x[i0]], b: [ln.A[0] + ln.u[0] * x[i1], ln.A[1] + ln.u[1] * x[i1]],
+          Mpos: Math.max(0, ...env.slice(i0, i1).map((e) => e.Mmax)), Mneg: Math.max(0, -env[i0].ML, -env[i1 - 1].MR, ...(cant ? env.slice(i0, i1).map((e) => -e.Mmin) : [])),
+          V: Math.max(...env.slice(i0, i1).map((e) => e.Vmax)),
+          defl: (() => { const Le = (cant ? 2 : 1) * (x[i1] - x[i0]), dl = Math.max(0, ...dL.slice(i0, i1)), dt = 3 * Math.max(0, ...dD.slice(i0, i1)) + dl;
+            return { dL: dl, dT: dt, limL: Le / 360, limT: Le / 240, ok: dl <= Le / 360 + 1e-9 && dt <= Le / 240 + 1e-9, I: (els[0] && EI[i0]) || 0 }; })(),
+          Mt: ln.torsion.reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2) });
+      }
+    }
+  }
+  if (done.size < lines.length) warnings.push("มีคานวางพาดกันเป็นวง — ตรวจจุดรองรับ");
+  return { lines, spans, columns: cols };
+}

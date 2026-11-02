@@ -299,8 +299,27 @@ function DesignInputs({ d, set }) {
   </>);
 }
 
+// Slope read off the section drawing: the ridge level, or rise : run (e.g. 1:2 or 0.5). Either one sets the angle.
+function SlopeFrom({ roof, g, set }) {
+  const tan = g.tan, run = (g.top - roof.H) / tan; // plan distance from the wall plate to the highest point
+  const toDeg = (t) => +((Math.atan(t) * 180) / Math.PI).toFixed(2);
+  const box = (label, unit, shown, parse) => (
+    <Field label={label} unit={unit}>
+      <input key={shown} defaultValue={shown} className={SEL} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        onBlur={(e) => { const t = parse(e.target.value.trim()); if (t > 0 && t < 20 && Math.abs(toDeg(t) - roof.slope) > 1e-3) set("slope", toDeg(t)); }} />
+    </Field>
+  );
+  return (<>
+    {box("ระดับยอดอกไก่", "m", g.top.toFixed(3), (v) => (Number(v) - roof.H) / run)}
+    {box("สูง : ราบ", "", `1:${(1 / tan).toFixed(3).replace(/\.?0+$/, "")}`, (v) => {
+      const m = /^([\d.]+)\s*[:/]\s*([\d.]+)$/.exec(v);
+      return m ? Number(m[1]) / Number(m[2]) : Number(v);
+    })}
+  </>);
+}
+
 export function RoofPage({ roof, set, dark }) {
-  const sk = useSkeleton(), { g, fr, dz, error } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
+  const sk = useSkeleton(), { g, fr, dz, error } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
   const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz);
   const modeBar = (
     <span className="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
@@ -322,6 +341,7 @@ export function RoofPage({ roof, set, dark }) {
         {mode !== "design" && mode !== "plate" && <Card title="รูปทรงหลังคา" icon={Triangle}>
           <div className="grid grid-cols-2 gap-3">
             {f("slope", "ความชัน", "องศา", "1")}{f("overhang", "ชายคายื่น", "m", "0.1")}
+            {g && <SlopeFrom roof={roof} g={g} set={set} />}
             {f("H", "ระดับอะเส", "m", "0.1")}
             <Field label="กริดจับจุด"><Select value={roof.snap} onChange={(v) => set("snap", Number(v))} options={[[0.1, "0.10 ม."], [0.25, "0.25 ม."], [0.5, "0.50 ม."], [1, "1.00 ม."]]} /></Field>
           </div>

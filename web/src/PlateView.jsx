@@ -132,13 +132,17 @@ export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, s
           </g>
         );
       })}
-      {posts.map((p, i) => {
+      {posts.filter((p) => p.kind === "ตุ๊กตา").map((p, i) => ( // short posts under rafter supports: small purple diamond
+        <rect key={`t${i}`} x={p.x - sc * 0.45} y={Y(p.y) - sc * 0.45} width={sc * 0.9} height={sc * 0.9} fill="#7a5af8" transform={`rotate(45 ${p.x} ${Y(p.y)})`} />
+      ))}
+      {posts.filter((p) => p.kind === "ดั้ง").map((p, i) => {
         const bad = loose.some((q) => Math.abs(q[0] - p.x) < 0.01 && Math.abs(q[1] - p.y) < 0.01), c = bad ? "#f04438" : "#12b76a";
         return (
           <g key={`d${i}`}>
             {bad && <circle cx={p.x} cy={Y(p.y)} r={sc * 1.3} fill="#f0443833" stroke={c} strokeWidth={sc * 0.08} />}
-            <circle cx={p.x} cy={Y(p.y)} r={sc * 0.7} fill={bad ? c : "none"} stroke={c} strokeWidth={sc * 0.12} />
-            <text x={p.x + sc * 0.9} y={Y(p.y) + sc * 1.2} fontSize={sc * 0.6} fill={c}>{bad ? "ดั้ง ! ไม่มีอะเสรับ" : p.kind}</text>
+            <circle cx={p.x} cy={Y(p.y)} r={sc * 1.1} fill={bad ? c : dark ? "#0f1222" : "#fff"} stroke={c} strokeWidth={sc * 0.25} />
+            <path d={`M${p.x - sc * 0.65} ${Y(p.y)}H${p.x + sc * 0.65}M${p.x} ${Y(p.y) - sc * 0.65}V${Y(p.y) + sc * 0.65}`} stroke={bad ? "#fff" : c} strokeWidth={sc * 0.2} />
+            <text x={p.x + sc * 0.9} y={Y(p.y) + sc * 1.2} fontSize={sc * 0.6} fill={c}>{bad ? "ดั้ง ! ไม่มีอะเสรับ" : ""}</text>
           </g>
         );
       })}

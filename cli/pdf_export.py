@@ -42,7 +42,7 @@ def main():
                     return m.get("result", {})
 
         call("Page.enable")
-        call("Page.navigate", url=f"{base}?print#{mod}")
+        call("Page.navigate", url=f"{base}{'&' if '?' in base else '?'}print#{mod}")
         for _ in range(120):  # Paged.js marks the title when done
             t = call("Runtime.evaluate", expression="document.title")["result"].get("value", "")
             if "[paged]" in t:

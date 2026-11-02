@@ -43,7 +43,7 @@ escape any U+FFFD in dist-web/assets/*.js as \uFFFD (publisher rejects it), then
   `steelSections.js` (C / SHS / RHS / CH hot-rolled channel tables; `SYM` label symbols), `roof.js` (outline → eave offset → straight skeleton → faces, gable, ridge/hip/valley lines;
   H = wall-plate level, eave = H − overhang·tanθ), `roofFrame.js` (rafters incl. valley jacks, purlins, supports, posts),
   `roofMembers.js` (designRoof: per-group + per-span members, `choose()` auto/fixed section with minimum, interior plates + load transfer).
-- `src/` React: `App.jsx` shell (roof state saved in localStorage `structcalc.roof` on edit only), `RoofPage.jsx` (modes รูปทรง/โครงหลังคา/ออกแบบ/อะเส),
+- `src/` React: `App.jsx` shell (only the roof is kept in localStorage `structcalc.roof`, on edit; other modules only via project file), `RoofPage.jsx` (modes วาดแปลน/รูปทรง/อะเส/โครงหลังคา/ออกแบบ, `?roof=draw|shape|plate|frame|design`),
   `PlateView.jsx` (อะเส tab), `Roof3D.jsx`, `RoofReport.jsx`, `ReportKit.jsx` (Paged.js; `Doc` has method/standard props), `drawings.js` (Maker.js → SVG/DXF).
 - straight-skeleton (CGAL wasm) is browser-only → roof geometry cannot be unit-tested in node; test in the browser
   (`import('/src/RoofPage.jsx')` → `loadSkeleton()` + `runRoof(roof, sk)`).
@@ -60,7 +60,13 @@ LINE/LWPOLYLINE/POLYLINE/CIRCLE/INSERT/POINT by layer → walls/columns/plates/i
 ดั้ง are editable (`roof.dang [[x,y]]`, null = auto along ridges; ridge spans split at them). Axis-locked drawing also stops on walls/plates/beams/ridges/grid lines;
 grid lines × any line are nodes. Testing tip: back up localStorage `structcalc.roof` before scripted tests — the user may edit in another tab meanwhile.
 Wall-plate types: `design.plateTypes [{name,pick:"C:150x50x20x2.3",count}]`, per span `design.memberType[id]` (index) or auto = lightest passing type.
-Ideas not done: drag/move plate endpoints, dimension display between columns, numeric edit panel inside the board.Other open items: roof slope from the section drawing (30° assumed for the Yasothon house test); batten section table; verify interior-beam rows in the PDF.
+Also (2026-10-31): tool สะพาน (`roof.supports`, null = auto, dashed when auto); select tool = click to select → number panel (X/Y, delete),
+drag dang/columns/corners, a selected line's ends drag; "ระยะเสา" toggle shows spans between columns on each plate.
+Slope from the section: รูปทรง card has ระดับยอดอกไก่ and สูง:ราบ (1:2 or 0.5) → sets `slope`. Batten: one type only (no table, user decision).
+Report §6 has an interior-plate (B) table: point loads P@a, ΣP, end reactions.
+Engine fixes 2026-10-31 (5-shape test: rect hip, rect 2 gables, L, T mixed gables, U with slanted wall): face plane from best-spread triple
+(near-duplicate skeleton vertices gave a wrong plane → hip shown as valley/spike); barge rafters excluded from maxCant; no posts outside walls
+(post added where ridge crosses a gable wall); ridge line load ≥ 0; collinear outline points → no seam line, no doubled rafter.
 
 Test house (user's real job, Yasothon, drawings EN-09/EN-11): outline [[0,2.4],[3.5,2.4],[3.5,3.4],[14,3.4],[14,7.9],[3.5,7.9],[3.5,6.9],[0,6.9]],
 overhang 1.2, plate level +7.25, concrete tile, rafters @1.0, battens @0.32.
@@ -78,3 +84,57 @@ User wants beams & columns designed the same way as the roof plates: draw, defin
    per member a type or auto = lightest passing type; checks reuse the diff-tested WSD engines (engine/beam.js, column.js).
 7. Output: plan coloured by type with tags, type schedule, report with the governing member per type, DXF.
 Phasing: P1 one floor + loads + continuous-beam analysis + beam types; P2 columns + multi-floor; P3 report/DXF.
+
+P1 BUILT 2026-10-31 (menu "คาน-เสา (แปลน)", `#frame`, `?frame=draw|result|types`, localStorage `structcalc.frame`, project file key `frame`):
+- `engine/contBeam.js` solveBeam (stiffness method, pins, cantilevers, linear + point loads) — `node cli/contbeam-check.mjs` (16 closed-form checks).
+- `engine/floor.js` analyzeFloor: collinear drawn beams sharing an end → one continuous line; supports = columns on the line, a line end
+  without column on another line = carried (secondary beams solved first, reactions → point loads); panels = bounded faces of the beam
+  graph; rectangle two-way (S/L≥0.5) triangle/trapezoid peak wS/2 as real load shapes, one-way → long beams wS/2, other shapes ≈ centroid
+  triangles; + wall (h × WALLS kg/m²) + self weight. Types: fixed per drawn beam or auto = lightest passing (b·h then steel), 4 passes
+  (self weight/EI depend on type); a drawn beam keeps one type over all its spans. Checks = designSection (beam.js) mid (+M) and support
+  (−M, tension top), span kind simple/one_end/both_ends/cantilever. Live load full on all spans (no pattern loading). `node cli/floor-check.mjs` (equilibrium).
+- Defaults = the user's schedule (drawing 26546466): B1–B6 (topX = extra top at supports L/4, botX = extra bottom 3L/5; the small
+  compression-side extras of B3–B6 are not modelled); column C1 by level in DEFAULT_COLUMN_TYPES (ตอม่อ 30×30 8-DB12 @0.15, ชั้น 1 20×20 6-DB12, ชั้น 2 20×20 4-DB12) for P2.
+- UI: `src/FloorBoard.jsx` (grid, column/beam/panel/erase tools, snap, undo, drag column moves beam ends), `src/planKit.js`, `src/FramePage.jsx`
+  (selection editor: beam type/wall, panel t/finish/live/open; span table; util chart / V-M of selected line; `src/Frame3D.jsx`).
+- fc is capped at 65 ksc (capFc, as the beam module) → long spans often need compression steel; that is a real result, not a bug.
+P2 BUILT 2026-10-31: `frame.floors` bottom up (default คานคอดิน h1.5 / ชั้น 2 / คานหลังคา; floor k's columns of height h stand under it),
+`frame.cur`, `frame.colPick {stackKey: typeIdx}`; old one-`floor` files migrate (App mergeFrame). `engine/frame.js` analyzeFrame: floors top-down,
+column Ptop = beam reactions + column above, Pbot = Ptop + self weight; a column with nothing under it → point load on the floor below
+(analyzeFloor `extra`, warns if no beam there). Columns: checkColumn → tiedColumn with P at the bottom, min eccentricity max(2.5 cm, 0.1·narrow side)
+about one axis, frame case 2 (k=1), tie spacing ≤ sTie (16db/48dt/side). Column types {name, levels:[{level,Bx,By,n,mainBar,tieBar,s}]} (`faceBars` n → nx/ny);
+auto per stack = lightest type passing at all levels. `node cli/frame-check.mjs` (base ΣP = all weights, incl. a floating column).
+Note: user's C1 ties RB6 @0.20 with DB12 fail 16db = 0.192 m — real result, shown as the reason. Column self weight passed down uses the
+picked/first type (not re-iterated). Contbeam fix: a point load exactly on a node was counted in both elements.
+P3 BUILT 2026-10-31: `src/FrameReport.jsx` (print button on #frame; `python -X utf8 cli/pdf_export.py frame out.pdf`, 8 pages for the example):
+design data + floor load table, per floor plan figure (`framePlanModel` in drawings.js: grid bubbles/dims, beams at true width coloured by
+type with tags, columns at true size, panel labels) + panel and span tables, governing span per beam type in steps (mid + support),
+column table all floors + governing column per type level in steps, beam/column schedules with counts and lengths.
+Floor board: "DXF" exports the current floor plan; "นำเข้า DXF" maps layers → เสา (circle/block/small closed shape centre) / คาน (lines),
+replaces this floor's columns and beams and rebuilds the grid from the column coordinates.
+Q1–Q3 BUILT 2026-10-31 (steps on #frame: 1 โครง · 2 พื้น · 3 บันได · 4 ผนัง · 5 น้ำหนักอื่น · 6 ผลคาน · 7 ผลเสา; build bottom up, analysis top down):
+- grid optional (toggle "กริด"), snaps to columns / beam ends / mid / any point on a beam, typed length (digits + Enter; pointing at a beam = distance from its nearer end).
+- panels `{kind S|PS|GS, dir x|y, t, finish, live, extra, open}`; cantilever slabs `floor.cants` (line load wL + torsion wL²/2 → beam Mt);
+  walls `floor.walls {a,b,kind,h,open%,layers}` (on a beam → line load, on a slab → spread on the panel; old beam.wall migrates via wallsOf),
+  `frame.wallTypes`; stairs `floor.stairs` (long/side/cant/landing; bottom edge handed to the floor below via `down`); `lineLoads`, `pointLoads`
+  (on a column → straight into it); load groups DL/SDL/WALL/LL/SP (an.groups from loads actually on the beams).
+- engine/slabDesign.js: S panels (two-way case from edge continuity / one-way), cantilever slabs, stairs via engine/slab.js; report tables per floor.
+- footings: frame.js designFooting (pileCap, piles I-18/22/26, safe load 18 t, DB12/DB16, cap widths) → report section ฐานราก.
+- column loads = max(continuous, simple-span) reaction per support (pinned continuous beams can lift a support next to a long span).
+- buildLines: collinear beams are not merged where a girder passes through their joint without a column (secondary beams on a girder).
+- short spans (< 4h) are flagged deep beams instead of failing the h/L ratio. App `?project=/projects/x.json` opens a served project (PDF export waits for it).
+Yasothon house model: `node cli/models/yasothon.mjs` → web/public/projects/yasothon.json (EN-03/04/05, roof loads copied from the roof module,
+curved porch beam as its chord). PDFs: `pdf_export.py roof|frame out.pdf "http://localhost:5180/?project=/projects/yasothon.json"` → out/รายการคำนวณ-บ้านยโสธร-ทั้งหลัง.pdf.
+Results: 10 floor-2 spans NG (fc capped 65 ksc → compression steel), C1 ชั้น 1/2 ties @0.20 > 16db, footings 1–2 × I-18.
+A (2026-11-02): live-load patterns (dead + each span's live load alone → max/min envelopes by superposition, column loads too);
+RC beam deflection (Ec·0.5Ig, 3·δD + δL ≤ L/240, δL ≤ L/360, cantilever 2L) inside auto type choice; roof link `frame.roofLink {on, floor}` +
+`frame.roofPoints` (src/roofLink.js, App recomputes on roof change); rebar section drawings per beam type / column level in the report.
+WORKFLOW UI (branch workflow-ui, 2026-11-02): App default `#work`, `?step=project|grid|frame|slab|stair|roof|loads|analysis|design|footing|report`;
+sidebar = workflow steps 0–10 (status !), then "เครื่องมือคำนวณเดี่ยว" (beam/slab/column/stair/footing); header = floor select + project-wide
+undo/redo (App `hist`, both frame+roof, edits within 0.6 s = one step, Ctrl+Z/Y); FramePage = sub-tabs + 2D/3D/split centre + right inspector +
+bottom drawer (spans/columns/groups/warnings) + status bar; App computes `fres = analyzeFrame(frame)` once (errors → warning, never a blank app).
+FloorBoard: vertical tool rail, no own undo, short labels (W# · kg/m, full text on hover), labels hidden when zoomed out. printReport joins every
+`.report` outside <main> (workflow prints roof + structure: `pdf_export.py work out.pdf "<url>?project=/projects/yasothon.json"` → 20 pages).
+Regression: `node cli/regress-yasothon.mjs` (baseline cli/regress-yasothon.baseline.json; `--save` to update) — must stay identical for UI work.
+Next agreed: C = 3D rigid-joint frame analysis + P-Delta (gravity first, compare with the current results), then B = wind / seismic / WSD
+combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).

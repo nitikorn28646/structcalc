@@ -12,6 +12,12 @@ function cuts(P, p, u) {
   return ts.sort((x, y) => x - y);
 }
 
+// point on the outline (within 2 cm of an edge)
+const onWall = (P, [x, y]) => P.some((a, i) => {
+  const b = P[(i + 1) % P.length], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / L2));
+  return Math.hypot(a[0] + dx * t - x, a[1] + dy * t - y) < 0.02;
+});
+
 const inside = (P, [x, y]) => {
   let c = false;
   for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
@@ -98,7 +104,9 @@ export function frameRoof(g, roof, supportsIn) {
         st.sort((x, y) => x - y);
         const spans = st.slice(1).map((v, i) => (v - st[i]) * sec).filter((v) => v > 0.02);
         // eave rafters beyond a gable wall (barge / verge) hang off the purlins, not the wall line
-        const barge = atEave && !inside(g.pts, [p[0] + F.nrm[0] * (roof.overhang + 0.05), p[1] + F.nrm[1] * (roof.overhang + 0.05)]);
+        // two faces of one straight wall (split by a collinear point) both put a rafter at their common edge: keep one
+        if (rafters.some((r) => Math.hypot(r.p[0] - p[0], r.p[1] - p[1]) < 0.05 && Math.hypot(r.q[0] - q[0], r.q[1] - q[1]) < 0.05)) continue;
+        const barge = atEave &&!inside(g.pts, [p[0] + F.nrm[0] * (roof.overhang + 0.05), p[1] + F.nrm[1] * (roof.overhang + 0.05)]);
         rafters.push({ p: [...p, z(f, p)], q: [...q, z(f, q)], len: L * sec, cant: atEave ? st[0] * sec : 0, spans: barge ? [] : spans, barge, jack: !atEave, face: f.edge });
       }
     }    // purlins parallel to the eave, spaced along the slope; one near the eave and one just below the top
@@ -114,11 +122,17 @@ export function frameRoof(g, roof, supportsIn) {
   const posts = [], key = new Set();
   const addPost = ([x, y], top, kind) => {
     const k = `${x.toFixed(2)},${y.toFixed(2)}`;
-    if (top - g.H > 0.15 && !key.has(k)) { key.add(k); posts.push({ x, y, top, kind, len: top - g.H }); }
+    // a post needs something to stand on: none beyond the walls (ridge ends over a gable overhang)
+    if (top - g.H > 0.15 && !key.has(k) && (inside(g.pts, [x, y]) || onWall(g.pts, [x, y]))) { key.add(k); posts.push({ x, y, top, kind, len: top - g.H }); }
   };
   const along = (a, b, za, zb, kind) => {
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / postSp - 1e-9));
     for (let k = 0; k <= n; k++) addPost([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n], za + ((zb - za) * k) / n, kind);
+    // where the line crosses a wall (gable wall under the ridge) the wall carries it: post on the wall line
+    for (let w = 0; w < g.pts.length; w++) {
+      const t = segX(a, b, g.pts[w], g.pts[(w + 1) % g.pts.length]);
+      if (t !== null) addPost([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], za + (zb - za) * t, kind);
+    }
   };
   if (roof.dang) for (const [x, y] of roof.dang) addPost([x, y], surfaceZ(g, [x, y]), "ดั้ง"); // placed by the user
   else {
@@ -131,6 +145,6 @@ export function frameRoof(g, roof, supportsIn) {
   return {
     rafters, purlins, supports, posts,
     totals: { purlin: sum(purlins), rafter: sum(rafters), ridge: g.ridge, hip: g.hip, valley: g.valley, support: supLen, post: sum(posts) },
-    maxSpan: Math.max(0, ...rafters.flatMap((r) => r.spans)), maxCant: Math.max(0, ...rafters.map((r) => Math.min(r.cant, r.len))),
+    maxSpan: Math.max(0, ...rafters.flatMap((r) => r.spans)), maxCant: Math.max(0, ...rafters.filter((r) => !r.barge).map((r) => Math.min(r.cant, r.len))), // barge rafters hang off the purlins
   };
 }

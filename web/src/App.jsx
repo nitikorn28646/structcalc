@@ -21,11 +21,19 @@ import { DEFAULT_STAIR, StairPage, StairReport } from "./StairPage.jsx";
 import { DEFAULT_ROOF, RoofPage } from "./RoofPage.jsx";
 import { RoofReport } from "./RoofReport.jsx";
 import { DEFAULT_FOOTING, FootingPage, FootingReport } from "./FootingPage.jsx";
+import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
+import { FrameReport } from "./FrameReport.jsx";
+import { analyzeFrame } from "../engine/frame.js";
+import { roofPoints } from "./roofLink.js";
+import { Redo2, Undo2 } from "lucide-react";
 
 const BAR_OPTS = [["", "—"], ...Object.keys(BARS).map((k) => [k, k])];
-const MODULES = [["beam", "คาน", RectangleHorizontal], ["slab", "พื้น", Square], ["column", "เสา", Columns3],
-  ["stair", "บันได", Footprints], ["footing", "ฐานราก", Landmark], ["roof", "โครงหลังคาเหล็ก", House]];
-const TITLES = { beam: ["ออกแบบคาน คสล.", "beamNo"], slab: ["ออกแบบพื้น คสล.", null], column: ["ออกแบบเสา คสล.", null], stair: ["ออกแบบบันได คสล.", null], footing: ["ออกแบบฐานรากแผ่", null], roof: ["ออกแบบโครงหลังคาเหล็ก", null] };
+// single-member calculators (tools); the building itself is designed in the workflow
+const MODULES = [["beam", "คาน", RectangleHorizontal], ["slab", "พื้น", Square], ["column", "เสา", Columns3], ["stair", "บันได", Footprints], ["footing", "ฐานราก", Landmark]];
+// one project = one workflow: model bottom up, analyse top down, design, report
+export const WORKFLOW = [["project", "ข้อมูลโครงการ"], ["grid", "กริด / ระดับชั้น"], ["frame", "โครงสร้าง (เสา-คาน)"], ["slab", "พื้น"], ["stair", "บันได"], ["roof", "หลังคา"],
+  ["loads", "น้ำหนักบรรทุก"], ["analysis", "วิเคราะห์"], ["design", "ออกแบบสมาชิก"], ["footing", "ฐานราก"], ["report", "รายการคำนวณ"]];
+const TITLES = { beam: ["ออกแบบคาน คสล.", "beamNo"], slab: ["ออกแบบพื้น คสล.", null], column: ["ออกแบบเสา คสล.", null], stair: ["ออกแบบบันได คสล.", null], footing: ["ออกแบบฐานรากแผ่", null], roof: ["ออกแบบโครงหลังคาเหล็ก", null], frame: ["ออกแบบคาน-เสาจากแปลน", null], work: ["โครงการ", null] };
 const GRADE_OPTS = Object.entries(GRADES).map(([k, g]) => [k, `${g} (${k})`]);
 
 // Light/dark theme: remembered per browser, first visit follows the OS setting.
@@ -169,14 +177,24 @@ function ProjectDialog({ st, set, onClose }) {
 }
 
 // saved roof data on top of the current defaults (older files lack newer fields)
+// saved frame on top of the defaults; a P1 file (one `floor`) becomes a one-floor `floors` list
+const mergeFrame = (s) => {
+  const floors = s.floors ?? (s.floor ? [s.floor] : DEFAULT_FRAME.floors);
+  return { ...DEFAULT_FRAME, ...s, floor: undefined, floors, cur: Math.min(s.cur ?? 0, floors.length - 1), mat: { ...DEFAULT_FRAME.mat, ...s.mat },
+    colTypes: s.colTypes?.[0]?.levels?.[0]?.n ? s.colTypes : DEFAULT_FRAME.colTypes,
+    beamTypes: s.beamTypes?.length ? s.beamTypes : DEFAULT_FRAME.beamTypes, wallTypes: s.wallTypes?.length ? s.wallTypes : DEFAULT_FRAME.wallTypes };
+};
 const mergeRoof = (s) => ({ ...DEFAULT_ROOF, ...s, frame: { ...DEFAULT_ROOF.frame, ...s.frame }, design: { ...DEFAULT_ROOF.design, ...s.design, types: undefined } });
 
 export default function App() {
   const [st, set, replaceSt] = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [projOpen, setProjOpen] = useState(false);
-  const [mod, setModState] = useState(() => (location.hash.slice(1) in TITLES ? location.hash.slice(1) : "beam"));
-  const setMod = (m) => { setModState(m); history.replaceState(null, "", `#${m}`); };
+  const [mod, setModState] = useState(() => { const h = location.hash.slice(1); return h === "frame" || h === "roof" || h === "work" ? "work" : h in TITLES ? h : "work"; });
+  const setMod = (m) => { setModState(m); history.replaceState(null, "", `${location.search}#${m}`); };
+  const [step, setStepState] = useState(() => { const q = new URLSearchParams(location.search).get("step"), h = location.hash.slice(1);
+    return WORKFLOW.some((w) => w[0] === q) ? q : h === "roof" ? "roof" : h === "frame" ? "design" : "frame"; });
+  const setStep = (k) => { setStepState(k); setMod("work"); };
   const [slab, setSlabState] = useState(DEFAULT_SLAB);
   const [column, setColumnState] = useState(DEFAULT_COLUMN);
   const setColumn = (k, v) => setColumnState((c) => ({ ...c, [k]: v }));
@@ -191,10 +209,55 @@ export default function App() {
     return DEFAULT_ROOF;
   });
   // saved on edits only (an effect would also re-save a stale copy whenever another tab hot-reloads)
-  const setRoof = (k, v) => setRoofState((x) => {
+  // beam & column framing: kept in this browser like the roof
+  const [frame, setFrameState] = useState(() => {
+    try { const s = JSON.parse(localStorage.getItem("structcalc.frame")); if (s?.floors || s?.floor) return mergeFrame(s); } catch { /* start from the example */ }
+    return DEFAULT_FRAME;
+  });
+  const hist = useRef({ undo: [], redo: [], t: 0 }), [, bump] = useState(0), live = useRef({ frame: null, roof: null });
+  const remember = () => {
+    const h = hist.current, now = Date.now();
+    if (now - h.t > 600) { h.undo = [...h.undo.slice(-99), { frame: live.current.frame, roof: live.current.roof }]; h.redo = []; bump((x) => x + 1); }
+    h.t = now;
+  };
+  const restore = (from, to) => {
+    const h = hist.current, s = h[from].at(-1);
+    if (!s) return;
+    h[from] = h[from].slice(0, -1); h[to] = [...h[to], { frame: live.current.frame, roof: live.current.roof }]; h.t = 0;
+    setFrameState(s.frame); setRoofState(s.roof);
+    try { localStorage.setItem("structcalc.frame", JSON.stringify(s.frame)); localStorage.setItem("structcalc.roof", JSON.stringify(s.roof)); } catch { /* ignore */ }
+    bump((x) => x + 1);
+  };
+  const setFrame = (k, v) => { remember(); setFrameState((x) => {
+    const next = { ...x, [k]: v };
+    try { localStorage.setItem("structcalc.frame", JSON.stringify(next)); } catch { /* ignore */ }
+    return next;
+  }); };
+  const setRoof = (k, v) => { remember(); setRoofState((x) => {
     const next = { ...x, [k]: v };
     try { localStorage.setItem("structcalc.roof", JSON.stringify(next)); } catch { /* ignore */ }
     return next;
+  }); };
+  live.current = { frame, roof };
+  const fres = useMemo(() => {
+    try { return analyzeFrame(frame); } catch (e) { // never take the whole app down: show the reason as a warning
+      const empty = { spans: [], panels: [], lines: [], columns: [], cants: [], walls: [], stairs: [], lineLoads: [], pointLoads: [], down: [], groups: {}, warnings: [] };
+      return { floors: frame.floors.map(() => empty), columns: [], stacks: [], footings: [], warnings: [`วิเคราะห์ไม่ได้: ${e.message}`], ok: false };
+    }
+  }, [frame]);
+  useEffect(() => { // roof → structure link: refresh the roof reactions (not an undo step) when the roof or the link changes
+    if (!frame.roofLink?.on || !roof?.pts) return;
+    let alive = true;
+    roofPoints(roof).then((r) => { if (!alive || r.error) return; setFrameState((x) => { const next = { ...x, roofPoints: r.pts }; try { localStorage.setItem("structcalc.frame", JSON.stringify(next)); } catch { /* ignore */ } return next; }); });
+    return () => { alive = false; };
+  }, [roof, frame.roofLink?.on, frame.roofLink?.floor]); // the whole building, shared by every workflow step
+  useEffect(() => {
+    const k = (e) => {
+      if (mod !== "work" || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); restore(e.shiftKey ? "redo" : "undo", e.shiftKey ? "undo" : "redo"); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); restore("redo", "undo"); }
+    };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   });
   const [footing, setFootingState] = useState(() => { // deep link: ?foot=pile or ?foot=pile3 (pile count)
     const m = /^pile(\d)?$/.exec(new URLSearchParams(location.search).get("foot") ?? "");
@@ -211,7 +274,7 @@ export default function App() {
   const openRef = useRef(null), [notice, setNotice] = useState(null);
   // project file: every module's inputs in one .json, to keep per job and reopen on any computer
   const saveProject = () => {
-    const data = { app: "StructCalc", version: 1, savedAt: new Date().toISOString(), beam: st, slab, column, stair: stairSt, footing, roof };
+    const data = { app: "StructCalc", version: 1, savedAt: new Date().toISOString(), beam: st, slab, column, stair: stairSt, footing, roof, frame };
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
     const name = `${(st.project.name || "project").replace(/[\\/:*?"<>|]/g, "_").trim()}.json`;
     Object.assign(document.createElement("a"), { href: url, download: name }).click();
@@ -226,14 +289,19 @@ export default function App() {
       if (d.column) setColumnState(d.column);
       if (d.stair) setStairState(d.stair);
       if (d.footing) setFootingState(d.footing);
+      if (d.frame?.floors || d.frame?.floor) { const f = mergeFrame(d.frame); setFrameState(f); try { localStorage.setItem("structcalc.frame", JSON.stringify(f)); } catch { /* ignore */ } }
       if (d.roof?.pts) { const r = mergeRoof(d.roof); setRoofState(r); try { localStorage.setItem("structcalc.roof", JSON.stringify(r)); } catch { /* ignore */ } }
       setNotice({ ok: true, text: `เปิด ${file.name} แล้ว` });
     } catch (e) { setNotice({ ok: false, text: `เปิดไฟล์ไม่ได้: ${e.message}` }); }
     setTimeout(() => setNotice(null), 4000);
   };
   const [dark, setDark] = useTheme();
+  useEffect(() => { // ?project=/projects/x.json opens a project file served with the app (examples, headless PDF export)
+    const url = new URLSearchParams(location.search).get("project");
+    if (url) { window.__projectLoading = true; fetch(url).then((r) => r.text()).then((t) => openProject({ name: url.split("/").pop(), text: async () => t })).finally(() => setTimeout(() => { window.__projectLoading = false; }, 300)); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (new URLSearchParams(location.search).has("print")) { const go = () => (document.querySelector("[data-report-loading]") ? setTimeout(go, 200) : printReport({ dialog: false })); setTimeout(go, 800); }
+    if (new URLSearchParams(location.search).has("print")) { const go = () => (document.querySelector("[data-report-loading]") || window.__projectLoading ? setTimeout(go, 200) : printReport({ dialog: false })); setTimeout(go, 800); }
   }, []);
   const r0 = res.mid.r;
   const n = (path, label, unit, step) => (
@@ -250,11 +318,25 @@ export default function App() {
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500 text-[#fff]"><Calculator className="h-5 w-5" /></span>
             StructCalc
           </div>
-          <p className="mb-2 text-xs uppercase tracking-wider text-gray-400">เมนู</p>
-          <nav className="space-y-1">
+          <p className="mb-1.5 text-xs uppercase tracking-wider text-gray-400">ขั้นตอนออกแบบ</p>
+          <nav className="space-y-0.5">
+            {WORKFLOW.map(([key, label], i) => {
+              const nBeam = fres.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nCol = fres.columns.filter((c) => !c.ok).length, nFoot = fres.footings.filter((f) => !f.ok).length;
+              const warn = (key === "design" && nBeam + nCol > 0) || (key === "footing" && nFoot > 0) || (key === "frame" && fres.warnings.length > 0);
+              const on = mod === "work" && step === key;
+              return (
+                <button key={key} onClick={() => { setStep(key); setMenuOpen(false); }}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium ${on ? "bg-brand-50 text-brand-500" : "text-gray-700 hover:bg-gray-100"}`}>
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${on ? "bg-brand-500 text-[#fff]" : warn ? "bg-[#fef3f2] text-[#d92d20]" : "bg-gray-100 text-gray-500"}`}>{warn ? "!" : i}</span>{label}
+                </button>
+              );
+            })}
+          </nav>
+          <p className="mb-1.5 mt-4 text-xs uppercase tracking-wider text-gray-400">เครื่องมือคำนวณเดี่ยว</p>
+          <nav className="space-y-0.5">
             {MODULES.map(([key, m, Icon]) => (
               <button key={m} disabled={!key} onClick={() => { setMod(key); setMenuOpen(false); }}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium ${mod === key ? "bg-brand-50 text-brand-500" : key ? "text-gray-700 hover:bg-gray-100" : "text-gray-400"}`}>
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[13px] font-medium ${mod === key ? "bg-brand-50 text-brand-500" : key ? "text-gray-700 hover:bg-gray-100" : "text-gray-400"}`}>
                 <Icon className="h-5 w-5" />{m}
                 {!key && <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-400">เร็วๆ นี้</span>}
               </button>
@@ -270,10 +352,22 @@ export default function App() {
                 <Menu className="h-5 w-5" />
               </button>
               <div className="min-w-0">
-                <h1 className="text-lg font-semibold text-gray-800">{TITLES[mod][0]}</h1>
-                <p className="truncate text-xs text-gray-500">{st.project.name} · {mod === "beam" ? st.project.beamNo : mod === "column" ? column.colNo : mod === "stair" ? stairSt.stairNo : mod === "footing" ? footing.footNo : mod === "roof" ? roof.roofNo : slab.slabNo} · {st.project.floor}</p>
+                <h1 className="text-lg font-semibold text-gray-800">{mod === "work" ? `${WORKFLOW.findIndex((w) => w[0] === step)}. ${WORKFLOW.find((w) => w[0] === step)?.[1]}` : TITLES[mod][0]}</h1>
+                <p className="truncate text-xs text-gray-500">{st.project.name} · {mod === "beam" ? st.project.beamNo : mod === "column" ? column.colNo : mod === "stair" ? stairSt.stairNo : mod === "footing" ? footing.footNo : mod === "roof" ? roof.roofNo : mod === "frame" || mod === "work" ? frame.frameNo : slab.slabNo} · {st.project.floor}</p>
               </div>
+              {mod === "work" && !["project", "roof", "report"].includes(step) && (
+                <label className="ml-4 flex items-center gap-2 text-xs text-gray-500">ชั้น
+                  <select value={Math.min(frame.cur ?? 0, frame.floors.length - 1)} onChange={(e) => setFrame("cur", Number(e.target.value))}
+                    className="h-9 rounded-lg border border-gray-300 bg-transparent px-2 text-sm font-medium text-gray-800">
+                    {frame.floors.map((f, i) => <option key={i} value={i}>{f.name}</option>)}
+                  </select>
+                </label>
+              )}
               <div className="ml-auto flex gap-2">
+                {mod === "work" && <>
+                  <button onClick={() => restore("undo", "redo")} disabled={!hist.current.undo.length} title="ย้อนกลับ (Ctrl+Z)" className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100 disabled:opacity-40"><Undo2 className="h-4 w-4" /></button>
+                  <button onClick={() => restore("redo", "undo")} disabled={!hist.current.redo.length} title="ทำซ้ำ (Ctrl+Y)" className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100 disabled:opacity-40"><Redo2 className="h-4 w-4" /></button>
+                </>}
                 <button onClick={() => setDark(!dark)} title={dark ? "ธีมสว่าง" : "ธีมมืด"}
                   className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100">
                   {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -289,7 +383,12 @@ export default function App() {
           </header>
 
           <ErrorBoundary resetKey={mod}>
-          {mod === "roof" ? <RoofPage roof={roof} set={setRoof} dark={dark} /> : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
+          {mod === "work" ? (step === "roof" ? <RoofPage roof={roof} set={setRoof} dark={dark} /> : step === "report" ? (
+            <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
+              <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง (หลังคา → โครงสร้าง → ฐานราก) · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
+              <RoofReport roof={roof} project={st.project} /><FrameReport frame={frame} project={st.project} />
+            </div></main>
+          ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} onProjectInfo={() => setProjOpen(true)} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
           <main className="grid min-h-0 flex-1 gap-4 p-4 md:p-5 xl:grid-cols-[300px_1fr_1fr_1.15fr] xl:grid-rows-[auto_1fr]">
             {/* inputs */}
             <div className="space-y-4 xl:row-span-2 xl:overflow-y-auto">
@@ -396,7 +495,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <ErrorBoundary resetKey={mod} quiet>{mod === "roof" ? <RoofReport roof={roof} project={st.project} /> : mod === "footing" ? <FootingReport f={footing} project={st.project} /> : mod === "stair" ? <StairReport s={stairSt} project={st.project} /> : mod === "column" ? <ColumnReport c={column} project={st.project} /> : mod === "slab" ? <SlabReport s={slab} project={st.project} /> : <Report st={st} res={res} forces={forces} fns={fns} />}</ErrorBoundary>
+      <ErrorBoundary resetKey={mod} quiet>{mod === "work" ? <><RoofReport roof={roof} project={st.project} /><FrameReport frame={frame} project={st.project} /></> : mod === "footing" ? <FootingReport f={footing} project={st.project} /> : mod === "stair" ? <StairReport s={stairSt} project={st.project} /> : mod === "column" ? <ColumnReport c={column} project={st.project} /> : mod === "slab" ? <SlabReport s={slab} project={st.project} /> : <Report st={st} res={res} forces={forces} fns={fns} />}</ErrorBoundary>
     </>
   );
 }

@@ -125,10 +125,10 @@ export function RoofReport({ roof, project }) {
         </Sec>
 
         {(() => {
-          const { plates, sizes } = platesOf(dz), pr = row("plate");
+          const { plates, sizes } = platesOf(dz), wall = plates.find((m) => !m.inner), inner = plates.filter((m) => m.inner);
           return (
             <Sec n={6} th="อะเส" en="Wall plate"
-              intro={`อะเสวางบนหัวผนังรับแรงปฏิกิริยาจากจันทัน ${fmt(pr.r.w)} กก./ม. (รวมน้ำหนักตัวเอง) คิดเป็นคานช่วงเดี่ยว wL²/8 ระหว่างเสา ส่วนอะเสช่วงใน (B…) รับดั้งเป็นแรงจุดจากอกไก่/ตะเข้ แต่ละช่วงเลือกขนาดเหล็กได้เอง แปลนแสดงรหัสช่วง (A1, A2, …) และสีตามขนาดเหล็ก`}>
+              intro={`อะเสวางบนหัวผนังรับแรงปฏิกิริยาจากจันทัน ${fmt(wall?.r.w ?? 0)} กก./ม. (รวมน้ำหนักตัวเอง) คิดเป็นคานช่วงเดี่ยว wL²/8 ระหว่างเสา ส่วนอะเสช่วงใน (B…) รับดั้งเป็นแรงจุดจากอกไก่/ตะเข้ แต่ละช่วงเลือกขนาดเหล็กได้เอง แปลนแสดงรหัสช่วง (A1, A2, …) และสีตามขนาดเหล็ก`}>
               <Figure caption={`แปลนอะเส — ${plates.length} ช่วง · ${sizes.map((x) => plateText(x)).join(" / ")}`}>
                 <Drawing model={plateModel(g, plates, fr.posts)} className="mx-auto h-[105mm]" fontSize={10} width={640} />
               </Figure>
@@ -136,12 +136,26 @@ export function RoofReport({ roof, project }) {
                 <thead><tr className="border-b border-gray-300 text-left">{["ช่วง", "แนวผนัง", "ยาว (ม.)", "หน้าตัด", "M (กก.-ม.)", "fb / Fb (ksc)", "Δ / Δall (ซม.)", "ผล"].map((h) => <th key={h} className="py-0.5 pr-2 font-semibold">{h}</th>)}</tr></thead>
                 <tbody>{plates.map((m) => (
                   <tr key={m.id} className="border-b border-gray-100">
-                    <td className="py-0.5 pr-2 font-semibold" style={{ color: m.color }}>{m.tag}{m.typeName ? ` (${m.typeName})` : ""}</td><td className="pr-2">{m.label.replace("อะเส ", "")}</td>
+                    <td className="py-0.5 pr-2 font-semibold" style={{ color: m.color }}>{m.tag}{m.typeName ? ` (${m.typeName})` : ""}</td><td className="pr-2">{m.inner ? "ช่วงใน (รับดั้ง)" : m.label.replace("อะเส ", "")}</td>
                     <td className="pr-2 tabular-nums">{fmt(m.span, 2)}</td><td className="pr-2">{secText(m)}</td>
                     <td className="pr-2 tabular-nums">{fmt(m.r.Mx, 1)}</td><td className="pr-2 tabular-nums">{fmt(m.r.fb, 0)} / {fmt(m.r.Fb, 0)}</td>
                     <td className="pr-2 tabular-nums">{fmt(m.r.d, 2)} / {fmt(m.r.dAllow, 2)}</td><td>{m.r.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
                   </tr>))}</tbody>
               </table>
+              {inner.length > 0 && (<>
+                <p className="mt-3 font-semibold text-gray-800">อะเสช่วงใน — แรงจุดที่รับและแรงปฏิกิริยา</p>
+                <p className="text-[9pt] text-gray-600">แรงจุดคือแรงปฏิกิริยาของอกไก่/ตะเข้/สะพานที่ลงดั้งหรือตุ๊กตา และแรงปลายของอะเสช่วงในตัวอื่นที่วางพาด (B…) ระยะวัดจากปลายต้น ·
+                  แรงปฏิกิริยาปลายส่งต่อลงเสาหรืออะเสที่รองรับ</p>
+                <table className="mt-1 w-full border-collapse text-[9pt]">
+                  <thead><tr className="border-b border-gray-300 text-left">{["ช่วง", "ยาว (ม.)", "แรงจุด P @ ระยะ (กก. @ ม.)", "ΣP (กก.)", "R ต้น / ปลาย (กก.)"].map((h) => <th key={h} className="py-0.5 pr-2 font-semibold">{h}</th>)}</tr></thead>
+                  <tbody>{inner.map((m) => (
+                    <tr key={m.id} className="border-b border-gray-100 align-top">
+                      <td className="py-0.5 pr-2 font-semibold" style={{ color: m.color }}>{m.tag}</td><td className="pr-2 tabular-nums">{fmt(m.span, 2)}</td>
+                      <td className="pr-2">{m.loads.length ? m.loads.map((l) => `${l.from} ${fmt(l.P, 0)} @ ${fmt(l.a, 2)}`).join(" · ") : "— (น้ำหนักตัวเองเท่านั้น)"}</td>
+                      <td className="pr-2 tabular-nums">{fmt(m.r.P, 0)}</td><td className="pr-2 tabular-nums">{fmt(m.r.Rl, 0)} / {fmt(m.r.Rr, 0)}</td>
+                    </tr>))}</tbody>
+                </table>
+              </>)}
             </Sec>
           );
         })()}

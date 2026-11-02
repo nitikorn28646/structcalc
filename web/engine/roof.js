@@ -19,14 +19,16 @@ export function offsetPolygon(pts, d) {
 }
 
 function plane(P) {
-  // least-effort plane through three well-spread points: z = a·x + b·y + c
+  // plane z = a·x + b·y + c through the best-spread three points (the skeleton may repeat a vertex at nearly the same spot,
+  // and a triple using both copies gives a wild plane)
+  let best = null, bn = 1e-9;
   for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) for (let k = j + 1; k < P.length; k++) {
     const [p, q, r] = [P[i], P[j], P[k]];
     const ux = q[0] - p[0], uy = q[1] - p[1], uz = q[2] - p[2], vx = r[0] - p[0], vy = r[1] - p[1], vz = r[2] - p[2];
     const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    if (Math.abs(nz) > 1e-6 * Math.hypot(nx, ny, nz) && Math.hypot(nx, ny, nz) > 1e-9) return { a: -nx / nz, b: -ny / nz, c: p[2] + (nx * p[0] + ny * p[1]) / nz };
+    if (Math.abs(nz) > bn) { bn = Math.abs(nz); best = { a: -nx / nz, b: -ny / nz, c: p[2] + (nx * p[0] + ny * p[1]) / nz }; }
   }
-  return null;
+  return best;
 }
 
 const area3 = (P) => {
@@ -74,6 +76,12 @@ export function roofGeometry(roof, skeleton) {
   for (const s of seg.values()) {
     const p = V[s.i], q = V[s.j], len = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
     if (len < 1e-6) continue;
+    // seam between the two faces of a wall edge split by a collinear point: same plane (or same gable wall) → no line
+    if (s.faces.length === 2) {
+      const [A, B] = s.faces;
+      if (A.plane && B.plane && Math.abs(A.plane.a - B.plane.a) < 1e-6 && Math.abs(A.plane.b - B.plane.b) < 1e-6 && Math.abs(A.plane.c - B.plane.c) < 1e-4) continue;
+      if (A.gable && B.gable && Math.abs((eave[A.edge][0] - eave[B.edge][0]) * (eave[(B.edge + 1) % n][1] - eave[B.edge][1]) - (eave[A.edge][1] - eave[B.edge][1]) * (eave[(B.edge + 1) % n][0] - eave[B.edge][0])) < 1e-6) continue;
+    }
     let type;
     if (s.faces.length < 2) type = sk.vertices[s.i][2] < 1e-9 && sk.vertices[s.j][2] < 1e-9 ? "eave" : "rake";
     else if (s.faces.some((f) => f.gable)) type = "rake";
