@@ -54,7 +54,11 @@ function useTheme() {
 }
 
 function useStore() {
-  const [st, setSt] = useState(DEFAULT_STATE);
+  const [st, setSt] = useState(() => { // the project part (name, owner, engineer…) survives a page reload
+    try { const p = JSON.parse(localStorage.getItem("structcalc.project")); if (p) return { ...DEFAULT_STATE, project: { ...DEFAULT_STATE.project, ...p } }; } catch { /* first visit */ }
+    return DEFAULT_STATE;
+  });
+  useEffect(() => { try { localStorage.setItem("structcalc.project", JSON.stringify(st.project)); } catch { /* ignore */ } }, [st.project]);
   const set = (path, v) =>
     setSt((s) => {
       const n = structuredClone(s);
@@ -219,7 +223,9 @@ export default function App() {
     return DEFAULT_FRAME;
   });
   const hist = useRef({ undo: [], redo: [], t: 0 }), [, bump] = useState(0), live = useRef({ frame: null, roof: null });
+  const [dirty, setDirty] = useState(false);
   const remember = () => {
+    setDirty(true);
     const h = hist.current, now = Date.now();
     if (now - h.t > 600) { h.undo = [...h.undo.slice(-99), { frame: live.current.frame, roof: live.current.roof }]; h.redo = []; bump((x) => x + 1); }
     h.t = now;
@@ -283,6 +289,7 @@ export default function App() {
     const name = `${(st.project.name || "project").replace(/[\\/:*?"<>|]/g, "_").trim()}.json`;
     Object.assign(document.createElement("a"), { href: url, download: name }).click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setDirty(false);
   };
   const openProject = async (file) => {
     try {
@@ -295,7 +302,7 @@ export default function App() {
       if (d.footing) setFootingState(d.footing);
       if (d.frame?.floors || d.frame?.floor) { const f = mergeFrame(d.frame); setFrameState(f); try { localStorage.setItem("structcalc.frame", JSON.stringify(f)); } catch { /* ignore */ } }
       if (d.roof?.pts) { const r = mergeRoof(d.roof); setRoofState(r); try { localStorage.setItem("structcalc.roof", JSON.stringify(r)); } catch { /* ignore */ } }
-      setNotice({ ok: true, text: `เปิด ${file.name} แล้ว` });
+      setNotice({ ok: true, text: `เปิด ${file.name} แล้ว` }); setDirty(false);
     } catch (e) { setNotice({ ok: false, text: `เปิดไฟล์ไม่ได้: ${e.message}` }); }
     setTimeout(() => setNotice(null), 4000);
   };
@@ -383,6 +390,7 @@ export default function App() {
                 {notice && <span className={`self-center text-xs ${notice.ok ? "text-green-600" : "text-red-600"}`}>{notice.text}</span>}
                 <Button variant="secondary" icon={FolderOpen} title="เปิดโครงการ (.json)" onClick={() => openRef.current.click()}><span className="hidden 2xl:inline">เปิดโครงการ</span></Button>
                 <input ref={openRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) openProject(f); }} />
+                {dirty && <span className="self-center text-[11px] text-[#b54708]" title="งานถูกเก็บในเบราว์เซอร์นี้อัตโนมัติแล้ว แต่ยังไม่ได้บันทึกเป็นไฟล์ (.json) — กดบันทึกโครงการเพื่อสำรองหรือย้ายเครื่อง">● ยังไม่บันทึกไฟล์</span>}
                 <Button variant="secondary" icon={Save} title="บันทึกโครงการ (.json)" onClick={saveProject}><span className="hidden 2xl:inline">บันทึกโครงการ</span></Button>
                 {mod !== "work" && <Button variant="secondary" icon={Building2} title="ข้อมูลโครงการ" onClick={() => setProjOpen(true)}><span className="hidden 2xl:inline">ข้อมูลโครงการ</span></Button>}
                 <Button icon={FileDown} onClick={printReport}>พิมพ์ / บันทึก PDF</Button>
