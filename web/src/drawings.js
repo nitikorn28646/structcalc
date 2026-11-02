@@ -127,7 +127,7 @@ class Draw {
   textAt(t, x, y, side) { this.text(t, x + (side * t.length * this.cu) / 2, y); }
   // Invisible padded frame so captions (not counted in Maker.js extents) are not clipped in SVG.
   framed(pad = 24) {
-    const e = makerjs.measure.modelExtents(this.model);
+    const e = makerjs.measure.modelExtents(this.model) ?? { low: [0, 0], high: [1, 1] }; // empty drawing (a floor with nothing drawn yet)
     let [x0, y0] = e.low, [x1, y1] = e.high;
     for (const t of this.texts) {
       const [hx, hy] = t.vertical ? [this.cu, t.half] : [t.half, this.cu];

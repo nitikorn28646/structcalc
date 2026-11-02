@@ -337,7 +337,9 @@ export default function App() {
   const [dark, setDark] = useTheme();
   useEffect(() => { // ?project=/projects/x.json opens a project file served with the app (examples, headless PDF export)
     const url = new URLSearchParams(location.search).get("project");
-    if (url) { window.__projectLoading = true; fetch(url).then((r) => r.text()).then((t) => openProject({ name: url.split("/").pop(), text: async () => t })).finally(() => setTimeout(() => { window.__projectLoading = false; }, 300)); }
+    if (url) { window.__projectLoading = true; fetch(url).then((r) => r.text()).then((t) => openProject({ name: url.split("/").pop(), text: async () => t }))
+      .then(() => { if (!new URLSearchParams(location.search).has("print")) { const q = new URLSearchParams(location.search); q.delete("project"); history.replaceState(null, "", `${location.pathname}${q.toString() ? `?${q}` : ""}${location.hash}`); } }) /* a reload must not reopen the example over the user's work */
+     .finally(() => setTimeout(() => { window.__projectLoading = false; }, 300)); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (new URLSearchParams(location.search).has("print")) { const go = () => (document.querySelector("[data-report-loading]") || window.__projectLoading ? setTimeout(go, 200) : printReport({ dialog: false })); setTimeout(go, 800); }

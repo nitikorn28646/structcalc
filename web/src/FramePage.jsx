@@ -31,10 +31,18 @@ const exFloor = (name, h, t, finish, live, wallH) => ({ name, h, t, finish, live
   columns: XS.flatMap((x) => YS.map((y) => [x, y])), beams: exBeams.map(({ wall, ...b }) => b), panels: {}, cants: [],
   walls: wallH ? exBeams.filter((b) => b.wall.h).map((b) => ({ a: b.a, b: b.b, kind: "brick", h: wallH, open: 0, layers: 1 })) : [] });
 // floors run bottom up; a floor's columns (height h) stand below its beams; column type level k is used under floor k
+// heavier spare types (from the Yasothon job) so that a new project has a passing type for longer spans / tie spacing; the auto
+// choice still takes the lightest type that passes, so B1–B6 / C1 are used wherever they are enough
+const T = (name, b, h, top, bot, topX, botX, st, sSup, sMid) => ({ name, b, h, top, bot, topX, botX, st, sSup, sMid });
+const CT = (level, B, n, bar, s) => ({ level, Bx: B, By: B, n, mainBar: bar, tieBar: "RB 6", s });
+const SPARE_BEAM_TYPES = [T("B7", 0.2, 0.5, "3-DB16", "3-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.15), T("B8", 0.2, 0.6, "2-DB16", "2-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.15),
+  T("B9", 0.2, 0.6, "3-DB16", "3-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.15), T("B10", 0.25, 0.7, "3-DB20", "3-DB20", "3-DB20", "3-DB20", "DB 10", 0.1, 0.15)];
+const SPARE_COLUMN_TYPES = [{ name: "C2", levels: [CT("ตอม่อ", 30, 8, "DB 12", 0.15), CT("ชั้น 1", 20, 6, "DB 12", 0.15), CT("ชั้น 2", 20, 4, "DB 12", 0.15)] },
+  { name: "C3", levels: [CT("ตอม่อ", 30, 8, "DB 20", 0.15), CT("ชั้น 1", 25, 8, "DB 16", 0.15), CT("ชั้น 2", 25, 8, "DB 16", 0.15)] }];
 export const DEFAULT_FRAME = {
   frameNo: "F1", mat: { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 }, cur: 1,
   floors: [exFloor("คานคอดิน", 1.5, 0, 0, 0, 2.8), exFloor("ชั้น 2", 3, 0.12, 100, 200, 2.8), exFloor("คานหลังคา", 3, 0, 0, 0, 0)],
-  beamTypes: DEFAULT_BEAM_TYPES, colTypes: DEFAULT_COLUMN_TYPES, colPick: {}, wallTypes: DEFAULT_WALL_TYPES,
+  beamTypes: [...DEFAULT_BEAM_TYPES, ...SPARE_BEAM_TYPES], colTypes: [...DEFAULT_COLUMN_TYPES, ...SPARE_COLUMN_TYPES], colPick: {}, wallTypes: DEFAULT_WALL_TYPES,
 };
 
 const KIND_TH = { simple: "ช่วงเดียว", one_end: "ช่วงริม", both_ends: "ช่วงใน", cantilever: "ยื่น" };
@@ -143,6 +151,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const cur = Math.min(frame.cur ?? 0, frame.floors.length - 1), fl = frame.floors[cur], types = frame.beamTypes, cTypes = frame.colTypes;
   const res = useMemo(() => resIn ?? analyzeFrame(frame), [resIn, frame]), an = res.floors[cur];
   const setFloor = (patch) => set("floors", frame.floors.map((f, i) => (i === cur ? { ...f, ...patch } : f)));
+  // one structural grid for the whole building (as on the drawings): a grid edit applies to every floor
+  const setGrid = (g) => set("floors", frame.floors.map((f) => ({ ...f, grid: g })));
+  // copy the floor below (columns and beams) — most floors repeat the one under them
+  const copyBelow = cur > 0 ? () => { const b = frame.floors[cur - 1]; setFloor({ columns: b.columns.map((c) => [...c]), beams: b.beams.map((x) => ({ ...x, a: [...x.a], b: [...x.b] })) }); } : null;
   const goFloor = (i) => { set("cur", i); setSel(null); };
   const colsHere = res.columns.filter((c) => c.floor === cur), colAt = (i) => colsHere.find((c) => c.i === i);
   const setMat = (k, v) => set("mat", { ...frame.mat, [k]: v });
@@ -179,7 +191,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   );
   const G = fl.grid, gridInput = (k, label) => (
     <label key={k + G[k].join()} className="block text-[11px] text-gray-500">{label}
-      <input defaultValue={G[k].join("  ")} onBlur={(e) => { const v = e.target.value.split(/[\s,]+/).map(Number).filter((x) => x > 0); if (v.length) setFloor({ grid: { ...G, [k]: v } }); }}
+      <input defaultValue={G[k].join("  ")} onBlur={(e) => { const v = e.target.value.split(/[\s,]+/).map(Number).filter((x) => x > 0); if (v.length) setGrid({ ...G, [k]: v }); }}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} className="mt-0.5 h-8 w-full rounded-lg border border-gray-300 bg-transparent px-2 text-[13px] text-gray-800 tabular-nums" />
     </label>
   );
@@ -199,7 +211,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
   const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark}
-            ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
+            ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
   const slabRows = step === "design" && sub === "slabs" ? designSlabs(an, fl, frame.mat) : [];
   const page = step === "project" ? (
@@ -420,7 +432,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <Card title="กริด (ระยะแกน ม.)" icon={Ruler}>
             <div className="space-y-2">
               {gridInput("dx", "แกน X (A, B, …)")}{gridInput("dy", "แกน Y (ล่าง → บน)")}
-              <Field label="แบ่งช่องกริด"><Select value={G.sub ?? 1} onChange={(v) => setFloor({ grid: { ...G, sub: Number(v) } })} options={[1, 2, 3, 4].map((v) => [v, v === 1 ? "เฉพาะแกน" : `ช่องละ ${v}`])} /></Field>
+              <Field label="แบ่งช่องกริด"><Select value={G.sub ?? 1} onChange={(v) => setGrid({ ...G, sub: Number(v) })} options={[1, 2, 3, 4].map((v) => [v, v === 1 ? "เฉพาะแกน" : `ช่องละ ${v}`])} /></Field>
             </div>
           </Card></>
   ) : step === "analysis" || step === "design" ? (
@@ -455,7 +467,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       <LineDiagram ln={showLine} f3={res.frame3d?.members.filter((m) => m.floor === cur)} wide />
     </div>);
   const center = page ? <div className="min-h-0 flex-1 overflow-auto p-1">{page}</div>
-    : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3"><div className="min-h-0">{boardEl}</div>{lineDiagram}</div>
+    : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 grid-rows-[minmax(180px,1fr)_minmax(0,auto)] gap-3"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>{lineDiagram}</div>
     : step === "footing" ? view3d
     : view === "3d" ? view3d : view === "split" ? <div className="grid min-h-0 flex-1 grid-cols-2 gap-3"><div className="min-h-0">{boardEl}</div>{view3d}</div> : boardEl;
   return (

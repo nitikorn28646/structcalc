@@ -6,3 +6,6 @@ app/
 *.log
 .claude/settings.local.json
 web/ss-test.mjs
+
+# client drawings for testing (never commit)
+แบบสำหรับทดสอบ/
