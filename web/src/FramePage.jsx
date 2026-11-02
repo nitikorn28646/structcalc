@@ -11,6 +11,7 @@ import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, GROUPS, S
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { analyzeFrame, stackKey } from "../engine/frame.js";
 import { designSlabs } from "../engine/slabDesign.js";
+import { frame3dModel } from "../engine/frame3d.js";
 import { GRADES } from "../engine/tables.js";
 import FloorBoard, { TYPE_COLORS } from "./FloorBoard.jsx";
 import ForceCharts from "./ForceCharts.jsx";
@@ -183,11 +184,11 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     ["สรุปทั้งอาคาร", res.ok ? "ผ่านทั้งหมด" : `คานไม่ผ่าน ${res.floors.reduce((s, a) => s + a.spans.filter((x) => !x.ok).length, 0)} · เสาไม่ผ่าน ${res.columns.filter((c) => !c.ok).length}`]];
 
   // ---- workflow layout: sub-tabs + view switch, centre (2D / 3D / split or a table page), inspector on the right, drawer, status bar
-  const SUBS = { loads: [["wall", "ผนัง"], ["other", "น้ำหนักอื่น / หลังคา"], ["groups", "สรุปกลุ่มน้ำหนัก"], ["lateral", "ลม / แผ่นดินไหว / Combination"]],
+  const SUBS = { analysis: [["cont", "คานต่อเนื่อง (ใช้ออกแบบ)"], ["frame3d", "โครง 3 มิติ (เทียบผล)"]], loads: [["wall", "ผนัง"], ["other", "น้ำหนักอื่น / หลังคา"], ["groups", "สรุปกลุ่มน้ำหนัก"], ["lateral", "ลม / แผ่นดินไหว / Combination"]],
     design: [["result", "คาน"], ["cols", "เสา"], ["slabs", "พื้น / บันได"], ["types", "Type คาน"], ["ctypes", "Type เสา"]] };
   const subs = SUBS[step], sub = subs ? (subs.some((x) => x[0] === subState) ? subState : subs[0][0]) : null;
   const boardStep = { frame: "frame", grid: "frame", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
-  const tablePage = step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || (step === "loads" && ["groups", "lateral"].includes(sub));
+  const tablePage = (step === "analysis" && sub === "frame3d") || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || (step === "loads" && ["groups", "lateral"].includes(sub));
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
@@ -230,6 +231,47 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             <p className="text-[11px] text-gray-400">ติ๊กเพื่อแสดงค่าบนแปลน · วิเคราะห์ทุกกลุ่มรวมกัน (WSD) · สร้างจากล่างขึ้นบน คำนวณจากบนลงล่าง</p>
           </div>
         </Card></div>
+    : step === "analysis" && sub === "frame3d" ? (() => {
+      // whole-building rigid-joint frame (gravity, P-Delta) beside the continuous-beam results the design uses
+      const m = res.frame3d ?? frame3dModel(frame, res);
+      if (m.error) return <p className="text-sm text-red-600">{m.error}</p>;
+      const pct = (a, b) => (b > 100 ? Math.round(((a - b) / b) * 100) : null), cell = (v) => (v === null ? "-" : `${v > 0 ? "+" : ""}${v}%`);
+      const hi = (v) => (v !== null && Math.abs(v) > 15 ? "font-semibold text-[#d92d20]" : "");
+      const rows = m.spans.filter((x) => x.floor === cur);
+      return (
+        <div className="space-y-3 text-[12px]">
+          <div className="grid max-w-4xl grid-cols-4 gap-2">
+            {[["น้ำหนักทั้งอาคาร", `${fmt(m.load / 1000, 2)} ตัน`], ["แรงที่ฐานรวม (ΣRz)", `${fmt(m.base.reduce((a, b) => a + b.R[2], 0) / 1000, 2)} ตัน`],
+              ["การเคลื่อนตัวด้านข้างสูงสุด", `${fmt(m.drift * 1000, 1)} มม.`], ["แบบจำลอง", `${m.nodes.length} จุด · ${m.members.length} ชิ้น`]].map(([l, v]) => (
+              <div key={l} className="rounded-xl border border-gray-200 bg-white px-3 py-2"><div className="text-[11px] text-gray-400">{l}</div><div className="font-semibold tabular-nums">{v}</div></div>))}
+          </div>
+          <label className="flex max-w-4xl items-center gap-2 font-medium text-gray-700">แรงที่ใช้ออกแบบ
+            <select value={frame.analysis ?? "envelope"} onChange={(e) => set("analysis", e.target.value)} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">
+              <option value="envelope">ค่ามากสุดของคานต่อเนื่องและโครง 3 มิติ (แนะนำ)</option><option value="continuous">คานต่อเนื่องอย่างเดียว</option>
+            </select>
+            <span className="ml-4">ฐานเสา</span>
+            <select value={frame.baseFixity ?? "pinned"} onChange={(e) => set("baseFixity", e.target.value)} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">
+              <option value="pinned">หมุด (ฐานเข็ม 1–2 ต้น รับโมเมนต์ไม่ได้)</option><option value="fixed">ยึดแน่น (ฐานรากแผ่ / เข็มกลุ่ม)</option>
+            </select></label>
+          <p className="max-w-4xl text-gray-500">โครง 3 มิติจุดต่อแข็ง: ฐานเสาตามที่เลือก (ที่หลังฐานราก) · ปลายคานซอยที่วางบนคานเป็นหมุด · stiffness แตกร้าว คาน 0.5Ig เสา 0.7Ig แรงบิด 0.2J · รวม P-Delta ·
+            น้ำหนักแนวดิ่ง DL+LL เต็มทุกช่วง (คานต่อเนื่องใช้หมากรุก) · ปลายคานซอยที่เป็นหมุดไม่รับแรงบิด · แดง = ต่างเกิน 15%</p>
+          <table className="w-full max-w-5xl border-collapse"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">
+            {["ช่วง", "M+ ต่อเนื่อง / โครง (กก.-ม.)", "ต่าง", "M− ต่อเนื่อง / โครง", "ต่าง", "V ต่อเนื่อง / โครง (กก.)", "ต่าง", "T โครง (กก.-ม.)"].map((h, i) => <th key={i} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
+            <tbody>{rows.map((x) => { const a = pct(x.Mpos, x.cont.Mpos), b = pct(x.Mneg, x.cont.Mneg), c = pct(x.V, x.cont.V); return (
+              <tr key={x.id} className="border-b border-gray-100 tabular-nums"><td className="px-1 py-0.5">{x.id}</td>
+                <td className="px-1">{fmt(x.cont.Mpos, 0)} / {fmt(x.Mpos, 0)}</td><td className={`px-1 ${hi(a)}`}>{cell(a)}</td>
+                <td className="px-1">{fmt(x.cont.Mneg, 0)} / {fmt(x.Mneg, 0)}</td><td className={`px-1 ${hi(b)}`}>{cell(b)}</td>
+                <td className="px-1">{fmt(x.cont.V, 0)} / {fmt(x.V, 0)}</td><td className={`px-1 ${hi(c)}`}>{cell(c)}</td><td className="px-1">{fmt(x.T, 0)}</td></tr>); })}</tbody></table>
+          <p className="font-semibold text-gray-700">เสา {fl.name} (โครง 3 มิติ) — แรงอัดและโมเมนต์จากโครงจริง เทียบกับแรงที่ใช้ออกแบบตอนนี้</p>
+          <table className="w-full max-w-4xl border-collapse"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">
+            {["เสา", "P ออกแบบตอนนี้ (ตัน)", "N โครง (ตัน)", "Mx โครง (กก.-ม.)", "My โครง (กก.-ม.)", "M ระยะเยื้องศูนย์ขั้นต่ำ (กก.-ม.)"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
+            <tbody>{m.columns.filter((c) => c.floor === cur).map((c) => { const cd = res.columns.find((x) => x.floor === cur && x.i === c.ci); return (
+              <tr key={c.ci} className="border-b border-gray-100 tabular-nums"><td className="px-1 py-0.5">{cd?.stack ?? c.ci}</td><td className="px-1">{fmt((cd?.Pbot ?? 0) / 1000, 2)}</td>
+                <td className={`px-1 ${c.N < 0 ? "font-semibold text-[#d92d20]" : ""}`}>{fmt(c.N / 1000, 2)}{c.N < 0 ? " (ดึง)" : ""}</td><td className="px-1">{fmt(c.Mx, 0)}</td><td className="px-1">{fmt(c.My, 0)}</td>
+                <td className="px-1">{cd?.check?.e ? fmt((cd.Pbot * cd.check.e) / 100, 0) : "-"}</td></tr>); })}</tbody></table>
+        </div>
+      );
+    })()
     : step === "loads" && sub === "lateral" ? (
       <div className="max-w-xl rounded-2xl border border-dashed border-gray-300 p-5 text-[13px] text-gray-500">
         <p className="font-semibold text-gray-700">แรงลม · แผ่นดินไหว · Load combination</p>
@@ -405,7 +447,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                   <tr key={s.id} onClick={() => setSel({ kind: "beam", i: s.member })} className={`cursor-pointer border-b border-gray-100 tabular-nums ${sel?.kind === "beam" && sel.i === s.member ? "bg-brand-50" : "hover:bg-gray-50"}`}>
                     <td className="px-1 py-0.5">{s.id}</td><td className="px-1">{fmt(s.len, 2)}</td><td className="px-1">{KIND_TH[s.kind]}</td>
                     <td className="px-1 font-semibold" style={{ color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length] }}>{types[s.typeIdx]?.name}{s.own ? "" : " (อัตโนมัติ)"}</td>
-                    <td className="px-1">{fmt(s.Mpos, 0)}</td><td className="px-1">{fmt(s.Mneg, 0)}</td><td className="px-1">{fmt(s.V, 0)}</td>
+                    <td className="px-1">{fmt(s.Mpos, 0)}{s.src?.Mpos === "3D" && <sup className="text-brand-500"> 3D</sup>}</td><td className="px-1">{fmt(s.Mneg, 0)}{s.src?.Mneg === "3D" && <sup className="text-brand-500"> 3D</sup>}</td><td className="px-1">{fmt(s.V, 0)}{s.src?.V === "3D" && <sup className="text-brand-500"> 3D</sup>}</td>
                     <td className="px-1">{fmt(s.check.util * 100, 0)}%</td><td className={`px-1 ${s.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{s.ok ? "ผ่าน" : s.check.error ?? "ไม่ผ่าน"}</td>
                   </tr>))}</tbody>
               </table>

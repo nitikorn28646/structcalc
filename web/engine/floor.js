@@ -185,7 +185,8 @@ export function checkSpan(t, sp, mat) {
 // floor.stairs = [{ a, b (plan rectangle corners), up: +x|-x|+y|-y, kind, t, riser, tread, finish, live, landingL, landingTo: this|below, side ±1 (cant) }]
 // floor.lineLoads = [{ a, b, q kg/m, name }] railings etc.; floor.pointLoads = [{ p, P kg, name }]; panels[key].extra kg/m² (SDL)
 // downLines: line loads handed down by the floor above (stair bottoms) → [{ a, b, q, g, from }]
-export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = []) {
+// minTypes: { drawnBeamIndex: typeIdx } lightest type allowed (set by the 3D-frame envelope of analyzeFrame)
+export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = [], minTypes = null) {
   const warnings = [], cols = floor.columns ?? [];
   const lines = buildLines(floor.beams ?? [], cols);
   // members along each line (t range) and supports
@@ -200,6 +201,11 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       const host = lines.find((o) => o !== ln && along(o, p) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
       if (host) ln.carriers.push({ t, host: host.id, at: along(host, p) });
     }
+  }
+  for (const ln of lines) for (const c of ln.carriers) { // two lines resting on each other (corner without a column): no real support there
+    const h = lines.find((o) => o.id === c.host);
+    if (ln.id < h.id && h.carriers.some((d) => d.host === ln.id && Math.hypot(...[0, 1].map((k) => (d.t ? h.B : h.A)[k] - (c.t ? ln.B : ln.A)[k])) < TOL))
+      warnings.push(`มุมคานแนว ${ln.id + 1} กับแนว ${h.id + 1} ไม่มีเสา — คานต่อเนื่องคิดว่าวางบนกันเอง ใช้ผลโครง 3 มิติ (มุมยึดแน่น) ประกอบ`);
   }
   // slab panels by kind: S cast in place (two-way / one-way), PS precast planks (one-way along dir), GS on ground (nothing to the beams)
   const panels = findPanels(lines).map((P) => {
@@ -337,11 +343,12 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   // types: fixed per drawn beam, or auto (lightest passing); iterate because self weight and stiffness depend on the choice
   const order = types.map((t, i) => ({ t, i })).sort((x, y) => typeWeight(x.t) - typeWeight(y.t));
   const typeOf = new Map(); // drawn beam index → type index in use
-  (floor.beams ?? []).forEach((b, i) => typeOf.set(i, b.type ?? order[0]?.i ?? 0));
-  let result;
+  (floor.beams ?? []).forEach((b, i) => typeOf.set(i, b.type ?? minTypes?.[i] ?? order[0]?.i ?? 0));
+  const allowed = (i, t) => minTypes?.[i] == null || typeWeight(t) >= typeWeight(types[minTypes[i]]) - 1e-9;
+  let result, changed = false;
   for (let pass = 0; pass < 4; pass++) {
     result = solveFloor(floor, lines, types, mat, typeOf, warnings, pass === 3);
-    let changed = false;
+    changed = false;
     // deflection with another type: δ · I(current) / I(type)
     const deflWith = (sp, t) => { const cur = types[typeOf.get(sp.member)] ?? types[0], f = (cur.b * cur.h ** 3) / (t.b * t.h ** 3), d = sp.defl;
       return { ...d, dL: d.dL * f, dT: d.dT * f, ok: d.dL * f <= d.limL + 1e-9 && d.dT * f <= d.limT + 1e-9 }; };
@@ -350,7 +357,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       const b = floor.beams[sp.member];
       if (b.type != null) { sp.check = withDefl(checkSpan(types[b.type], sp, mat), sp, types[b.type]); sp.typeIdx = b.type; sp.own = true; continue; }
       let best = null;
-      for (const { t, i } of order) { const c = withDefl(checkSpan(t, sp, mat), sp, t); if (c.ok) { best = { c, i }; break; } if (!best || c.util < best.c.util) best = { c, i }; }
+      for (const { t, i } of order) { if (!allowed(sp.member, t)) continue; const c = withDefl(checkSpan(t, sp, mat), sp, t); if (c.ok) { best = { c, i }; break; } if (!best || c.util < best.c.util) best = { c, i }; }
       sp.check = best.c; sp.typeIdx = best.i;
     }
     // a drawn beam uses one type over all its spans: the heaviest its spans need
@@ -362,6 +369,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     }
     if (!changed) break;
   }
+  // types still moving after the last pass: solve once more so self weight / stiffness match the types reported
+  if (changed) result = solveFloor(floor, lines, types, mat, typeOf, [], false);
   for (const sp of result.spans) {
     const t = types[typeOf.get(sp.member)] ?? types[0], f = 1; // the last pass ran with these types: its deflections are current
     sp.typeIdx = typeOf.get(sp.member); const c = checkSpan(t, sp, mat), d = sp.defl;
@@ -419,6 +428,7 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
       // EI = Ec · 0.5 Ig (cracked section, for deflections; the reactions only depend on the ratios)
       const Ec = EcOf(mat), EI = x.slice(1).map((v, k) => { const m = (v + x[k]) / 2, pt = ln.parts.find((p) => m >= p.t0 - 1e-6 && m <= p.t1 + 1e-6), t = types[typeOf.get(pt?.i)] ?? types[0]; return (Ec * 0.5 * t.b * t.h ** 3) / 12; });
       const res = solveBeam({ x, sup, EI, loads });
+      ln.beamIn = { x, sup, EI, loads }; // kept for the PyNite differential test (cli/frame3d-export.mjs)
       if (res.error) {
         if (last) warnings.push(`แนวคาน ${ln.id + 1}: ${res.error} — วางเสาหรือให้ปลายคานวางบนคานอื่น`);
         done.set(ln.id, { reaction: () => 0 }); Object.assign(ln, { error: res.error, res: null, loads, pts }); continue;

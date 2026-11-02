@@ -51,7 +51,9 @@ export function FrameReport({ frame, project }) {
           ["ผลการตรวจสอบรวม", res.ok ? "ผ่านทุกข้อ" : `คานไม่ผ่าน ${spans.filter((s) => !s.ok).length} ช่วง · เสาไม่ผ่าน ${res.columns.filter((c) => !c.ok).length} ต้น/ชั้น`, res.ok],
         ]}>
         <Sec n={++n} th="ข้อมูลการออกแบบและน้ำหนักบรรทุก" en="Design data & loads"
-          intro="ใช้วิธีหน่วยแรงใช้งาน น้ำหนักบรรทุกคงที่รวมน้ำหนักบรรทุกจรโดยไม่คูณตัวคูณ น้ำหนักจรลงเต็มทุกช่วงพร้อมกัน คานคิดเป็นคานต่อเนื่องวางบนจุดรองรับแบบหมุน (เสาหรือคานที่รับ)">
+          intro={`ใช้วิธีหน่วยแรงใช้งาน น้ำหนักบรรทุกคงที่รวมน้ำหนักบรรทุกจรโดยไม่คูณตัวคูณ ${res.analysis === "envelope"
+            ? `แรงออกแบบ = ค่ามากสุดของ (ก) คานต่อเนื่องบนจุดรองรับแบบหมุน จัดน้ำหนักจรแบบหมากรุก และ (ข) โครง 3 มิติจุดต่อแข็งทั้งอาคาร (ฐานเสา${frame.baseFixity === "fixed" ? "ยึดแน่น" : "เป็นหมุด เพราะฐานเข็ม 1–2 ต้นรับโมเมนต์ไม่ได้"} ปลายคานซอยเป็นหมุด stiffness แตกร้าว คาน 0.5Ig เสา 0.7Ig รวม P-Delta) — เสาใช้โมเมนต์จากโครง 3 มิติทั้งสองแกนแต่ไม่น้อยกว่าระยะเยื้องศูนย์ขั้นต่ำ ความยาวเสาใช้ความสูงสุทธิ (หลังคานล่างถึงท้องคานบน)`
+            : "คานคิดเป็นคานต่อเนื่องวางบนจุดรองรับแบบหมุน (เสาหรือคานที่รับ) จัดน้ำหนักจรแบบหมากรุก"}`}>
           <Item th="กำลังอัดคอนกรีต" f="f'c" v={fmt(mat.fcPrime, 0)} u={ksc} note={`fc = ${fmt(fc, 1)} ${ksc}${mat.capFc !== false && mat.F * mat.fcPrime > 65 ? " (ไม่เกิน 65 ตามกฎกระทรวง)" : ""}`} />
           <Item th="เหล็กเสริม" f="fy" v={fmt(mat.fy, 0)} u={ksc} note={`เหล็กปลอก fy = ${fmt(mat.fys, 0)} ${ksc} · คอนกรีตหุ้ม ${fmt(mat.cover, 1)} ซม.`} />
           <Item th="หน่วยน้ำหนักคอนกรีต" v={fmt(CONC, 0)} u="กก./ม.³" note={`ผนัง: ${(frame.wallTypes ?? DEFAULT_WALL_TYPES).map((t) => `${t.name} ${t.w}`).join(" · ")} กก./ม.²`} />
@@ -88,8 +90,9 @@ export function FrameReport({ frame, project }) {
                 <Table head={["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "M สูงสุด (กก.-ม./ม.)", "เหล็กเสริม", "ผล"]}
                   rows={slabs.map((x) => [x.name, x.way ?? ({ C: "พื้นยื่น", ST: "บันได", PS: "PS", GS: "GS" })[x.kind] ?? x.kind, x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-",
                     x.cont !== undefined ? `${x.cont} ด้าน${x.case ? ` (กรณี ${x.case})` : ""}` : "-", x.r ? fmt(x.r.M ?? Math.max(...x.r.MS), 0) : "-", x.text ?? x.note, x.r ? pass(x.ok) : "-"])} /></>)}
-              <Table head={["ช่วง", "ยาว (ม.)", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "ใช้", "ผล"]}
-                rows={an.spans.map((s) => [s.id, fmt(s.len, 2), KIND_TH[s.kind], types[s.typeIdx]?.name, fmt(s.Mpos, 0), fmt(s.Mneg, 0), fmt(s.V, 0), `${fmt(s.check.util * 100, 0)}%`, pass(s.ok)])} />
+              <Table head={["ช่วง", "ยาว (ม.)", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "T (กก.-ม.)", "ใช้", "ผล"]}
+                rows={an.spans.map((s) => { const m = (k) => (s.src?.[k] === "3D" ? " ³ᴰ" : ""); return [s.id, fmt(s.len, 2), KIND_TH[s.kind], types[s.typeIdx]?.name, fmt(s.Mpos, 0) + m("Mpos"), fmt(s.Mneg, 0) + m("Mneg"), fmt(s.V, 0) + m("V"), fmt(s.Mt ?? 0, 0), `${fmt(s.check.util * 100, 0)}%`, pass(s.ok)]; })} />
+              {res.analysis === "envelope" && <Note>³ᴰ = ค่าจากโครง 3 มิติมากกว่าคานต่อเนื่อง (ใช้ค่านี้ออกแบบ)</Note>}
               {an.warnings.map((w) => <Note key={w}>{w}</Note>)}
             </Sec>
           );
@@ -124,9 +127,10 @@ export function FrameReport({ frame, project }) {
               <div key={`${i}-${j}`} className="mb-2">
                 <p className="mt-2 font-semibold text-gray-800">{t.name} {lv.level} — {lv.Bx}×{lv.By} ซม. {lv.n}-{lv.mainBar} ปลอก {lv.tieBar} @{fmt(lv.s, 2)} ม. · ต้นวิกฤต {c.stack} ใต้ {floors[c.floor].name}</p>
                 {r ? (<>
-                  <Item th="แรงอัด (รวมน้ำหนักเสา)" f="P" v={fmt(c.Pbot, 0)} u="กก." note={`ความยาว ${fmt(c.L, 2)} ม. · น้ำหนักเสา ${fmt(c.W, 0)} กก.`} />
+                  <Item th="แรงอัด (รวมน้ำหนักเสา)" f="P" v={fmt(c.Pd ?? c.Pbot, 0)} u="กก." note={`ความสูงชั้น ${fmt(c.L, 2)} ม. · สูงสุทธิ lu ${fmt(c.Lu ?? c.L, 2)} ม. (หักคานลึก ${fmt(c.dTop ?? 0, 2)} ม.) · น้ำหนักเสา ${fmt(c.W, 0)} กก.`} />
+                  {c.M3 && <Item th="โมเมนต์จากโครง 3 มิติ" f="Mx / My" v={`${fmt(c.M3.Mx, 0)} / ${fmt(c.M3.My, 0)}`} u="กก.-ม." note="ใช้ไม่น้อยกว่าโมเมนต์จากระยะเยื้องศูนย์ขั้นต่ำ" />}
                   <Item th="อัตราส่วนเหล็ก" f="pg = Ast/Ag" v={`${fmt(r.pg, 2)}%`} ok={r.pgOk} note={`Ast ${fmt(r.Ast, 2)} ซม.² · Ag ${fmt(r.Ag, 0)} ซม.²`} />
-                  <Item th="ระยะเยื้องศูนย์ขั้นต่ำ" f="e = max(2.5, 0.1t)" v={fmt(c.check.e, 2)} u="ซม." note={`M = ${fmt((c.Pbot * c.check.e) / 100, 0)} กก.-ม.`} />
+                  <Item th="ระยะเยื้องศูนย์ขั้นต่ำ" f="e = max(2.5, 0.1t)" v={fmt(c.check.e, 2)} u="ซม." note={`M = ${fmt(((c.Pd ?? c.Pbot) * c.check.e) / 100, 0)} กก.-ม.`} />
                   <Item th="กรณีควบคุม" v={r.mode === "I" ? "แรงอัดควบคุม" : r.mode === "II" ? "แรงอัดร่วมแรงดัด" : "แรงดึงควบคุม"} note={r.slender ? `เสาชะลูด R = ${fmt(r.R, 3)}` : "เสาสั้น"} />
                   <Item th={r.mode === "I" ? "แรงอัด / กำลังรับแรงอัด" : "อัตราส่วนหน่วยแรง"} f={r.mode === "I" ? "P ≤ Pa" : "fa/Fa + fb/Fb ≤ 1"} v={r.mode === "I" ? `${fmt(r.Pd, 0)} ≤ ${fmt(r.Pa, 0)}` : fmt(r.ratio, 3)} ok={r.ok} />
                   <Item th="ระยะเหล็กปลอก" f="s ≤ min(16db, 48dt, t)" v={`${fmt(lv.s * 100, 1)} ≤ ${fmt(r.sTie, 1)}`} u="ซม." ok={c.check.sOk} />
@@ -138,8 +142,8 @@ export function FrameReport({ frame, project }) {
 
         <Sec n={++n} th="ฐานราก" en="Pile caps"
           intro={`แรงที่ฐานเสา (รวมน้ำหนักเสาทุกชั้น) ลงฐานรากเสาเข็มตอก ยาว ${(frame.footing?.pileL ?? 6)} ม. รับน้ำหนักปลอดภัย ${fmt((frame.footing?.Psafe ?? 18000) / 1000, 0)} ตัน/ต้น ตามแบบ ตรวจด้วยโมดูลฐานราก (เสาเข็ม ฐานหนา ${fmt(frame.footing?.t ?? 0.4, 2)} ม.) เลือกจำนวนและขนาดเข็มที่น้อยที่สุดที่ผ่านทุกข้อ แรงลงเสาใช้ค่ามากกว่าระหว่างคานต่อเนื่องกับคานช่วงเดี่ยว (ไม่ให้เสาที่ถูกยกรับแรงน้อยเกินจริง)`}>
-          <Table head={["เสา (X, Y)", "P ฐานเสา (ตัน)", "เข็ม", "ฐานราก Bx × By (ม.)", "แรงต่อเข็ม / ปลอดภัย (ตัน)", "เหล็กเสริม", "ผล"]}
-            rows={res.footings.map((f) => [f.stack, fmt(f.P / 1000, 2), `${f.n} × ${f.pile}`, f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)}` : "-",
+          <Table head={["เสา (X, Y)", "P ฐานเสา (ตัน)", "M ฐานเสา x / y (กก.-ม.)", "เข็ม", "ฐานราก Bx × By (ม.)", "แรงต่อเข็ม / ปลอดภัย (ตัน)", "เหล็กเสริม", "ผล"]}
+            rows={res.footings.map((f) => [f.stack, fmt(f.P / 1000, 2), `${fmt(f.Mx ?? 0, 0)} / ${fmt(f.My ?? 0, 0)}`, `${f.n} × ${f.pile}`, f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)}` : "-",
               f.r ? `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}` : "-", f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error, pass(f.ok)])} />
           <Note>สรุป: ฐานเข็ม 1 ต้น {res.footings.filter((f) => f.n === 1).length} ฐาน · 2 ต้น {res.footings.filter((f) => f.n === 2).length} ฐาน · 3 ต้นขึ้นไป {res.footings.filter((f) => f.n >= 3).length} ฐาน · แรงรวมที่ฐาน {fmt(res.footings.reduce((a, f) => a + f.P, 0) / 1000, 1)} ตัน</Note>
         </Sec>

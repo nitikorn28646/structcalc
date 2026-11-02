@@ -1,0 +1,53 @@
+{
+ "name": "structcalc-contbeam-vs-pynite",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\pynite_beam.py"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\contbeam-solve.mjs"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "contbeam-hand",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\contbeam-hand.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.0001
+   },
+   "timeout": 600
+  },
+  {
+   "id": "contbeam-yasothon",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\contbeam-yasothon.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.0001
+   },
+   "timeout": 600
+  }
+ ]
+}
