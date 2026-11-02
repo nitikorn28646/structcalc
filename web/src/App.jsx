@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, Building2, Calculator, Moon, Sun, Columns3, Download, FileDown, FolderOpen, Footprints, House, Landmark, Layers, Menu, RectangleHorizontal, Save,
+import { Box, Building2, Calculator, Moon, Sun, Columns3, Download, FileDown, FilePlus2, FolderOpen, Footprints, House, Landmark, Layers, Menu, RectangleHorizontal, Save,
   Ruler, Square, Wrench, X } from "lucide-react";
 import { BARS, STIRRUPS, BEAM_TYPES, GRADES } from "../engine/tables.js";
 import { Badge, Button, Card, ErrorBoundary, Field, NumberInput, Select, TextInput } from "./ui.jsx";
@@ -263,6 +263,7 @@ export default function App() {
   }, [roof, frame.roofLink?.on, frame.roofLink?.floor]); // the whole building, shared by every workflow step
   useEffect(() => {
     const k = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); (e.shiftKey ? saveAs : saveProject)(); return; } // also while typing
       if (mod !== "work" || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); restore(e.shiftKey ? "redo" : "undo", e.shiftKey ? "undo" : "redo"); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); restore("redo", "undo"); }
@@ -283,13 +284,40 @@ export default function App() {
   const [viewOpen, setViewOpen] = useState(false);
   const openRef = useRef(null), [notice, setNotice] = useState(null);
   // project file: every module's inputs in one .json, to keep per job and reopen on any computer
-  const saveProject = () => {
-    const data = { app: "StructCalc", version: 1, savedAt: new Date().toISOString(), beam: st, slab, column, stair: stairSt, footing, roof, frame };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
-    const name = `${(st.project.name || "project").replace(/[\\/:*?"<>|]/g, "_").trim()}.json`;
-    Object.assign(document.createElement("a"), { href: url, download: name }).click();
+  // project file: Chrome / Edge write the same .json again (File System Access API: Save = overwrite, Save As = choose);
+  // other browsers download a copy. A new project starts empty (floors kept, no columns / beams).
+  const fileRef = useRef(null), [fileName, setFileName] = useState(null), [askNew, setAskNew] = useState(false);
+  const projectJson = () => JSON.stringify({ app: "StructCalc", version: 1, savedAt: new Date().toISOString(), beam: st, slab, column, stair: stairSt, footing, roof, frame }, null, 1);
+  const baseName = () => `${(st.project.name || "project").replace(/[\\/:*?"<>|]/g, "_").trim()}.json`;
+  const writeHandle = async (h) => { const w = await h.createWritable(); await w.write(projectJson()); await w.close(); fileRef.current = h; setFileName(h.name); setDirty(false); setNotice({ ok: true, text: `บันทึก ${h.name} แล้ว` }); };
+  const saveAs = async () => {
+    if (window.showSaveFilePicker) {
+      try { await writeHandle(await window.showSaveFilePicker({ suggestedName: fileName ?? baseName(), types: [{ description: "โครงการ StructCalc", accept: { "application/json": [".json"] } }] })); }
+      catch (e) { if (e.name !== "AbortError") setNotice({ ok: false, text: `บันทึกไม่ได้: ${e.message}` }); }
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([projectJson()], { type: "application/json" }));
+    Object.assign(document.createElement("a"), { href: url, download: fileName ?? baseName() }).click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setDirty(false);
+    setDirty(false); setNotice({ ok: true, text: "ดาวน์โหลดไฟล์โครงการแล้ว" });
+  };
+  const saveProject = async () => {
+    if (fileRef.current) { try { await writeHandle(fileRef.current); return; } catch (e) { setNotice({ ok: false, text: `บันทึกทับไม่ได้ (${e.message}) — เลือกที่บันทึกใหม่` }); } }
+    await saveAs();
+  };
+  const openFile = async () => {
+    if (!window.showOpenFilePicker) { openRef.current.click(); return; }
+    try { const [h] = await window.showOpenFilePicker({ types: [{ description: "โครงการ StructCalc", accept: { "application/json": [".json"] } }] }); const f = await h.getFile(); fileRef.current = h; setFileName(h.name); await openProject(f); }
+    catch (e) { if (e.name !== "AbortError") setNotice({ ok: false, text: `เปิดไฟล์ไม่ได้: ${e.message}` }); }
+  };
+  const newProject = () => {
+    const empty = { ...DEFAULT_FRAME, cur: 0, colPick: {}, lateral: undefined, roofLink: undefined, roofPoints: [],
+      floors: DEFAULT_FRAME.floors.map((f) => ({ ...f, columns: [], beams: [], walls: [], panels: {}, cants: [], stairs: [], lineLoads: [], pointLoads: [] })) };
+    hist.current = { undo: [], redo: [], t: 0 };
+    replaceSt({ ...DEFAULT_STATE }); setFrameState(empty); setRoofState(DEFAULT_ROOF);
+    try { localStorage.setItem("structcalc.frame", JSON.stringify(empty)); localStorage.setItem("structcalc.roof", JSON.stringify(DEFAULT_ROOF)); } catch { /* ignore */ }
+    fileRef.current = null; setFileName(null); setDirty(false); setAskNew(false); setStep("project");
+    setNotice({ ok: true, text: "เริ่มโครงการใหม่แล้ว — ใส่ข้อมูลโครงการ แล้วไปขั้น 1 กริด / ระดับชั้น" });
   };
   const openProject = async (file) => {
     try {
@@ -388,10 +416,18 @@ export default function App() {
                   {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </button>
                 {notice && <span className={`self-center text-xs ${notice.ok ? "text-green-600" : "text-red-600"}`}>{notice.text}</span>}
-                <Button variant="secondary" icon={FolderOpen} title="เปิดโครงการ (.json)" onClick={() => openRef.current.click()}><span className="hidden 2xl:inline">เปิดโครงการ</span></Button>
-                <input ref={openRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) openProject(f); }} />
-                {dirty && <span className="self-center text-[11px] text-[#b54708]" title="งานถูกเก็บในเบราว์เซอร์นี้อัตโนมัติแล้ว แต่ยังไม่ได้บันทึกเป็นไฟล์ (.json) — กดบันทึกโครงการเพื่อสำรองหรือย้ายเครื่อง">● ยังไม่บันทึกไฟล์</span>}
-                <Button variant="secondary" icon={Save} title="บันทึกโครงการ (.json)" onClick={saveProject}><span className="hidden 2xl:inline">บันทึกโครงการ</span></Button>
+                <span className="flex items-center gap-1 rounded-lg bg-gray-100 p-0.5">
+                  <button onClick={() => (dirty ? setAskNew(true) : newProject())} title="โครงการใหม่ (เริ่มจากว่าง)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><FilePlus2 className="h-4 w-4" />ใหม่</button>
+                  <button onClick={openFile} title="เปิดไฟล์โครงการ (.json)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><FolderOpen className="h-4 w-4" />เปิด</button>
+                  <button onClick={saveProject} title={fileName ? `บันทึกทับ ${fileName} (Ctrl+S)` : "บันทึกเป็นไฟล์ .json (Ctrl+S)"} className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><Save className="h-4 w-4" />บันทึก{dirty && <span className="text-[#b54708]" title="ยังไม่ได้บันทึกเป็นไฟล์ (งานถูกเก็บในเบราว์เซอร์นี้อัตโนมัติแล้ว)">●</span>}</button>
+                  <button onClick={saveAs} title="บันทึกเป็นไฟล์ใหม่ (Ctrl+Shift+S)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white">บันทึกเป็น…</button>
+                </span>
+                {fileName && <span className="self-center text-[11px] text-gray-500" title="ไฟล์ที่เปิดอยู่">{fileName}</span>}
+                <input ref={openRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { setFileName(f.name); openProject(f); } }} />
+                {askNew && <span className="flex items-center gap-1 rounded-lg bg-[#fffaeb] px-2 py-1 text-[12px] text-[#b54708] ring-1 ring-[#fdb022]">งานนี้ยังไม่ได้บันทึกเป็นไฟล์
+                  <button onClick={async () => { await saveProject(); }} className="rounded px-1.5 font-medium underline">บันทึกก่อน</button>
+                  <button onClick={newProject} className="rounded px-1.5 font-medium text-[#d92d20] underline">ทิ้งและเริ่มใหม่</button>
+                  <button onClick={() => setAskNew(false)} className="rounded px-1.5">ยกเลิก</button></span>}
                 {mod !== "work" && <Button variant="secondary" icon={Building2} title="ข้อมูลโครงการ" onClick={() => setProjOpen(true)}><span className="hidden 2xl:inline">ข้อมูลโครงการ</span></Button>}
                 <Button icon={FileDown} onClick={printReport}>พิมพ์ / บันทึก PDF</Button>
               </div>
