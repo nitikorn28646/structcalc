@@ -6,7 +6,7 @@ import { SVGRenderer } from "echarts/renderers";
 import { Download, GitCommitHorizontal, Home, Plus, Ruler, Trash2, Triangle, Wand2 } from "lucide-react";
 import { roofGeometry } from "../engine/roof.js";
 import { frameRoof } from "../engine/roofFrame.js";
-import { DEFAULT_DESIGN, ROOFINGS, autoInnerPlates, designRoof } from "../engine/roofMembers.js";
+import { DEFAULT_DESIGN, ROOFINGS, autoInnerPlates, designRoof, BATTEN_RANGE } from "../engine/roofMembers.js";
 import { SECTIONS, SECTION_TYPES, SYM } from "../engine/steelSections.js";
 import { Badge } from "./ui.jsx";
 import { Card, Field, NumberInput, Select, inputCls as SEL } from "./ui.jsx";
@@ -264,13 +264,13 @@ function MemberTable({ dz, d, setD, setHover }) {
 }
 const TILES = ["cpac", "ceramic"];
 
-function DesignInputs({ d, set }) {
+function DesignInputs({ d, set, onRoofing = () => {} }) {
   const n = (key, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={d[key]} step={step} onChange={(v) => set(key, v)} /></Field>;
   const TYPE_OPTS = Object.entries(SECTION_TYPES);
   return (<>
     <Card title="น้ำหนักบรรทุกและวัสดุ" icon={Triangle}>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="วัสดุมุง"><Select value={d.roofing} onChange={(v) => set({ roofing: v, pick: { ...d.pick, purlin: TILES.includes(v) ? "batten" : d.pick.purlin === "batten" ? "auto:C" : d.pick.purlin } })} options={Object.entries(ROOFINGS).map(([k, [t, w]]) => [k, `${t} (${w})`])} /></Field>
+        <Field label="วัสดุมุง"><Select value={d.roofing} onChange={(v) => { onRoofing(v); set({ roofing: v, pick: { ...d.pick, purlin: TILES.includes(v) ? "batten" : d.pick.purlin === "batten" ? "auto:C" : d.pick.purlin } }); }} options={Object.entries(ROOFINGS).map(([k, [t, w]]) => [k, `${t} (${w})`])} /></Field>
         {n("live", "น้ำหนักจร", "kg/m²")}{n("wind", "แรงลม", "kg/m²")}{n("extra", "น้ำหนักอื่นๆ", "kg/m²")}
         <Field label="เกรดเหล็ก"><Select value={d.grade} onChange={(v) => set("grade", v)} options={[["Fe-24", "Fe-24 (2400)"], ["Fe-30", "Fe-30 (3000)"]]} /></Field>
         <Field label="เหล็กยึดแป"><Select value={d.sagRows} onChange={(v) => set("sagRows", Number(v))} options={[[0, "ไม่ใช้"], [1, "1 แถว"], [2, "2 แถว"], [3, "3 แถว"]]} /></Field>
@@ -346,7 +346,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null }) {
             <Field label="กริดจับจุด"><Select value={roof.snap} onChange={(v) => set("snap", Number(v))} options={[[0.1, "0.10 ม."], [0.25, "0.25 ม."], [0.5, "0.50 ม."], [1, "1.00 ม."]]} /></Field>
           </div>
         </Card>}
-        {mode === "plate" && g ? <PlateInputs d={roof.design} setD={setD} g={g} plates={pl.plates} sizes={pl.sizes} setInner={(v) => set("innerPlates", v)} onAutoInner={() => set("innerPlates", autoInnerPlates(g, fr))} drawn={!!roof.plates?.length} /> : mode === "design" ? <DesignInputs d={roof.design} set={setD} /> : mode === "frame" ? (<>
+        {mode === "plate" && g ? <PlateInputs d={roof.design} setD={setD} g={g} plates={pl.plates} sizes={pl.sizes} setInner={(v) => set("innerPlates", v)} onAutoInner={() => set("innerPlates", autoInnerPlates(g, fr))} drawn={!!roof.plates?.length} /> : mode === "design" ? <DesignInputs d={roof.design} set={setD} onRoofing={(v) => TILES.includes(v) && (roof.frame.purlinSp < BATTEN_RANGE[0] || roof.frame.purlinSp > BATTEN_RANGE[1]) && set("frame", { ...roof.frame, purlinSp: 0.32 })} /> : mode === "frame" ? (<>
         <Card title="ระยะโครงหลังคา" icon={Ruler}>
           <div className="grid grid-cols-2 gap-3">
             {fv("rafterSp", "ระยะจันทัน", "m", "0.1")}{fv("purlinSp", "ระยะแป (ตามแนวเอียง)", "m", "0.05")}

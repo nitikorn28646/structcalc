@@ -25,6 +25,8 @@ import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
 import { roofFromFrame, roofPoints } from "./roofLink.js";
+import { loadSkeleton, runRoof } from "./RoofPage.jsx";
+import { autoInnerPlates } from "../engine/roofMembers.js";
 import { HelpCircle, Redo2, Undo2 } from "lucide-react";
 import { StepGuide, Tour, markTourSeen, tourSeen } from "./Help.jsx";
 
@@ -202,13 +204,15 @@ export default function App() {
   const setStep = (k) => { setStepState(k); setMod("work"); try { const q = new URLSearchParams(location.search); q.set("step", k); history.replaceState(null, "", `${location.pathname}?${q}#work`); } catch { /* ignore */ } }; // a reload stays on this step
   const [toolsOpen, setToolsOpen] = useState(false);
   // roof plan from the structure: outline, columns, plates, grid, plate level; the roof loads then go to the top floor's columns
-  const roofFromStructure = () => {
+  const roofFromStructure = async () => {
     const r = roofFromFrame(frame, fres);
     if (r.error) { setNotice({ ok: false, text: r.error }); return; }
     const { linkFloor, ...patch } = r;
+    // plates under the ดั้ง (posts on the ridges) as on the drawings, so post loads reach columns through real members
+    try { const sk = await loadSkeleton(), rr = runRoof({ ...roof, ...patch }, sk); if (rr.g && rr.fr) patch.innerPlates = autoInnerPlates(rr.g, rr.fr); } catch { /* keep without */ }
     remember(); setRoofState((x) => { const next = { ...x, ...patch }; try { localStorage.setItem("structcalc.roof", JSON.stringify(next)); } catch { /* ignore */ } return next; });
     setFrame("roofLink", { on: true, floor: linkFloor });
-    setNotice({ ok: true, text: `หลังคาจากแปลนโครงสร้าง: ขอบ ${patch.pts.length} มุม · เสา ${patch.columns.length} ต้น · ส่งแรงลง ${frame.floors[linkFloor].name}` });
+    setNotice({ ok: true, text: `หลังคาจากแปลนโครงสร้าง: ขอบ ${patch.pts.length} มุม · เสา ${patch.columns.length} ต้น · อะเสรับดั้ง ${patch.innerPlates.length} เส้น · ส่งแรงลง ${frame.floors[linkFloor].name}` });
   };
   const [tour, setTour] = useState(() => !tourSeen() && !new URLSearchParams(location.search).has("print"));
   const closeTour = () => { markTourSeen(); setTour(false); };

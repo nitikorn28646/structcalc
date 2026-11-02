@@ -54,6 +54,7 @@ function gravity(frame, minTypes) {
   for (let k = n - 1; k >= 0; k--) {
     // roof module reactions linked to this floor (frame.roofPoints, recomputed by the app whenever the roof changes)
     const fl = frame.roofLink?.on && frame.roofLink.floor === k ? { ...floors[k], pointLoads: [...(floors[k].pointLoads ?? []), ...(frame.roofPoints ?? [])] } : floors[k];
+    if (fl !== floors[k]) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — เพิ่มเสา / อะเสรับดั้งที่ตำแหน่งนั้นถ้าแบบมี`);
     // columns of the floor above with no column right under them stand on this floor's beams
     const extra = above.filter((c) => !fl.columns.some((q) => near(q, c.p))).map((c) => ({ p: c.p, P: c.Pbot, from: `เสา ${c.stack} (${floors[k + 1].name})` }));
     an[k] = analyzeFloor(fl, beamTypes, mat, extra, frame.wallTypes ?? DEFAULT_WALL_TYPES, downLines, minTypes?.[k]);
@@ -227,6 +228,8 @@ export function analyzeFrame(frame) {
     return { ...worst, minP };
   });
   const lateral = lat && f3?.combos ? lateralChecks(frame, lat, f3) : null;
+  // a type whose bars cannot be read would be checked with no steel at all: say so instead of a silent NG
+  for (const t of beamTypes) for (const k of ["top", "bot", "topX", "botX"]) if (t[k] && !parseBars(t[k])) g.warnings.push(`Type คาน ${t.name}: อ่านเหล็ก "${t[k]}" ไม่ได้ (ใช้รูปแบบ เช่น 2-DB12, 3-RB9) — คิดเป็นไม่มีเหล็ก`);
   return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, analysis: f3 ? "envelope" : "continuous", warnings: [...new Set(g.warnings)],
     ok: g.an.every((a) => a.ok) && stacks.every((s) => s.ok) && footings.every((f) => f.ok) && (!lateral || lateral.ok) };
 }

@@ -1,5 +1,6 @@
 // Rebar data: nominal area (cm²) and diameter (cm), TIS 20/24 sizes.
 export const BARS = {
+  "RB 9": { A: 0.64, d: 0.9 }, // small ground beams (GB 2-RB9) on house drawings
   "RB 12": { A: 1.13, d: 1.2 }, "RB 15": { A: 1.77, d: 1.5 }, "RB 19": { A: 2.84, d: 1.9 },
   "RB 25": { A: 4.91, d: 2.5 }, "DB 12": { A: 1.13, d: 1.2 }, "DB 16": { A: 2.01, d: 1.6 },
   "DB 20": { A: 3.14, d: 2.0 }, "DB 25": { A: 4.91, d: 2.5 }, "DB 28": { A: 6.16, d: 2.8 },
