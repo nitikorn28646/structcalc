@@ -4,6 +4,7 @@
 // rigid. Cracked stiffness: beams 0.5·Ig, columns 0.7·Ig, torsion 0.2·J. Optional P-Delta (geometric stiffness, iterated).
 // Units: m, kg, kg-m. Global axes: X, Y plan, Z up (base Z = 0 = top of the footings).
 import { CONC } from "./floor.js";
+import { arcGeom, arcPoint } from "./arc.js";
 
 const GP = [[-Math.sqrt(3 / 5), 5 / 9], [0, 8 / 9], [Math.sqrt(3 / 5), 5 / 9]];
 const shape = (x, L) => { const s = x / L; return [1 - 3 * s * s + 2 * s ** 3, L * (s - 2 * s * s + s ** 3), 3 * s * s - 2 * s ** 3, L * (s ** 3 - s * s)]; };
@@ -219,7 +220,8 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
 
 // Build the whole-building model from the frame data and its floor analyses (analyzeFrame result) and solve it.
 export function frame3dModel(frame, res, opt = {}) {
-  const nodes = [], key = (x, y, z) => `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`, idx = new Map();
+  const r3 = (v) => (Math.round(v * 1000) / 1000 + 0).toFixed(3); // + 0: no "-0.000" (an arc end at −2e-16 must meet the column)
+  const nodes = [], key = (x, y, z) => `${r3(x)},${r3(y)},${r3(z)}`, idx = new Map();
   const pin = (frame.baseFixity ?? "pinned") === "pinned";
   const node = (x, y, z, base = false) => { const k = key(x, y, z); if (!idx.has(k)) { idx.set(k, nodes.length); nodes.push({ x, y, z }); } const i = idx.get(k); if (base) nodes[i][pin ? "pinned" : "fixed"] = true; return i; };
   let z = 0; const Z = frame.floors.map((f) => (z += f.h ?? 3)); // levels (m above the footing top)
@@ -236,8 +238,10 @@ export function frame3dModel(frame, res, opt = {}) {
     for (const pl of an.pointLoads ?? []) if (pl.on === "column") nodeLoads.push({ n: node(fl.columns[pl.ci][0], fl.columns[pl.ci][1], zk), P: pl.P });
     // beams: every line split at the points where something meets it
     for (const ln of an.lines) {
-      const at = (t) => [ln.A[0] + ln.u[0] * t, ln.A[1] + ln.u[1] * t];
-      const ts = new Set([0, ln.L, ...ln.cols.map((c) => c.t), ...ln.parts.flatMap((p) => [p.t0, p.t1])]);
+      // an arc beam: nodes on the true arc (12 pieces), positions along it by the chord parameter t
+      const ag = ln.arc ? arcGeom(ln.A, ln.B, ln.arc.s) : null;
+      const at = (t) => (!ag ? [ln.A[0] + ln.u[0] * t, ln.A[1] + ln.u[1] * t] : t < 1e-9 ? ln.A : t > ln.L - 1e-9 ? ln.B : arcPoint(ag, t));
+      const ts = new Set([0, ln.L, ...ln.cols.map((c) => c.t), ...ln.parts.flatMap((p) => [p.t0, p.t1]), ...(ag ? Array.from({ length: 11 }, (_, i) => (ln.L * (i + 1)) / 12) : [])]);
       for (const o of an.lines) if (o !== ln) for (const p of [o.A, o.B]) { const d = [p[0] - ln.A[0], p[1] - ln.A[1]], t = d[0] * ln.u[0] + d[1] * ln.u[1]; if (t > 1e-3 && t < ln.L - 1e-3 && Math.abs(d[0] * ln.u[1] - d[1] * ln.u[0]) < 0.03) ts.add(t); }
       for (const c of res.columns.filter((x) => x.floor === k + 1)) { const p = c.p, d = [p[0] - ln.A[0], p[1] - ln.A[1]], t = d[0] * ln.u[0] + d[1] * ln.u[1]; if (t > 1e-3 && t < ln.L - 1e-3 && Math.abs(d[0] * ln.u[1] - d[1] * ln.u[0]) < 0.03) ts.add(t); }
       const xs = [...ts].map((t) => +t.toFixed(4)).sort((a, b) => a - b).filter((t, i, a) => !i || t - a[i - 1] > 1e-3);
@@ -255,6 +259,9 @@ export function frame3dModel(frame, res, opt = {}) {
           ...pts.filter((p) => p.at >= x0 - 1e-9 && (p.at < x1 - 1e-9 || s === xs.length - 2)).map((p) => ({ at: p.at - x0, P: p.P, g: "SP" })),
         ];
         const ov = (q) => Math.max(0, Math.min(q.b, x1) - Math.max(q.a, x0)), torque = (ln.torsion ?? []).map((q) => q.m * ov(q)).filter(Boolean), torqueL = (ln.torsion ?? []).map((q) => (q.mL ?? 0) * ov(q)).filter(Boolean);
+        // arc piece: its real length differs from the chord-parameter length → stretch positions, keep each load's total
+        const kL = ag ? Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / L : 1;
+        if (kL !== 1) for (const l of loads) { if (l.P !== undefined) l.at = Math.min(l.at * kL, L * kL); else { l.a *= kL; l.b = Math.min(l.b * kL, L * kL); l.wa /= kL; l.wb /= kL; } }
         members.push({ i: node(p0[0], p0[1], zk), j: node(p1[0], p1[1], zk), kind: "beam", floor: k, line: ln.id, x0, x1, b: ty.b, h: ty.h, loads, torque, torqueL,
           release: [s === 0 && carried.has(+x0.toFixed(4)), s === xs.length - 2 && carried.has(+x1.toFixed(4))] });
       }

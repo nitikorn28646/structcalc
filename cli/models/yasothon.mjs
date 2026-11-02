@@ -4,6 +4,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { analyzeFloor, DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES } from "../../web/engine/floor.js";
 import { analyzeFrame } from "../../web/engine/frame.js";
+import { quarterSagitta } from "../../web/engine/arc.js";
 
 const mat = { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 };
 const B = (a, b, wallH = 0) => ({ a, b, type: null, wallH });
@@ -90,6 +91,8 @@ const roof = { roofNo: "R1", slope: 30, overhang: 1.2, H: 7.25, snap: 0.5, suppo
   design: { roofing: "cpac", battenW: 0.6, minT: 2.3, minSec: "100x50x20x2.3", live: 30, wind: 50, extra: 15, grade: "Fe-24", E: 2100000, sagRows: 1, rodFy: 2400, plateSpan: 4,
     pick: { purlin: "batten", rafter: "auto:C", hip: "auto:C", ridge: "auto:C", support: "auto:C", plate: "auto:C", post: "auto:C" }, counts: { hip: 2, ridge: 2, support: 2, plate: 2, post: 2 } } };
 const project = { app: "StructCalc", version: 1, beam: { project: { name: "บ้านพักอาศัย คสล. 2 ชั้น — คุณหนูเลียง สีลาทอง", owner: "คุณหนูเลียง สีลาทอง", location: "หมู่ 11 ต.กระจาย อ.ป่าติ้ว จ.ยโสธร", engineer: "", license: "", beamNo: "B1", floor: "", date: "2026-10-31" } }, roof, frame };
+// porch edge (EN-03/04): the curved beam is a quarter circle (user, 2026-11-02) bulging out towards the corner (6, 1.0)
+for (const fl of project.frame.floors) for (const b of fl.beams) if (b.a[0] === 6 && b.a[1] === 1.8 && b.b[1] === 1.0 && b.b[0] > 6.5) b.arc = { s: -quarterSagitta(Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1])) };
 mkdirSync("web/public/projects", { recursive: true });
 writeFileSync("web/public/projects/yasothon.json", JSON.stringify(project, null, 1));
 

@@ -70,6 +70,16 @@ save("two-storey-pdelta", twoStorey(true));
   const strip = (m) => ({ i: m.i, j: m.j, kind: m.kind, b: m.b, h: m.h, loads: m.loads ?? [], torque: m.torque ?? [], release: m.release });
   for (const pDelta of [false, true]) save(pDelta ? "yasothon-pdelta" : "yasothon-linear", { nodes: inp.nodes, members: inp.members.map(strip), nodeLoads: inp.nodeLoads, E: inp.E, pDelta });
 }
+// 4b a quarter-arc beam between two columns (the 3D model puts 12 straight pieces on the arc)
+{
+  const { quarterSagitta } = await import(pathToFileURL(join(root, "web/engine/arc.js")));
+  const { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES } = await import(pathToFileURL(join(root, "web/engine/floor.js")));
+  const s = -quarterSagitta(Math.hypot(4, 4)), mat = { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 };
+  const fl = (name, h, arc) => ({ name, h, t: 0, finish: 0, live: 0, columns: [[0, 0], [4, 4], [0, 4]], panels: {}, lineLoads: [{ a: [0, 0], b: [4, 4], q: 500, name: "ราว" }],
+    beams: [{ a: [0, 0], b: [4, 4], type: null, ...(arc ? { arc: { s } } : {}) }, { a: [0, 0], b: [0, 4], type: null }, { a: [0, 4], b: [4, 4], type: null }] });
+  const inp = analyzeFrame({ mat, beamTypes: DEFAULT_BEAM_TYPES, colTypes: DEFAULT_COLUMN_TYPES, floors: [fl("GB", 1, false), fl("ชั้น 2", 3, true)] }).frame3d.input;
+  save("arc-beam", { nodes: inp.nodes, members: inp.members.map((m) => ({ i: m.i, j: m.j, kind: m.kind, b: m.b, h: m.h, loads: m.loads ?? [], torque: m.torque ?? [], release: m.release })), nodeLoads: inp.nodeLoads, E: inp.E, pDelta: false });
+}
 // 5 continuous beams (engine/contBeam.js): hand-made lines and every beam line of the Yasothon house as floor.js solves it
 {
   const lines = [

@@ -8,7 +8,7 @@ from pathlib import Path
 from cases import PY, ROOT
 
 HERE = Path(__file__).parent
-FRAMES = ["portal-fixed", "box-pinned-secondary", "box-fixed-secondary", "two-storey-lateral", "two-storey-pdelta", "yasothon-linear", "yasothon-pdelta"]
+FRAMES = ["portal-fixed", "box-pinned-secondary", "box-fixed-secondary", "two-storey-lateral", "two-storey-pdelta", "yasothon-linear", "yasothon-pdelta", "arc-beam"]
 BEAMS = ["contbeam-hand", "contbeam-yasothon"]
 
 

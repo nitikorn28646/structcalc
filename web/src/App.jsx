@@ -30,7 +30,7 @@ import { StepGuide, Tour, markTourSeen, tourSeen } from "./Help.jsx";
 
 const BAR_OPTS = [["", "—"], ...Object.keys(BARS).map((k) => [k, k])];
 // single-member calculators (tools); the building itself is designed in the workflow
-const MODULES = [["beam", "คาน", RectangleHorizontal], ["slab", "พื้น", Square], ["column", "เสา", Columns3], ["stair", "บันได", Footprints], ["footing", "ฐานราก", Landmark]];
+const MODULES = [["beam", "คานเดี่ยว", RectangleHorizontal], ["slab", "พื้นเดี่ยว", Square], ["column", "เสาเดี่ยว", Columns3], ["stair", "บันไดเดี่ยว", Footprints], ["footing", "ฐานรากเดี่ยว", Landmark]];
 // one project = one workflow: model bottom up, analyse top down, design, report
 export const WORKFLOW = [["project", "ข้อมูลโครงการ"], ["grid", "กริด / ระดับชั้น"], ["frame", "โครงสร้าง (เสา-คาน)"], ["slab", "พื้น"], ["stair", "บันได"], ["roof", "หลังคา"],
   ["loads", "น้ำหนักบรรทุก"], ["analysis", "วิเคราะห์"], ["design", "ออกแบบสมาชิก"], ["footing", "ฐานราก"], ["report", "รายการคำนวณ"]];
@@ -196,6 +196,7 @@ export default function App() {
   const [step, setStepState] = useState(() => { const q = new URLSearchParams(location.search).get("step"), h = location.hash.slice(1);
     return WORKFLOW.some((w) => w[0] === q) ? q : h === "roof" ? "roof" : h === "frame" ? "design" : "frame"; });
   const setStep = (k) => { setStepState(k); setMod("work"); };
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [tour, setTour] = useState(() => !tourSeen() && !new URLSearchParams(location.search).has("print"));
   const closeTour = () => { markTourSeen(); setTour(false); };
   const [slab, setSlabState] = useState(DEFAULT_SLAB);
@@ -335,8 +336,10 @@ export default function App() {
               );
             })}
           </nav>
-          <p className="mb-1.5 mt-4 text-xs uppercase tracking-wider text-gray-400">เครื่องมือคำนวณเดี่ยว</p>
-          <nav className="space-y-0.5">
+          <button onClick={() => setToolsOpen(!toolsOpen)} className="mb-1.5 mt-4 flex w-full items-center text-left text-xs uppercase tracking-wider text-gray-400 hover:text-gray-600">
+            เครื่องมือคำนวณเดี่ยว <span className="ml-auto">{toolsOpen || mod !== "work" ? "▾" : "▸"}</span></button>
+          {(toolsOpen || mod !== "work") && <nav className="space-y-0.5">
+            <p className="px-3 pb-1 text-[11px] text-gray-400">คำนวณทีละชิ้น ไม่เกี่ยวกับโครงการทั้งหลัง</p>
             {MODULES.map(([key, m, Icon]) => (
               <button key={m} disabled={!key} onClick={() => { setMod(key); setMenuOpen(false); }}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[13px] font-medium ${mod === key ? "bg-brand-50 text-brand-500" : key ? "text-gray-700 hover:bg-gray-100" : "text-gray-400"}`}>
@@ -344,7 +347,7 @@ export default function App() {
                 {!key && <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-400">เร็วๆ นี้</span>}
               </button>
             ))}
-          </nav>
+          </nav>}
         </aside>
         {menuOpen && <div className="fixed inset-0 z-10 bg-black/50 lg:hidden" onClick={() => setMenuOpen(false)} />}
 
@@ -381,7 +384,7 @@ export default function App() {
                 <Button variant="secondary" icon={FolderOpen} title="เปิดโครงการ (.json)" onClick={() => openRef.current.click()}><span className="hidden 2xl:inline">เปิดโครงการ</span></Button>
                 <input ref={openRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) openProject(f); }} />
                 <Button variant="secondary" icon={Save} title="บันทึกโครงการ (.json)" onClick={saveProject}><span className="hidden 2xl:inline">บันทึกโครงการ</span></Button>
-                <Button variant="secondary" icon={Building2} title="ข้อมูลโครงการ" onClick={() => setProjOpen(true)}><span className="hidden 2xl:inline">ข้อมูลโครงการ</span></Button>
+                {mod !== "work" && <Button variant="secondary" icon={Building2} title="ข้อมูลโครงการ" onClick={() => setProjOpen(true)}><span className="hidden 2xl:inline">ข้อมูลโครงการ</span></Button>}
                 <Button icon={FileDown} onClick={printReport}>พิมพ์ / บันทึก PDF</Button>
               </div>
             </div>

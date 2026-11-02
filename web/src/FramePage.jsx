@@ -1,5 +1,7 @@
 // Beam & column framing (P1: one floor): draw columns / beams on a grid, slab panels and loads, continuous beams, beam types.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ColumnChart, LineDiagram, SlabStrip } from "./ReportDiagrams.jsx";
+import { arcGeom, quarterSagitta } from "../engine/arc.js";
 import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
@@ -147,6 +149,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const fv = (k, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={fl[k]} step={step} onChange={(v) => setFloor({ [k]: v })} /></Field>;
   const beam = sel?.kind === "beam" ? fl.beams[sel.i] : null, col = sel?.kind === "column" ? fl.columns[sel.i] : null, panel = sel?.kind === "panel" ? an.panels.find((p) => p.key === sel.key) : null;
   const line = beam ? an.lines.find((l) => l.members.includes(sel.i)) : null;
+  const [lineId, setLineId] = useState(null);
+  const bigLine = an.lines.filter((l) => l.res).reduce((a, l) => { const m = Math.max(...an.spans.filter((s) => s.line === l.id).map((s) => Math.max(s.Mpos, s.Mneg)), 0); return !a || m > a.m ? { l, m } : a; }, null)?.l;
+  const showLine = line ?? an.lines.find((l) => l.id === lineId && l.res) ?? bigLine;
   const setBeam = (patch) => setFloor({ beams: fl.beams.map((b, i) => (i === sel.i ? { ...b, ...patch } : b)) });
   const wall = sel?.kind === "wall" ? wallsOf(fl)[sel.i] : null, cant = sel?.kind === "cant" ? fl.cants?.[sel.i] : null;
   const setWall = (patch) => setFloor({ walls: wallsOf(fl).map((w, i) => (i === sel.i ? { ...w, ...patch } : w)) });
@@ -185,11 +190,11 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     ["สรุปทั้งอาคาร", res.ok ? "ผ่านทั้งหมด" : `คานไม่ผ่าน ${res.floors.reduce((s, a) => s + a.spans.filter((x) => !x.ok).length, 0)} · เสาไม่ผ่าน ${res.columns.filter((c) => !c.ok).length}`]];
 
   // ---- workflow layout: sub-tabs + view switch, centre (2D / 3D / split or a table page), inspector on the right, drawer, status bar
-  const SUBS = { analysis: [["cont", "คานต่อเนื่อง (ใช้ออกแบบ)"], ["frame3d", "โครง 3 มิติ (เทียบผล)"]], loads: [["wall", "ผนัง"], ["other", "น้ำหนักอื่น / หลังคา"], ["groups", "สรุปกลุ่มน้ำหนัก"], ["lateral", "ลม / แผ่นดินไหว / Combination"]],
+  const SUBS = { analysis: [["cont", "แรงภายในคาน"], ["colf", "แรงในเสา"], ["frame3d", "เทียบ 2 วิธี / ตั้งค่า"]], loads: [["wall", "ผนัง"], ["other", "น้ำหนักอื่น / หลังคา"], ["groups", "สรุปกลุ่มน้ำหนัก"], ["lateral", "ลม / แผ่นดินไหว / Combination"]],
     design: [["result", "คาน"], ["cols", "เสา"], ["slabs", "พื้น / บันได"], ["types", "Type คาน"], ["ctypes", "Type เสา"]] };
   const subs = SUBS[step], sub = subs ? (subs.some((x) => x[0] === subState) ? subState : subs[0][0]) : null;
-  const boardStep = { frame: "frame", grid: "frame", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
-  const tablePage = (step === "analysis" && sub === "frame3d") || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || (step === "loads" && ["groups", "lateral"].includes(sub));
+  const boardStep = { frame: "frame", grid: "grid", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
+  const tablePage = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || (step === "loads" && ["groups", "lateral"].includes(sub));
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
@@ -218,9 +223,13 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   ) : step === "design" && sub === "types" ? <TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} />
     : step === "design" && sub === "ctypes" ? <ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} />
     : step === "design" && sub === "slabs" ? (
+      <div className="space-y-3">
       <table className="w-full border-collapse text-[12px]"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "เหล็กเสริม", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
         <tbody>{slabRows.map((x) => <tr key={x.name} className="border-b border-gray-100 tabular-nums"><td className="px-1 py-1">{x.name}</td><td className="px-1">{x.way ?? x.kind}</td><td className="px-1">{x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-"}</td>
           <td className="px-1">{x.cont ?? "-"}</td><td className="px-1">{x.text ?? x.note}</td><td className={`px-1 ${x.r ? (x.ok ? "text-green-600" : "font-semibold text-red-600") : "text-gray-400"}`}>{x.r ? (x.ok ? "ผ่าน" : "ไม่ผ่าน") : "-"}</td></tr>)}</tbody></table>
+      <p className="text-sm font-semibold text-gray-800">โมเมนต์ในพื้นและบันได (ต่อความกว้าง 1 ม.) — {fl.name}</p>
+      <div className="grid gap-3 xl:grid-cols-2">{slabRows.filter((x) => x.r).map((x) => <div key={x.name} className="rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200"><p className="text-[12px] font-medium text-[#344054]">{x.name} · {x.way ?? ({ C: "พื้นยื่น", ST: "บันได" })[x.kind]} · {x.text}</p><SlabStrip row={x} /></div>)}</div>
+      </div>
     ) : step === "loads" && sub === "groups" ? <div className="max-w-md"><Card title={`น้ำหนักแยกกลุ่ม — ${fl.name}`} icon={Layers}>
           <div className="space-y-1 text-[13px]">
             {Object.entries(GROUPS).map(([g, [name, color]]) => (
@@ -233,6 +242,14 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             <p className="text-[11px] text-gray-400">ติ๊กเพื่อแสดงค่าบนแปลน · วิเคราะห์ทุกกลุ่มรวมกัน (WSD) · สร้างจากล่างขึ้นบน คำนวณจากบนลงล่าง</p>
           </div>
         </Card></div>
+    : step === "analysis" && sub === "colf" ? (
+      <div className="max-w-6xl space-y-3">
+        <div className="rounded-xl bg-[#fff] p-3 ring-1 ring-gray-200"><ColumnChart stacks={res.stacks} floors={frame.floors} /></div>
+        <table className="w-full border-collapse text-[12px]"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["เสา (X, Y)", "ชั้น", "P ออกแบบ (กก.)", "Mx / My จากโครง 3 มิติ (กก.-ม.)", "ชุดแรงที่ควบคุม", "ใช้", "ผล"].map((h) => <th key={h} className="px-1 py-1">{h}</th>)}</tr></thead>
+          <tbody>{res.columns.slice().sort((a, b) => a.stack.localeCompare(b.stack) || a.floor - b.floor).map((c) => <tr key={`${c.stack}-${c.floor}`} className="border-b border-gray-100 tabular-nums">
+            <td className="px-1 py-0.5">{c.stack}</td><td className="px-1">ใต้ {frame.floors[c.floor]?.name}</td><td className="px-1">{fmt(c.Pd ?? c.Pbot, 0)}</td><td className="px-1">{fmt(c.M3?.Mx ?? 0, 0)} / {fmt(c.M3?.My ?? 0, 0)}</td>
+            <td className="px-1">{c.check?.combo ?? "D+L"}</td><td className="px-1">{fmt((c.check?.util ?? 0) * 100, 0)}%</td><td className={`px-1 ${c.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{c.ok ? "ผ่าน" : "ไม่ผ่าน"}</td></tr>)}</tbody></table>
+      </div>)
     : step === "analysis" && sub === "frame3d" ? (() => {
       // whole-building rigid-joint frame (gravity, P-Delta) beside the continuous-beam results the design uses
       const m = res.frame3d ?? frame3dModel(frame, res);
@@ -326,7 +343,11 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             </div>)}
             {beam && (<div className="grid grid-cols-2 gap-3">
               <Field label="Type"><Select value={beam.type ?? ""} onChange={(v) => setBeam({ type: v === "" ? null : Number(v) })} options={[["", "อัตโนมัติ"], ...types.map((t, i) => [i, t.name])]} /></Field>
-              <Field label="ยาว" unit="m"><div className="flex h-11 items-center text-sm tabular-nums">{fmt(Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1]), 2)}</div></Field>
+              <Field label={beam.arc?.s ? "ยาวตามส่วนโค้ง" : "ยาว"} unit="m"><div className="flex h-11 items-center text-sm tabular-nums">{fmt(arcGeom(beam.a, beam.b, beam.arc?.s)?.L ?? Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1]), 2)}</div></Field>
+              <Field label="คานโค้ง: ระยะป่องกลางช่วง" unit="m (+ ซ้าย / − ขวา)"><NumberInput value={beam.arc?.s ?? 0} step="0.05" onChange={(v) => setBeam({ arc: v ? { s: v } : undefined })} /></Field>
+              <div className="flex flex-wrap items-end gap-1 text-[12px]">{[["¼ วงกลม ซ้าย", 1], ["¼ วงกลม ขวา", -1], ["ตรง", 0]].map(([lab, sg]) => (
+                <button key={lab} onClick={() => setBeam({ arc: sg ? { s: sg * quarterSagitta(Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1])) } : undefined })} className="rounded-md px-2 py-1 ring-1 ring-gray-300 hover:bg-gray-50">{lab}</button>))}</div>
+              {beam.arc?.s ? <p className="col-span-2 text-[11px] text-gray-500">R = {fmt(arcGeom(beam.a, beam.b, beam.arc.s).R, 2)} ม. · มุม {fmt((arcGeom(beam.a, beam.b, beam.arc.s).th * 180) / Math.PI, 0)}° · โครง 3 มิติแบ่ง 12 ชิ้นตามส่วนโค้ง (มีแรงบิดจากความโค้ง) · คานต่อเนื่องใช้ช่วงตามคอร์ด</p> : null}
               {(() => { const on = line ? an.walls.filter((w) => w.on.some((o) => o.line === line.id)) : []; return (
                 <div className="col-span-2 text-[12px] text-gray-600">ผนังบนแนวคานนี้: {on.length ? on.map((w) => `ผนัง ${w.i + 1} ${fmt(w.q, 0)}`).join(" · ") + ` กก./ม. (รวม ${fmt(on.reduce((s, w) => s + w.q, 0), 0)})` : "ไม่มี"} — แก้ที่ขั้น 4 ผนัง</div>); })()}
             </div>)}
@@ -419,8 +440,22 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             {fv("h", "ความสูงเสาใต้ชั้นนี้", "m", "0.1")}{fv("t", "พื้นหนา", "m", "0.01")}{fv("finish", "วัสดุปูผิว", "kg/m²", "10")}{fv("live", "น้ำหนักจร", "kg/m²", "50")}
           </div>
         </Card>;
-  const [drawer, setDrawer] = useState(null), dTab = drawer ?? (["analysis", "design", "footing"].includes(step) ? (step === "footing" || sub === "cols" ? "cols" : "spans") : null);
+  const [drawer, setDrawer] = useState(null), resultStep = ["analysis", "design", "footing"].includes(step);
+  const dTab = drawer ?? (resultStep && !(step === "analysis" && sub === "cont") ? (step === "footing" || sub === "cols" ? "cols" : "spans") : null);
+  const lineDiagram = showLine && (
+    <div className="min-h-0 overflow-auto rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200">
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-[12px] text-[#344054]">
+        <span className="font-semibold">น้ำหนัก · แรงเฉือน · โมเมนต์ — {fl.name}</span>
+        <select value={showLine.id} onChange={(e) => { setSel(null); setLineId(Number(e.target.value)); }} className="h-7 rounded-md border border-gray-300 bg-[#fff] px-1 text-[12px] text-[#344054]">
+          {an.lines.filter((l) => l.res).map((l) => <option key={l.id} value={l.id}>แนว {l.id + 1}: ({fmt(l.A[0], 2)}, {fmt(l.A[1], 2)}) → ({fmt(l.B[0], 2)}, {fmt(l.B[1], 2)}){l.arc ? " โค้ง" : ""}</option>)}
+        </select>
+        <span className="text-[#667085]">ช่วง {an.spans.filter((s) => s.line === showLine.id).map((s) => `${s.id} ${types[s.typeIdx]?.name ?? ""} M+ ${fmt(s.Mpos, 0)} M− ${fmt(s.Mneg, 0)} V ${fmt(s.V, 0)}${s.Mt ? ` T ${fmt(s.Mt, 0)}` : ""}`).join(" · ")}</span>
+        <span className="ml-auto text-[11px] text-[#98a2b3]">คลิกคานบนแปลนเพื่อเลือกแนว</span>
+      </div>
+      <LineDiagram ln={showLine} f3={res.frame3d?.members.filter((m) => m.floor === cur)} wide />
+    </div>);
   const center = page ? <div className="min-h-0 flex-1 overflow-auto p-1">{page}</div>
+    : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3"><div className="min-h-0">{boardEl}</div>{lineDiagram}</div>
     : step === "footing" ? view3d
     : view === "3d" ? view3d : view === "split" ? <div className="grid min-h-0 flex-1 grid-cols-2 gap-3"><div className="min-h-0">{boardEl}</div>{view3d}</div> : boardEl;
   return (
@@ -434,7 +469,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <div className="flex min-h-0 flex-1 flex-col p-3">{center}</div>
           <div className="border-t border-gray-200 bg-white">
             <div className="flex items-center gap-1 px-3 py-1">
-              {drawerTabs.map(([k, t]) => <button key={k} onClick={() => setDrawer(dTab === k ? "" : k)} className={`rounded-md px-2.5 py-1 text-xs font-medium ${dTab === k ? "bg-brand-50 text-brand-500" : k === "warn" && res.warnings.length ? "text-red-600" : "text-gray-500 hover:bg-gray-50"}`}>{t}</button>)}
+              {(resultStep ? drawerTabs : drawerTabs.filter(([k]) => k === "warn")).map(([k, t]) => <button key={k} onClick={() => setDrawer(dTab === k ? "" : k)} className={`rounded-md px-2.5 py-1 text-xs font-medium ${dTab === k ? "bg-brand-50 text-brand-500" : k === "warn" && res.warnings.length ? "text-red-600" : "text-gray-500 hover:bg-gray-50"}`}>{t}</button>)}
               <span className="ml-auto text-[11px] text-gray-400">{dTab ? "คลิกแท็บอีกครั้งเพื่อพับ" : "ตาราง · คำเตือน"}</span>
             </div>
             {dTab && <div className="h-[230px] overflow-auto px-3 pb-2">

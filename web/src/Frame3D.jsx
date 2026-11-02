@@ -2,6 +2,7 @@
 // stairs and the steel roof. Every layer can be switched off; floors can be shown all / up to the current one / current only.
 // Plan x,y → three x,-z; height → y. Base (y = 0) = top of the footings.
 import { useEffect, useMemo, useState } from "react";
+import { arcPolyline } from "../engine/arc.js";
 import { Canvas } from "@react-three/fiber";
 import { Bounds, Edges, Grid, OrbitControls } from "@react-three/drei";
 import { Maximize2, Minimize2 } from "lucide-react";
@@ -122,7 +123,8 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                 })}
                 {on.beam && fl.beams.map((b, i) => {
                   const sp = an?.spans.find((s) => s.member === i), ti = sp?.typeIdx ?? b.type ?? 0, t = frame.beamTypes[ti] ?? frame.beamTypes[0];
-                  return <Box key={`b${i}`} p={b.a} q={b.b} w={t.b} z0={Zk - t.h} h={t.h} color={sp && !sp.ok ? "#f04438" : byType ? TYPE_COLORS[ti % TYPE_COLORS.length] : CONC} edges="#475467" />;
+                  const pts = arcPolyline(b.a, b.b, b.arc?.s, 12), color = sp && !sp.ok ? "#f04438" : byType ? TYPE_COLORS[ti % TYPE_COLORS.length] : CONC;
+                  return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={color} edges={pts.length > 2 ? undefined : "#475467"} />);
                 })}
                 {on.slab && an?.panels.filter((p) => !p.open && !p.stairWell).map((p) => (
                   <Prism key={p.key} P={p.P} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />

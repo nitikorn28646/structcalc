@@ -1,5 +1,6 @@
 ﻿// Reinforcement drawings built as Maker.js models (units: cm) → SVG for screen/PDF, DXF for CAD.
 import makerjs from "makerjs";
+import { arcPolyline } from "../engine/arc.js";
 import { BARS, STIRRUPS } from "../engine/tables.js";
 import { barText } from "./beamModel.js";
 import { SYM } from "../engine/steelSections.js";
@@ -592,7 +593,10 @@ export function framePlanModel(floor, an, beamTypes, cols = []) {
   floor.beams.forEach((b, i) => {
     const sp = an?.spans.find((s) => s.member === i), ti = sp?.typeIdx ?? b.type ?? 0, t = beamTypes[ti] ?? beamTypes[0], layer = `PLATE${ti % PLATE_COLORS.length}`;
     const a = c(b.a), e = c(b.b), L = Math.hypot(e[0] - a[0], e[1] - a[1]), n = [-(e[1] - a[1]) / L, (e[0] - a[0]) / L], w = (t.b * 100) / 2;
-    for (const s of [-1, 1]) d.line([a[0] + n[0] * w * s, a[1] + n[1] * w * s], [e[0] + n[0] * w * s, e[1] + n[1] * w * s], layer);
+    if (b.arc?.s) { // arc beam: inner and outer faces as short chords, offsets in plan metres
+      const sc = L / Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]);
+      for (const s of [-1, 1]) { const P = arcPolyline(b.a, b.b, b.arc.s, 16), off = P.map((p, k) => { const q = P[Math.min(k + 1, P.length - 1)], r = P[Math.max(k - 1, 0)], tx = q[0] - r[0], ty = q[1] - r[1], tl = Math.hypot(tx, ty); return c([p[0] - (ty / tl) * (w / sc) * s, p[1] + (tx / tl) * (w / sc) * s]); }); off.slice(1).forEach((p, k) => d.line(off[k], p, layer)); }
+    } else for (const s of [-1, 1]) d.line([a[0] + n[0] * w * s, a[1] + n[1] * w * s], [e[0] + n[0] * w * s, e[1] + n[1] * w * s], layer);
     const vert = Math.abs(n[0]) > 0.7;
     d.text(`${t.name} ${num(t.b * 100, 0)}x${num(t.h * 100, 0)}`, (a[0] + e[0]) / 2 - n[0] * (w + 26), (a[1] + e[1]) / 2 - n[1] * (w + 26), vert);
   });

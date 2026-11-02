@@ -2,6 +2,7 @@
 // · 4 walls (on beams or slabs, double walls, stacked walls) · results. Free drawing snaps to columns, beam ends / mid-points / any point
 // on a beam; typed lengths (digits + Enter) place exact points.
 import { useEffect, useRef, useState } from "react";
+import { arcPolyline } from "../engine/arc.js";
 import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Hand, Magnet, MousePointer2, PanelTop, Redo2, Ruler, Undo2, Wand2 } from "lucide-react";
 import { guessRole, parseDxf, toPlan } from "./dxfImport.js";
 import { fmt } from "./beamModel.js";
@@ -18,7 +19,7 @@ const TOOLS = {
   wall: [SEL, ["wall", "ผนัง", Ruler, "คลิกต้น → ปลาย ต่อเนื่องได้ · วางบนคาน = ลงคาน · วางกลางพื้น = กระจายลงแผ่นพื้น · วาดซ้อนได้"], ["erase", "ลบ", Eraser, "คลิกผนังที่จะลบ"]],
   stair: [SEL, ["stair", "บันได", Footprints, "คลิกมุมหนึ่ง → มุมตรงข้ามของช่องบันได (ดูดเข้าเสา/คาน) · เลือกแบบ ทิศขึ้น ที่แผงซ้าย"], ["erase", "ลบ", Eraser, "คลิกบันไดที่จะลบ"]],
   other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
-  result: [SEL], cols: [SEL],
+  result: [SEL], cols: [SEL], grid: [SEL],
 };
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
@@ -190,7 +191,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        {step === "frame" && <>
+        {(step === "frame" || step === "grid") && <>
           <button onClick={() => { setGridOn(!gridOn); setFloor({ grid: { ...G, on: !gridOn } }); }} className={`${btn} ${gridOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Grid3x3 className="h-3.5 w-3.5" />กริด</button>
           <button onClick={() => setOrtho(!ortho)} className={`${btn} ${ortho ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}>ล็อคแกน</button>
           <button onClick={() => setSnapOn(!snapOn)} className={`${btn} ${snapOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Magnet className="h-3.5 w-3.5" />จุดยึด</button>
@@ -264,8 +265,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             const m = [(b.a[0] + b.b[0]) / 2, (b.a[1] + b.b[1]) / 2], L = dist(b.a, b.b), n = [-(b.b[1] - b.a[1]) / L, (b.b[0] - b.a[0]) / L];
             return (
               <g key={`b${i}`}>
-                {isSel("beam", i) && <line x1={b.a[0]} y1={-b.a[1]} x2={b.b[0]} y2={-b.b[1]} stroke="#f79009" strokeOpacity={0.45} strokeWidth={14 * k} strokeLinecap="round" />}
-                <line x1={b.a[0]} y1={-b.a[1]} x2={b.b[0]} y2={-b.b[1]} stroke={color} strokeWidth={(result ? 5 : 4) * k} strokeLinecap="round" opacity={step === "wall" || step === "slab" ? 0.6 : 1} />
+                {isSel("beam", i) && <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke="#f79009" strokeOpacity={0.45} strokeWidth={14 * k} strokeLinecap="round" />}
+                <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={(result ? 5 : 4) * k} strokeLinecap="round" opacity={step === "wall" || step === "slab" ? 0.6 : 1} />
                 {result && ti !== undefined && txt([m[0] - n[0] * 11 * k, m[1] - n[1] * 11 * k], `${types[ti]?.name}${bad ? " ✕" : ""}`, color, 11, "middle", 600)}
                 {!result && step === "frame" && b.type != null && txt([m[0] - n[0] * 11 * k, m[1] - n[1] * 11 * k], types[b.type]?.name, color, 11)}
               </g>

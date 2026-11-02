@@ -25,7 +25,7 @@ function Band({ y0, h, xs, ys, sx, color, down, fill = true, dash, peak = true, 
 
 // loads, shear and moment along a line. x/sup = nodes and supports, loads as contBeam; V, M = functions of t (full load);
 // env = [{ x0, L, Mmax[41], Mmin[41] }] live-load envelope; alt = [{ x0, x1, M(t local) }] 3D-frame moments
-export function BeamDiagram({ x, sup, loads, V, M, env, alt, carried = [] }) {
+export function BeamDiagram({ x, sup, loads, V, M, env, alt, carried = [], wide = false }) {
   const L = x[x.length - 1] - x[0], sx = (t) => X0 + ((t - x[0]) * (X1 - X0)) / (L || 1);
   const pts = loads.filter((l) => l.P !== undefined);
   const ts = [...new Set([...Array.from({ length: 241 }, (_, i) => x[0] + (L * i) / 240), ...pts.flatMap((p) => [p.at - 1e-6, p.at + 1e-6]), ...x.flatMap((v) => [v - 1e-6, v + 1e-6])])]
@@ -38,7 +38,7 @@ export function BeamDiagram({ x, sup, loads, V, M, env, alt, carried = [] }) {
   const mScale = Math.max(1e-9, ...Ms.map(Math.abs), ...eMax, ...eMin.map(Math.abs), ...aM.map(Math.abs));
   const sy = (v) => yM + (v * 46) / mScale;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto w-full max-w-[170mm]" fontFamily="inherit">
+    <svg viewBox={`0 0 ${W} ${H}`} className={wide ? "mx-auto block h-auto max-h-[42vh] w-full" : "mx-auto w-full max-w-[170mm]"} fontFamily="inherit">
       {/* loads */}
       <T x={6} y={22} a="start" c={LOAD} w={600}>น้ำหนัก</T><T x={6} y={34} a="start" c={MUTE} s={8.5}>กก./ม.</T>
       <path d={`${path([[sx(ts[0]), yb], ...ts.map((t, i) => [sx(t), yb - (wv[i] * 34) / wm]), [sx(ts[ts.length - 1]), yb]])}Z`} fill={LOAD} fillOpacity={0.12} stroke={LOAD} strokeWidth={0.8} />
@@ -69,10 +69,10 @@ export function BeamDiagram({ x, sup, loads, V, M, env, alt, carried = [] }) {
 }
 
 // a beam line of a floor analysis (ln from analyzeFloor) with its 3D-frame members
-export function LineDiagram({ ln, f3 }) {
+export function LineDiagram({ ln, f3, wide = false }) {
   if (!ln.res || !ln.x) return null;
   const alt = f3?.filter((m) => m.kind === "beam" && m.line === ln.id).map((m) => ({ x0: m.x0, x1: m.x1, M: m.M }));
-  return <BeamDiagram x={ln.x} sup={ln.sup} loads={ln.loads} V={ln.res.V} M={ln.res.M} env={ln.env?.env.map((e) => e.curve).filter(Boolean)} alt={alt?.length ? alt : null} carried={ln.carriers.map((c) => c.t)} />;
+  return <BeamDiagram x={ln.x} sup={ln.sup} loads={ln.loads} V={ln.res.V} M={ln.res.M} env={ln.env?.env.map((e) => e.curve).filter(Boolean)} alt={alt?.length ? alt : null} carried={ln.carriers.map((c) => c.t)} wide={wide} />;
 }
 
 // any simple member solved here with the continuous-beam engine (roof members, stairs): x / sup / loads as contBeam

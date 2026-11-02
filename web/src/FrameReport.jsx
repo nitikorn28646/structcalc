@@ -7,6 +7,7 @@ import { SLAB_BARS } from "../engine/tables.js";
 import { CONC, DEFAULT_WALL_TYPES, GROUPS, STAIR_KINDS, faceBars, parseBars, wallsOf } from "../engine/floor.js";
 import { designSlabs } from "../engine/slabDesign.js";
 import { analyzeFrame } from "../engine/frame.js";
+import { arcGeom } from "../engine/arc.js";
 import { ColumnChart, FrameIso, LineDiagram, SlabStrip } from "./ReportDiagrams.jsx";
 
 const ksc = "กก./ซม.²";
@@ -126,6 +127,7 @@ export function FrameReport({ frame, project }) {
               <Table head={["ช่วง", "ยาว (ม.)", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "T (กก.-ม.)", "ใช้", "ผล"]}
                 rows={an.spans.map((s) => { const m = (k) => (s.src?.[k] === "LAT" ? " ᴸ" : s.src?.[k] === "3D" ? " ³ᴰ" : ""); return [s.id, fmt(s.len, 2), KIND_TH[s.kind], types[s.typeIdx]?.name, fmt(s.Mpos, 0) + m("Mpos"), fmt(s.Mneg, 0) + m("Mneg"), fmt(s.V, 0) + m("V"), fmt(s.Mt ?? 0, 0), `${fmt(s.check.util * 100, 0)}%`, pass(s.ok)]; })} />
               {res.analysis === "envelope" && <Note>³ᴰ = ค่าจากโครง 3 มิติมากกว่าคานต่อเนื่อง (ใช้ค่านี้ออกแบบ){res.lateral ? " · ᴸ = ค่าจากชุดผสมแรงที่มีแรงลม / แผ่นดินไหว" : ""}</Note>}
+              {an.lines.filter((ln) => ln.arc).map((ln) => { const g = arcGeom(ln.A, ln.B, ln.arc.s); return <Note key={`arc${ln.id}`}>คานโค้ง แนว {ln.id + 1}: รัศมี {fmt(g.R, 2)} ม. มุม {fmt((g.th * 180) / Math.PI, 0)}° ยาวตามส่วนโค้ง {fmt(g.L, 2)} ม. (คอร์ด {fmt(g.c, 2)} ม.) — โครง 3 มิติแบ่ง 12 ชิ้นตามส่วนโค้ง ได้โมเมนต์และแรงบิดจากความโค้ง (ใช้ออกแบบ) · คานต่อเนื่องคิดตามคอร์ด · พื้นระหว่างคอร์ดกับส่วนโค้ง {fmt(g.area, 2)} ม.² เพิ่มเป็นน้ำหนักบนคาน</Note>; })}
               {an.warnings.map((w) => <Note key={w}>{w}</Note>)}
               <p className="mt-3 font-semibold text-gray-800">รูปน้ำหนัก แรงเฉือน และโมเมนต์ของคานแต่ละแนว — {f.name}</p>
               {an.lines.filter((ln) => ln.res).map((ln) => (

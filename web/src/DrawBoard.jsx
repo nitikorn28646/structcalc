@@ -221,8 +221,6 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark 
       else if (drawing && e.key === "Backspace") setTyped((t) => t.slice(0, -1));
       else if (e.key === "Enter" && typed) { const p = typedPoint(); setTyped(""); if (p) place(p); }
       else if (e.key === "Enter" && tool === "wall") closeWall();
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); restore("undo", "redo"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); restore("redo", "undo"); }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -292,8 +290,6 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark 
         <select value={nsub} onChange={(e) => setGrid({ sub: Number(e.target.value) })} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2 text-xs">
           {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v === 1 ? "โหนดเฉพาะแกน" : `แบ่งช่องละ ${v}`}</option>)}
         </select>
-        <button onClick={() => restore("undo", "redo")} disabled={!hist.undo.length} title="ย้อนกลับ (Ctrl+Z)" className={`${btn} text-gray-600 ring-gray-300 disabled:opacity-40`}><Undo2 className="h-3.5 w-3.5" /></button>
-        <button onClick={() => restore("redo", "undo")} disabled={!hist.redo.length} title="ทำซ้ำ (Ctrl+Y)" className={`${btn} text-gray-600 ring-gray-300 disabled:opacity-40`}><Redo2 className="h-3.5 w-3.5" /></button>
         <button onClick={() => setVb(fit())} title="พอดีจอ" className={`${btn} text-gray-600 ring-gray-300`}><Hand className="h-3.5 w-3.5" />พอดีจอ</button>
         <div className="ml-auto">{modeBar}</div>
       </div>

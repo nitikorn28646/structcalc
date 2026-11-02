@@ -186,5 +186,18 @@ combos, uplift warning; res.lateral {wind, seismic, weights, combos, drift (wind
 incl. diaphragm torsion vs hand 3×3 solution). Lateral off → regression identical. Yasothon with wind only: Wy drift NG at ชั้น 2 (10.7 > 9.0 mm)
 and roof (7.9 > 6.5), 4 columns NG at 10.5 line under wind combos; uplift at 3 footings — real results, model left without lateral (user chooses).
 PyNite diff re-run after the solver refactor: frame3d 7/7 (20261102-101316), contBeam 2/2 (20261102-101325).
+Q4 CURVED BEAMS BUILT 2026-11-02: drawn beam `arc: { s }` (sagitta m, + = bulge left of a → b); `engine/arc.js` (arcGeom, arcPoint by
+chord parameter, quarterSagitta, arcPolyline). floor.js: an arc beam is its own line (never merged), loads/1-D analysis on the chord, + the
+slab segment between chord and arc as a uniform load when the arc bulges out of the panel. frame3d: 12 pieces on the true arc (loads stretched,
+totals kept) → bending + torsion from curvature; node key rounds without "-0.000" (an arc end at −2e-16 was a separate node → cantilever).
+Inspector: sagitta field + "¼ วงกลม ซ้าย/ขวา"; plan / 3D / report plan draw arcs; report note per arc line. `node cli/arc-check.mjs`
+(geometry, quarter-circle cantilever statics + Castigliano deflection ≤ 2 %, pipeline equilibrium); PyNite case arc-beam (8/8, 20261102-102835).
+Yasothon porch beams = quarter arcs (user) on คานคอดิน and ชั้น 2 → pass (ชั้น 2: T 552 kg-m), baseline re-saved.
+UI AUDIT 2026-11-02 (user: duplicated menus, force diagrams only in the report): sidebar single-member tools folded ("…เดี่ยว", collapsed in
+the workflow); header "ข้อมูลโครงการ" only outside the workflow; step 1 board = grid only (no column/beam tools); results drawer only in
+steps 7–9 (warnings tab everywhere); roof DrawBoard lost its own undo/redo + Ctrl+Z (double undo with the project history); step 7 tabs
+"แรงภายในคาน" (plan + big loads/V/M diagram of the selected line, line dropdown, default = largest moment), "แรงในเสา" (ColumnChart + table
+with governing combination), "เทียบ 2 วิธี / ตั้งค่า"; step 8 "พื้น / บันได" shows slab moment strips. Dev-only note: Vite HMR logs
+"Failed to reload /@fs/D:\…" after files are written from outside — a page reload fixes it.
 Next agreed: C = 3D rigid-joint frame analysis + P-Delta (gravity first, compare with the current results), then B = wind / seismic / WSD
 combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).

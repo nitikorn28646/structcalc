@@ -3,6 +3,7 @@
 // Units: m, kg. Section checks reuse engine/beam.js (diff-tested); analysis is engine/contBeam.js.
 import { designSection } from "./beam.js";
 import { solveBeam } from "./contBeam.js";
+import { arcGeom } from "./arc.js";
 import { BARS } from "./tables.js";
 
 export const WALLS = { brick: ["อิฐมอญครึ่งแผ่น", 180], brick2: ["อิฐมอญเต็มแผ่น", 360], block: ["คอนกรีตบล็อก", 120], light: ["อิฐมวลเบา", 90] };
@@ -60,6 +61,7 @@ const cross = (a, b) => a[0] * b[1] - a[1] * b[0];
 const TOL = 0.03;
 
 // position of p along a line (start A, unit u, length L): t, or null when off the line / outside it
+const insidePoly = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 function along(ln, p, inside = false) {
   const d = sub(p, ln.A), t = d[0] * ln.u[0] + d[1] * ln.u[1];
   if (Math.abs(cross(ln.u, d)) > TOL || t < -TOL || t > ln.L + TOL) return null;
@@ -78,6 +80,7 @@ function buildLines(beams, cols = []) {
       if (Math.abs(cross(d, e)) > 1e-6 * Math.hypot(...d) * Math.hypot(...e) || Math.abs(cross(d, sub(q.A, p.A))) / Math.hypot(...d) > TOL) continue;
       const shared = [[p.A, q.A], [p.A, q.B], [p.B, q.A], [p.B, q.B]].find(([x, y]) => dist(x, y) < TOL);
       if (!shared) continue;
+      if ([...p.members, ...q.members].some((k) => beams[k].arc?.s)) continue; // an arc beam is a line of its own
       const J = shared[0], third = beams.some((b, k) => !p.members.includes(k) && !q.members.includes(k) && Math.abs(cross(sub(b.b, b.a), d)) > 1e-6 * Math.hypot(...d) * dist(b.a, b.b)
         && (() => { const e = sub(b.b, b.a), L2 = e[0] ** 2 + e[1] ** 2, t = ((J[0] - b.a[0]) * e[0] + (J[1] - b.a[1]) * e[1]) / L2; return t > 0.01 && t < 0.99 && Math.abs(cross(e, sub(J, b.a))) / Math.sqrt(L2) < TOL; })()); // a girder passing through
       if (third && !cols.some((c) => dist(c, J) < TOL)) continue;
@@ -89,7 +92,8 @@ function buildLines(beams, cols = []) {
   }
   return lines.map((l, k) => {
     const L = dist(l.A, l.B), u = [(l.B[0] - l.A[0]) / L, (l.B[1] - l.A[1]) / L];
-    return { id: k, A: l.A, B: l.B, L, u, members: l.members };
+    const arc = l.members.length === 1 && beams[l.members[0]].arc?.s ? beams[l.members[0]].arc : null;
+    return { id: k, A: l.A, B: l.B, L, u, members: l.members, ...(arc ? { arc } : {}) };
   });
 }
 
@@ -334,6 +338,16 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       ln.slab.push(a < b ? { a, b, wa: w0, wb: w1, g: gk, from: `P${k + 1}` } : { a: b, b: a, wa: w1, wb: w0, g: gk, from: `P${k + 1}` });
     }
   }));
+  // arc beams: the slab reaches the arc, not the chord — a panel whose chord edge has the arc outside it gets the segment
+  // between chord and arc as extra load, spread evenly on the beam (by load group)
+  for (const ln of lines.filter((o) => o.arc)) {
+    const g = arcGeom(ln.A, ln.B, ln.arc.s);
+    panels.forEach((pn, k) => {
+      if (pn.open || pn.stairWell || pn.st === "GS" || !pn.P.some((p, e) => { const q = pn.P[(e + 1) % pn.P.length]; return along(ln, p) !== null && along(ln, q) !== null && dist(p, q) > TOL; })) return;
+      if (insidePoly(pn.P, g.mid)) return; // arc bulges into the panel: its area is smaller (ignored, conservative)
+      for (const [gk, gv] of Object.entries(pn.g)) if (gv > 0) ln.slab.push({ a: 0, b: ln.L, wa: (gv * g.area) / ln.L, wb: (gv * g.area) / ln.L, g: gk, from: `P${k + 1} ส่วนโค้ง` });
+    });
+  }
   // columns from above standing on a beam: point load on the first line through that point
   for (const e of extra) {
     const ln = lines.find((o) => along(o, e.p) !== null);
