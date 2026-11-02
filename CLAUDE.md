@@ -3,6 +3,7 @@
 Thai structural-design web app (own code) + PDF reports, diff-tested against the user's third-party Excel
 (`D:\001_NITIKORN WONGSRILA\011_รายการคำนวน\RC Design WSD & Steel roof Design ASD(New) ไผ่ ขอนเเก่น .xlsm`).
 Rule: learn behaviour from the Excel only — never copy its layout, text, VBA. Record every diff run (see `D:\REA\CLAUDE.md`).
+**Development rules for every account (read before any change): `.claude/skills/structcalc-dev/SKILL.md`** — direction, frozen formulas, test gate, hand-off.
 
 ## Working in the cloud / another machine
 Repo = this folder (git). In the cloud (Linux): `cd web && npm ci && npm run dev` / `npx vite build`; node CLIs in `cli/` work.
