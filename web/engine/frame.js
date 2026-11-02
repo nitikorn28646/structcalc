@@ -6,6 +6,7 @@ import { BARS } from "./tables.js";
 import { frame3dModel } from "./frame3d.js";
 import { tiedColumn } from "./column.js";
 import { pileCap } from "./footing.js";
+import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
 
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
 export const stackKey = (p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
@@ -82,7 +83,16 @@ function designColumns(frame, cols) {
   const stacks = [...new Set(cols.map((c) => c.stack))].map((key) => ({ key, list: cols.filter((c) => c.stack === key).sort((a, b) => a.floor - b.floor) }));
   const weight = (t) => t.levels.reduce((s, lv) => s + lv.Bx * lv.By, 0);
   const order = colTypes.map((t, i) => ({ t, i })).sort((a, b) => weight(a.t) - weight(b.t));
-  const run = (t, list) => list.map((c) => { const lv = t.levels[Math.min(c.floor, t.levels.length - 1)]; return { lv, chk: checkColumn(lv, c.Pd ?? c.Pbot, c.Lu ?? c.L, mat, c.M3 ?? {}) }; });
+  // every load combination of the column (gravity design forces first); the governing check is kept with its combination name
+  const check = (lv, c) => {
+    let worst = null;
+    for (const q of [{ name: "D+L", P: c.Pd ?? c.Pbot, M: c.M3 ?? {} }, ...(c.combos ?? []).map((x) => ({ name: x.name, P: x.N, M: { Mx: x.Mx, My: x.My } }))]) {
+      const chk = { ...checkColumn(lv, q.P, c.Lu ?? c.L, mat, q.M), combo: q.name, tension: q.P < 0 };
+      if (!worst || (worst.ok && !chk.ok) || (chk.ok === worst.ok && chk.util > worst.util)) worst = chk;
+    }
+    return worst;
+  };
+  const run = (t, list) => list.map((c) => { const lv = t.levels[Math.min(c.floor, t.levels.length - 1)]; return { lv, chk: check(lv, c) }; });
   for (const st of stacks) {
     const fixed = frame.colPick?.[st.key];
     let pick = null;
@@ -108,16 +118,44 @@ function checkEnv(t, sp, mat) {
   return { ...c, defl: dd, ok: c.ok && dd.ok, util: Math.max(c.util, d ? Math.max(dd.dT / d.limT, dd.dL / d.limL) : 0) };
 }
 
+// wind / earthquake (frame.lateral, engine/lateral.js): floor forces as load cases of the 3D frame and the combinations.
+// Seismic weight per floor = the floor's load groups except live load (beams, slabs, walls, point loads incl. those straight
+// on its columns) without columns of the floor above standing on its beams (counted on their own floor) + half the columns
+// below and above it. Needs the 3D frame (frame.analysis "envelope").
+function lateralLoads(frame, g) {
+  const L = frame.lateral, wOn = !!L?.wind?.on, eOn = !!L?.seismic?.on;
+  if (!wOn && !eOn) return null;
+  const n = frame.floors.length, colW = (k) => g.cols.filter((c) => c.floor === k).reduce((s, c) => s + (c.W ?? 0), 0);
+  const weights = g.an.map((an, k) => Object.entries(an.groups ?? {}).reduce((s, [gk, v]) => s + (gk === "LL" ? 0 : v), 0)
+    - an.lines.reduce((s, ln) => s + (ln.extra ?? []).filter((e) => String(e.from ?? "").startsWith("เสา")).reduce((t, e) => t + e.P, 0), 0)
+    + colW(k) / 2 + (k + 1 < n ? colW(k + 1) / 2 : 0));
+  const wind = wOn ? windForces(frame) : null, seismic = eOn ? seismicForces(frame, weights) : null, cases = [];
+  if (wind) cases.push({ key: "Wx", F: wind.x.floors.map((f) => [f.F, 0]) }, { key: "Wy", F: wind.y.floors.map((f) => [0, f.F]) });
+  if (seismic) cases.push({ key: "Ex", F: seismic.floors.map((f) => [f.F, 0]) }, { key: "Ey", F: seismic.floors.map((f) => [0, f.F]) });
+  return { wind, seismic, weights, cases, combos: expandCombos(frame) };
+}
+// storey drift of the unfactored lateral cases: wind ≤ h/400, earthquake Cd·δ/I ≤ 0.02·h
+function lateralChecks(frame, lat, f3) {
+  const Z = levels(frame), rows = [];
+  for (const [key, d] of Object.entries(f3.drifts ?? {})) d.forEach((r) => {
+    const k = Z.findIndex((z) => Math.abs(z - r.z) < 1e-6), h = Z[k] - (k ? Z[k - 1] : 0), wind = key[0] === "W";
+    const s = lat.seismic, dd = wind ? r.dd : (s.Cd * r.dd) / s.I, lim = wind ? h / 400 : 0.02 * h;
+    rows.push({ key, floor: k, h, d: r.d, dd, lim, ok: dd <= lim + 1e-9 });
+  });
+  return { ...lat, drift: rows, ok: rows.every((r) => r.ok) };
+}
+
 // frame.analysis: "envelope" (default) = design forces are the larger of the continuous beams and the 3D rigid-joint frame
 // (gravity, P-Delta); "continuous" = continuous beams only (as before 2026-11-02)
 export function analyzeFrame(frame) {
   const { beamTypes, mat } = frame, envelope = (frame.analysis ?? "envelope") === "envelope";
-  let g, stacks, f3 = null, minTypes = null;
+  let g, stacks, f3 = null, minTypes = null, lat = null;
   for (let it = 0; it < 4; it++) {
     g = gravity(frame, minTypes);
     stacks = designColumns(frame, g.cols);
     if (!envelope) break;
-    f3 = frame3dModel(frame, { floors: g.an, columns: g.cols });
+    lat = lateralLoads(frame, g);
+    f3 = frame3dModel(frame, { floors: g.an, columns: g.cols }, lat ? { lateral: { cases: lat.cases, combos: lat.combos } } : {});
     if (f3.error) { g.warnings.push(`โครง 3 มิติ: ${f3.error} — ใช้ผลคานต่อเนื่อง`); f3 = null; break; }
     // beam types: each drawn (auto) beam must pass with the envelope forces on all its spans
     const next = g.an.map(() => ({}));
@@ -127,6 +165,13 @@ export function analyzeFrame(frame) {
         const fr = f3.spans.find((x) => x.floor === k && x.id === sp.id);
         sp.f3 = fr ?? null;
         sp.envF = { Mpos: Math.max(sp.Mpos, fr?.Mpos ?? 0), Mneg: Math.max(sp.Mneg, fr?.Mneg ?? 0), V: Math.max(sp.V, fr?.V ?? 0), Mt: Math.max(sp.Mt ?? 0, fr?.T ?? 0) };
+        // load combinations with wind / earthquake: the largest of every combination, with the name of the one that governs
+        sp.gov = {};
+        for (const cb of f3.combos ?? []) {
+          const c = cb.spans.find((x) => x.floor === k && x.id === sp.id);
+          if (!c) continue;
+          for (const [key, v] of [["Mpos", c.Mpos], ["Mneg", c.Mneg], ["V", c.V], ["Mt", c.T]]) if (v > sp.envF[key] + 1e-6) { sp.envF[key] = v; sp.gov[key] = cb.name; }
+        }
       }
       const order = beamTypes.map((t, i) => ({ t, i })).sort((a, b) => tWeight(a.t) - tWeight(b.t));
       frame.floors[k].beams.forEach((b, m) => {
@@ -148,7 +193,8 @@ export function analyzeFrame(frame) {
     for (const sp of an.spans) {
       const F = sp.envF ?? { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V, Mt: sp.Mt ?? 0 };
       sp.cont = { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V, Mt: sp.Mt ?? 0 };
-      sp.src = { Mpos: F.Mpos > sp.Mpos + 1e-6 ? "3D" : "ต่อเนื่อง", Mneg: F.Mneg > sp.Mneg + 1e-6 ? "3D" : "ต่อเนื่อง", V: F.V > sp.V + 1e-6 ? "3D" : "ต่อเนื่อง" };
+      const src = (k) => (sp.gov?.[k] ? "LAT" : F[k] > sp[k] + 1e-6 ? "3D" : "ต่อเนื่อง"); // LAT = a combination with wind / earthquake governs
+      sp.src = { Mpos: src("Mpos"), Mneg: src("Mneg"), V: src("V") };
       Object.assign(sp, F);
       sp.check = checkEnv(sp.type, sp, mat); sp.ok = sp.check.ok;
     }
@@ -159,14 +205,28 @@ export function analyzeFrame(frame) {
     for (const c of g.cols) {
       const fc = f3.columns.find((x) => x.floor === c.floor && x.ci === c.i);
       c.f3 = fc ?? null; c.Pd = Math.max(c.Pbot, fc?.N ?? 0); c.M3 = { Mx: fc?.Mx ?? 0, My: fc?.My ?? 0 };
+      c.combos = (f3.combos ?? []).filter((cb) => cb.W || cb.E || cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, ...cb.columns.find((x) => x.floor === c.floor && x.ci === c.i) }));
     }
     stacks = designColumns(frame, g.cols);
   }
-  const base = (c) => f3?.base.find((b) => near(b.p, c.p));
+  const base = (c, list = f3?.base) => list?.find((b) => near(b.p, c.p));
   const footings = g.cols.filter((c) => c.floor === 0).map((c) => {
     const b = base(c), P = Math.max(c.Pbot, b?.R[2] ?? 0), Mx = Math.abs(b?.R[3] ?? 0), My = Math.abs(b?.R[4] ?? 0);
-    return { p: c.p, stack: c.stack, P, Mx, My, ...designFooting(P, c.lv, mat, frame.footing ?? DEFAULT_FOOTING, Mx, My) };
+    const fo = frame.footing ?? DEFAULT_FOOTING, grav = { p: c.p, stack: c.stack, P, Mx, My, combo: "D+L", ...designFooting(P, c.lv, mat, fo, Mx, My) };
+    const lc = (f3?.combos ?? []).filter((cb) => cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, R: base(c, cb.base)?.R })).filter((x) => x.R);
+    if (!lc.length) return grav;
+    // lateral combinations: the one with the largest axial load and the ones with the largest base moments are designed too
+    const pick = [...new Set([lc.reduce((a, x) => (x.R[2] > a.R[2] ? x : a)), lc.reduce((a, x) => (Math.abs(x.R[3]) > Math.abs(a.R[3]) ? x : a)), lc.reduce((a, x) => (Math.abs(x.R[4]) > Math.abs(a.R[4]) ? x : a))])];
+    const minP = Math.min(...lc.map((x) => x.R[2]));
+    let worst = grav;
+    for (const x of pick) {
+      const r = { p: c.p, stack: c.stack, P: Math.max(x.R[2], 0), Mx: Math.abs(x.R[3]), My: Math.abs(x.R[4]), combo: x.name, ...designFooting(Math.max(x.R[2], 1), c.lv, mat, fo, Math.abs(x.R[3]), Math.abs(x.R[4])) };
+      if ((worst.ok && !r.ok) || (r.ok === worst.ok && (r.util ?? 0) > (worst.util ?? 0))) worst = r;
+    }
+    if (minP < 0) g.warnings.push(`ฐานราก ${c.stack}: แรงถอน ${Math.round(-minP)} กก. (ชุด ${lc.find((x) => x.R[2] === minP).name}) — ตรวจแรงถอนเข็ม`);
+    return { ...worst, minP };
   });
-  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, analysis: f3 ? "envelope" : "continuous", warnings: [...new Set(g.warnings)],
-    ok: g.an.every((a) => a.ok) && stacks.every((s) => s.ok) && footings.every((f) => f.ok) };
+  const lateral = lat && f3?.combos ? lateralChecks(frame, lat, f3) : null;
+  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, analysis: f3 ? "envelope" : "continuous", warnings: [...new Set(g.warnings)],
+    ok: g.an.every((a) => a.ok) && stacks.every((s) => s.ok) && footings.every((f) => f.ok) && (!lateral || lateral.ok) };
 }

@@ -37,7 +37,7 @@ procedure and the non-negotiables. When this file and a request conflict, ask th
 3. **Tests** — add or extend a `cli/*-check.mjs` with closed-form or equilibrium checks for new engine behaviour.
    Gate before any commit:
    ```
-   node cli/contbeam-check.mjs && node cli/floor-check.mjs && node cli/floor-loads-check.mjs && node cli/frame-check.mjs && node cli/regress-yasothon.mjs
+   node cli/contbeam-check.mjs && node cli/floor-check.mjs && node cli/floor-loads-check.mjs && node cli/frame-check.mjs && node cli/frame3d-check.mjs && node cli/lateral-check.mjs && node cli/regress-yasothon.mjs
    cd web && npx vite build
    ```
 4. **Browser check** (dev server `structcalc-web`, http://localhost:5180): open

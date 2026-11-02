@@ -55,25 +55,47 @@ function invert(M) {
   }
   return A.map((r) => r.slice(n));
 }
-// dense symmetric solve (Gaussian elimination, partial pivoting); null when singular
-function solve(K, F) {
-  const n = F.length, A = K.map((r, i) => Float64Array.from([...r, F[i]]));
+// dense solve of K·x = F for several right-hand sides at once (Gaussian elimination, partial pivoting); null when singular
+function solveMany(K, Fs) {
+  const n = K.length, m = Fs.length, A = K.map((r, i) => Float64Array.from([...r, ...Fs.map((F) => F[i])]));
   for (let c = 0; c < n; c++) {
     let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
     if (Math.abs(A[p][c]) < 1e-9) return null;
     if (p !== c) [A[c], A[p]] = [A[p], A[c]];
     const rc = A[c];
-    for (let r = c + 1; r < n; r++) { const f = A[r][c] / rc[c]; if (f) { const rr = A[r]; for (let j = c; j <= n; j++) rr[j] -= f * rc[j]; } }
+    for (let r = c + 1; r < n; r++) { const f = A[r][c] / rc[c]; if (f) { const rr = A[r]; for (let j = c; j < n + m; j++) rr[j] -= f * rc[j]; } }
   }
-  const x = new Float64Array(n);
-  for (let i = n - 1; i >= 0; i--) { let s = A[i][n]; for (let j = i + 1; j < n; j++) s -= A[i][j] * x[j]; x[i] = s / A[i][i]; }
-  return x;
+  return Fs.map((_, q) => {
+    const x = new Float64Array(n);
+    for (let i = n - 1; i >= 0; i--) { let s = A[i][n + q]; for (let j = i + 1; j < n; j++) s -= A[i][j] * x[j]; x[i] = s / A[i][i]; }
+    return x;
+  });
 }
 
 // members: { i, j (node ids), kind "beam"|"column", b, h (m; beam: width b, depth h vertical; column: Bx along X, By along Y),
 //   release: [bool i, bool j] (pinned bending at that end), loads: [{a,b,wa,wb} | {at,P}] downward along the member (beams) }
-// nodes: [{ x, y, z, fixed, pinned }] (pinned = translations held only); nodeLoads: [{ n, P }] downward (kg)
-export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, pDelta = false, factors = { beam: 0.5, column: 0.7, J: 0.2 } }) {
+// nodes: [{ x, y, z, fixed, pinned, master }] (pinned = translations held only; master = diaphragm node, only ux uy rz free);
+// nodeLoads: [{ n, P }] downward (kg); lateral: [{ n, F: [Fx, Fy, Mz?] }] (kg, kg-m)
+// diaphragms: [{ master, slaves: [node ids] }] rigid in-plane floors (penalty constraints on ux, uy, rz)
+// cases (optional): extra load cases solved with the same stiffness (the P-Delta axial forces of the main loads):
+//   [{ nodeLoads, lateral, loads: [per member { loads, torque }] }] → result.cases[k] = { u, R, members }
+
+// equivalent nodal loads (local, 12) of a member's gravity loads and distributed torque
+function nodalLoads(loads, torque, L) {
+  const fe = [0, 0, 0, 0];
+  for (const l of loads ?? []) {
+    if (l.P !== undefined) { shape(l.at, L).forEach((N, k) => (fe[k] -= l.P * N)); continue; }
+    const h = (l.b - l.a) / 2, mid = (l.a + l.b) / 2;
+    for (const [g, wt] of GP) { const xs = mid + g * h, w = l.wa + ((l.wb - l.wa) * (xs - l.a)) / (l.b - l.a || 1); shape(xs, L).forEach((N, k) => (fe[k] -= wt * h * w * N)); }
+  }
+  let t = 0; for (const v of torque ?? []) t += v; // distributed torque total (kg-m), half to each end
+  const fl = new Array(12).fill(0);
+  fl[2] = fe[0]; fl[4] = -fe[1]; fl[8] = fe[2]; fl[10] = -fe[3]; // θ about +y = −dw/dx
+  if (t) { fl[3] = t / 2; fl[9] = t / 2; }
+  return fl;
+}
+
+export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, pDelta = false, factors = { beam: 0.5, column: 0.7, J: 0.2 }, diaphragms = [], cases = [] }) {
   const G = E / 2.4, nd = nodes.length * 6;
   const prep = members.map((m) => {
     const p = nodes[m.i], q = nodes[m.j], d = [q.x - p.x, q.y - p.y, q.z - p.z], L = Math.hypot(...d), ex = unit(d);
@@ -83,74 +105,85 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
     const T3 = [ex, ey, ez], f = m.kind === "column" ? factors.column : factors.beam;
     // column: bending about local y (ey = ez × ex = X × Z = −Y) has depth along X → I = By·Bx³/12; about local z (X) → Bx·By³/12
     const [Iy, Iz] = m.kind === "column" ? [(m.h * m.b ** 3) / 12, (m.b * m.h ** 3) / 12] : [(m.b * m.h ** 3) / 12, (m.h * m.b ** 3) / 12];
-    // equivalent nodal loads of the gravity loads (local z ≈ up for beams): contBeam convention fe = [Fz_i, θ_i, Fz_j, θ_j]
-    const fe = [0, 0, 0, 0];
-    for (const l of m.loads ?? []) {
-      if (l.P !== undefined) { shape(l.at, L).forEach((N, k) => (fe[k] -= l.P * N)); continue; }
-      const h = (l.b - l.a) / 2, mid = (l.a + l.b) / 2;
-      for (const [g, wt] of GP) { const xs = mid + g * h, w = l.wa + ((l.wb - l.wa) * (xs - l.a)) / (l.b - l.a || 1); shape(xs, L).forEach((N, k) => (fe[k] -= wt * h * w * N)); }
-    }
-    for (const t of m.torque ?? []) { fe.t = (fe.t ?? 0) + t; } // distributed torque total (kg-m), half to each end
-    const fl = new Array(12).fill(0);
-    fl[2] = fe[0]; fl[4] = -fe[1]; fl[8] = fe[2]; fl[10] = -fe[3]; // θ about +y = −dw/dx
-    if (fe.t) { fl[3] = fe.t / 2; fl[9] = fe.t / 2; }
     // pinned end: bending released, and torsion too (a pinned secondary beam takes no compatibility torsion from the girder's
     // rotation); with both ends pinned torsion stays held at end i so the member cannot spin
     const rel = [...(m.release?.[0] ? [4, 5] : []), ...(m.release?.[1] ? [9, 10, 11] : []), ...(m.release?.[0] && !m.release?.[1] ? [3] : [])].sort((a, b) => a - b);
-    return { m, L, T3, A: m.b * m.h, Iy: Iy * f, Iz: Iz * f, J: Jrect(m.b, m.h) * factors.J, fl, rel };
+    const dofs = [...[0, 1, 2, 3, 4, 5].map((dd) => m.i * 6 + dd), ...[0, 1, 2, 3, 4, 5].map((dd) => m.j * 6 + dd)];
+    return { m, L, T3, A: m.b * m.h, Iy: Iy * f, Iz: Iz * f, J: Jrect(m.b, m.h) * factors.J, fl: nodalLoads(m.loads, m.torque, L), rel, dofs };
   });
   const toG = (T3, v) => [0, 1, 2].map((c) => T3[0][c] * v[0] + T3[1][c] * v[1] + T3[2][c] * v[2]); // local → global (3-vector)
   const toL = (T3, v) => T3.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
-  let N = prep.map(() => 0), u = null, iters = pDelta ? 4 : 1, res;
-  for (let it = 0; it < iters; it++) {
-    const K = Array.from({ length: nd }, () => new Float64Array(nd)), F = new Float64Array(nd);
-    for (const { n, P } of nodeLoads) F[n * 6 + 2] -= P;
-    for (const { n, F: f } of lateral) { F[n * 6] += f[0]; F[n * 6 + 1] += f[1]; }
-    for (const e of prep) {
-      const kl = localK(E, G, e.A, e.Iy, e.Iz, e.J, e.L, pDelta ? N[prep.indexOf(e)] : 0), c = condense(kl, e.fl, e.rel);
-      e.kc = c.k; e.fc = c.f; e.kl = kl; e.cinv = c.inv;
+  const held = (n) => nodes[n].fixed || nodes[n].pinned;
+  // load vector of one case: node loads, lateral forces, member equivalent loads (condensed at released ends)
+  const loadVector = (cs) => {
+    const F = new Float64Array(nd);
+    for (const { n, P } of cs.nodeLoads ?? []) F[n * 6 + 2] -= P;
+    for (const { n, F: f } of cs.lateral ?? []) { F[n * 6] += f[0]; F[n * 6 + 1] += f[1]; F[n * 6 + 5] += f[2] ?? 0; }
+    prep.forEach((e, k) => {
+      const fc = condense(e.kl, cs.fls[k], e.rel).f;
+      for (let blk = 0; blk < 4; blk++) { const g = toG(e.T3, fc.slice(blk * 3, blk * 3 + 3)); for (let c2 = 0; c2 < 3; c2++) F[e.dofs[blk * 3 + c2]] += g[c2]; }
+    });
+    return F;
+  };
+  // member end forces (local) of a displacement vector: f = k·u − fe; released DOFs recovered from the condensation
+  const endForces = (u, fls) => prep.map((e, k) => {
+    const ug = e.dofs.map((i) => u[i]), ul = [0, 1, 2, 3].flatMap((blk) => toL(e.T3, ug.slice(blk * 3, blk * 3 + 3))), fl = fls[k];
+    if (e.rel.length) { // rotation of the released DOFs (end moment 0): u_r = krr⁻¹ (fr − kra·ua)
+      const ua = ul.map((v, i) => (e.rel.includes(i) ? 0 : v)), rhs = e.rel.map((r) => fl[r] - ua.reduce((s, v, j) => s + e.kl[r][j] * v, 0));
+      e.rel.forEach((r, a) => (ul[r] = e.rel.reduce((s, _, b) => s + e.cinv[a][b] * rhs[b], 0)));
+    }
+    return e.kl.map((row, i) => row.reduce((s, v, j) => s + v * ul[j], 0) - fl[i]);
+  });
+  // stiffness with the axial forces N (P-Delta), supports, diaphragm constraints → solve every right-hand side
+  const solveK = (N, cs) => {
+    const K = Array.from({ length: nd }, () => new Float64Array(nd));
+    prep.forEach((e, k) => {
+      const kl = localK(E, G, e.A, e.Iy, e.Iz, e.J, e.L, pDelta ? N[k] : 0), c = condense(kl, e.fl, e.rel);
+      e.kl = kl; e.cinv = c.inv;
       // transform: kg = Tᵀ k T with T = blockdiag(T3 ×4)
-      const dofs = [...[0, 1, 2, 3, 4, 5].map((d) => e.m.i * 6 + d), ...[0, 1, 2, 3, 4, 5].map((d) => e.m.j * 6 + d)];
       const Tm = (r, c2) => (Math.floor(r / 3) === Math.floor(c2 / 3) ? e.T3[r % 3][c2 % 3] : 0);
-      const KT = e.kc.map((row) => Array.from({ length: 12 }, (_, j) => row.reduce((s, v, a) => s + v * Tm(a, j), 0)));
+      const KT = c.k.map((row) => Array.from({ length: 12 }, (_, j) => row.reduce((s, v, a) => s + v * Tm(a, j), 0)));
       for (let a = 0; a < 12; a++) for (let b = 0; b < 12; b++) {
         let v = 0; for (let r = 0; r < 12; r++) v += Tm(r, a) * KT[r][b];
-        K[dofs[a]][dofs[b]] += v;
+        K[e.dofs[a]][e.dofs[b]] += v;
       }
-      for (let blk = 0; blk < 4; blk++) { const g = toG(e.T3, e.fc.slice(blk * 3, blk * 3 + 3)); for (let c2 = 0; c2 < 3; c2++) F[dofs[blk * 3 + c2]] += g[c2]; }
-      e.dofs = dofs;
-    }
-    // supports: fixed bases; a tiny rotational spring keeps a joint where only pinned ends meet from being singular
-    const free = [];
-    for (let n = 0; n < nodes.length; n++) for (let d = 0; d < 6; d++) { if (nodes[n].fixed || (nodes[n].pinned && d < 3)) continue; if (d >= 3) K[n * 6 + d][n * 6 + d] += 1e-3; free.push(n * 6 + d); }
-    const sol = solve(free.map((i) => free.map((j) => K[i][j])), free.map((i) => F[i]));
-    if (!sol) return { error: "โครงสร้างไม่มีเสถียรภาพ (ตรวจจุดรองรับ / เสา)" };
-    u = new Float64Array(nd); free.forEach((i, k) => (u[i] = sol[k]));
-    // member end forces (local): f = k·u − fe (on the member); released DOFs recovered from the condensation
-    res = prep.map((e) => {
-      const ug = e.dofs.map((i) => u[i]), ul = [0, 1, 2, 3].flatMap((blk) => toL(e.T3, ug.slice(blk * 3, blk * 3 + 3)));
-      if (e.rel.length) { // rotation of the released DOFs (end moment 0): u_r = krr⁻¹ (fr − kra·ua)
-        const ua = ul.map((v, i) => (e.rel.includes(i) ? 0 : v)), rhs = e.rel.map((r) => e.fl[r] - ua.reduce((s, v, j) => s + e.kl[r][j] * v, 0));
-        e.rel.forEach((r, a) => (ul[r] = e.rel.reduce((s, _, b) => s + e.cinv[a][b] * rhs[b], 0)));
-      }
-      return e.kl.map((row, i) => row.reduce((s, v, j) => s + v * ul[j], 0) - e.fl[i]);
     });
-    N = res.map((f) => -f[0]); // axial force (tension +) at end i: force on the member along −x
-  }
-  // reactions at the fixed nodes (global), base forces
-  const R = nodes.map(() => [0, 0, 0, 0, 0, 0]);
-  const held = (n) => nodes[n].fixed || nodes[n].pinned;
-  for (const { n, P } of nodeLoads) if (held(n)) R[n][2] += P; // a load applied right at a support goes straight into it
-  prep.forEach((e, k) => {
-    const f = res[k];
-    for (const [blk, node] of [[0, e.m.i], [1, e.m.i], [2, e.m.j], [3, e.m.j]]) {
-      if (!held(node)) continue;
-      const g = toG(e.T3, f.slice(blk * 3, blk * 3 + 3)); for (let c = 0; c < 3; c++) R[node][(blk % 2) * 3 + c] += g[c];
+    // rigid floors: penalty on u_s − u_m + θ_m·dy, v_s − v_m − θ_m·dx, rz_s − θ_m (stiff compared with the members)
+    if (diaphragms.length) {
+      let kd = 0; for (let i = 0; i < nd; i += 6) kd = Math.max(kd, K[i][i], K[i + 1][i + 1]);
+      const kp = 1e3 * kd, add = (c) => { for (const [i, a] of c) for (const [j, b] of c) K[i][j] += kp * a * b; };
+      for (const { master: mm, slaves } of diaphragms) for (const s of slaves) {
+        const dx = nodes[s].x - nodes[mm].x, dy = nodes[s].y - nodes[mm].y;
+        add([[s * 6, 1], [mm * 6, -1], [mm * 6 + 5, dy]]); add([[s * 6 + 1, 1], [mm * 6 + 1, -1], [mm * 6 + 5, -dx]]); add([[s * 6 + 5, 1], [mm * 6 + 5, -1]]);
+      }
     }
-  });
+    // supports; a tiny rotational spring keeps a joint where only pinned ends meet from being singular
+    const free = [];
+    for (let n = 0; n < nodes.length; n++) for (let d = 0; d < 6; d++) {
+      if (nodes[n].fixed || (nodes[n].pinned && d < 3) || (nodes[n].master && (d === 2 || d === 3 || d === 4))) continue;
+      if (d >= 3) K[n * 6 + d][n * 6 + d] += 1e-3; free.push(n * 6 + d);
+    }
+    const Fv = cs.map(loadVector); // after the member matrices are set (condensation of the loads uses them)
+    const sol = solveMany(free.map((i) => free.map((j) => K[i][j])), Fv.map((F) => free.map((i) => F[i])));
+    if (!sol) return null;
+    return sol.map((x) => { const u = new Float64Array(nd); free.forEach((i, k) => (u[i] = x[k])); return u; });
+  };
+  // reactions at the supports (global), including loads applied right at a support
+  const reactions = (cs, res) => {
+    const R = nodes.map(() => [0, 0, 0, 0, 0, 0]);
+    for (const { n, P } of cs.nodeLoads ?? []) if (held(n)) R[n][2] += P;
+    prep.forEach((e, k) => {
+      const f = res[k];
+      for (const [blk, node] of [[0, e.m.i], [1, e.m.i], [2, e.m.j], [3, e.m.j]]) {
+        if (!held(node)) continue;
+        const g = toG(e.T3, f.slice(blk * 3, blk * 3 + 3)); for (let c = 0; c < 3; c++) R[node][(blk % 2) * 3 + c] += g[c];
+      }
+    });
+    return R;
+  };
   // results per member: end forces and, for beams, M / V along the member (sagging +) from the end values and its loads
-  const out = prep.map((e, k) => {
-    const f = res[k], L = e.L, loads = e.m.loads ?? [];
+  const memberOut = (res, loadsOf) => prep.map((e, k) => {
+    const f = res[k], L = e.L, loads = loadsOf(k);
     const left = (x) => loads.reduce(([W, Mw], l) => {
       if (l.P !== undefined) return l.at < x - 1e-9 ? [W + l.P, Mw + l.P * (x - l.at)] : [W, Mw];
       if (x <= l.a) return [W, Mw];
@@ -164,7 +197,24 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
     return { ...e.m, L, f, N: -f[0], T: Math.max(Math.abs(f[3]), Math.abs(f[9])), V, M, Mmax: Math.max(0, ...Ms), Mmin: Math.min(0, ...Ms), ML: M(0), MR: M(L),
       Vmax: Math.max(...xs.map((x) => Math.abs(V(x)))), My: [f[4], f[10]], Mz: [f[5], f[11]], sec: { A: e.A, Iy: e.Iy, Iz: e.Iz, J: e.J, G }, rel: e.rel, T3: e.T3 };
   });
-  return { u, R, members: out, disp: (n) => u.slice(n * 6, n * 6 + 3) };
+  // main loads, P-Delta iterated on their own axial forces
+  const main = { nodeLoads, lateral, fls: prep.map((e) => e.fl) };
+  let N = prep.map(() => 0), u = null, res;
+  for (let it = 0; it < (pDelta ? 4 : 1); it++) {
+    const s = solveK(N, [main]);
+    if (!s) return { error: "โครงสร้างไม่มีเสถียรภาพ (ตรวจจุดรองรับ / เสา)" };
+    u = s[0]; res = endForces(u, main.fls);
+    N = res.map((f) => -f[0]); // axial force (tension +) at end i: force on the member along −x
+  }
+  const out = { u, R: reactions(main, res), members: memberOut(res, (k) => prep[k].m.loads ?? []), disp: (n) => u.slice(n * 6, n * 6 + 3) };
+  // extra load cases: same stiffness (geometric stiffness from the main loads' axial forces of the last pass), solved together
+  if (cases.length) {
+    const cs = cases.map((c) => ({ ...c, fls: prep.map((e, k) => nodalLoads(c.loads?.[k]?.loads, c.loads?.[k]?.torque, e.L)) }));
+    const us = solveK(N, cs);
+    if (!us) return { ...out, error: "โครงสร้างไม่มีเสถียรภาพภายใต้แรงด้านข้าง" };
+    out.cases = cs.map((c, q) => { const r = endForces(us[q], c.fls); return { u: us[q], R: reactions(c, r), members: memberOut(r, (k) => c.loads?.[k]?.loads ?? []) }; });
+  }
+  return out;
 }
 
 // Build the whole-building model from the frame data and its floor analyses (analyzeFrame result) and solve it.
@@ -172,7 +222,7 @@ export function frame3dModel(frame, res, opt = {}) {
   const nodes = [], key = (x, y, z) => `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`, idx = new Map();
   const pin = (frame.baseFixity ?? "pinned") === "pinned";
   const node = (x, y, z, base = false) => { const k = key(x, y, z); if (!idx.has(k)) { idx.set(k, nodes.length); nodes.push({ x, y, z }); } const i = idx.get(k); if (base) nodes[i][pin ? "pinned" : "fixed"] = true; return i; };
-  let z = 0; const Z = frame.floors.map((f) => (z += f.h ?? 3));
+  let z = 0; const Z = frame.floors.map((f) => (z += f.h ?? 3)); // levels (m above the footing top)
   const members = [], nodeLoads = [], warnings = [];
   frame.floors.forEach((fl, k) => {
     const an = res.floors[k], zk = Z[k], zb = k ? Z[k - 1] : 0;
@@ -193,7 +243,7 @@ export function frame3dModel(frame, res, opt = {}) {
       const xs = [...ts].map((t) => +t.toFixed(4)).sort((a, b) => a - b).filter((t, i, a) => !i || t - a[i - 1] > 1e-3);
       // loads on the line: distributed (slab, walls, cantilevers, stairs, railings…) + self weight + point loads that are not columns above
       const typeAt = (t) => { const sp = an.spans.find((s) => s.line === ln.id && t >= s.x0 - 1e-6 && t <= s.x1 + 1e-6); return sp?.type ?? frame.beamTypes[0]; };
-      const dist = [...ln.slab, ...ln.parts.map((p) => { const ty = typeAt((p.t0 + p.t1) / 2), w = CONC * ty.b * ty.h; return { a: p.t0, b: p.t1, wa: w, wb: w }; })];
+      const dist = [...ln.slab, ...ln.parts.map((p) => { const ty = typeAt((p.t0 + p.t1) / 2), w = CONC * ty.b * ty.h; return { a: p.t0, b: p.t1, wa: w, wb: w, g: "DL" }; })];
       const pts = (ln.extra ?? []).filter((e) => !String(e.from ?? "").startsWith("เสา"));
       // pinned only where the carrying beam passes through; two beams meeting end to end at a corner without a column
       // are one monolithic corner (rigid) — pinning both made a hinge nothing holds up (found by the PyNite diff test)
@@ -201,27 +251,67 @@ export function frame3dModel(frame, res, opt = {}) {
       for (let s = 0; s + 1 < xs.length; s++) {
         const x0 = xs[s], x1 = xs[s + 1], L = x1 - x0, ty = typeAt((x0 + x1) / 2), p0 = at(x0), p1 = at(x1);
         const loads = [
-          ...dist.flatMap((l) => { const a = Math.max(l.a, x0), b = Math.min(l.b, x1), w = (t) => l.wa + ((l.wb - l.wa) * (t - l.a)) / (l.b - l.a || 1); return b - a > 1e-9 ? [{ a: a - x0, b: b - x0, wa: w(a), wb: w(b) }] : []; }),
-          ...pts.filter((p) => p.at >= x0 - 1e-9 && (p.at < x1 - 1e-9 || s === xs.length - 2)).map((p) => ({ at: p.at - x0, P: p.P })),
+          ...dist.flatMap((l) => { const a = Math.max(l.a, x0), b = Math.min(l.b, x1), w = (t) => l.wa + ((l.wb - l.wa) * (t - l.a)) / (l.b - l.a || 1); return b - a > 1e-9 ? [{ a: a - x0, b: b - x0, wa: w(a), wb: w(b), g: l.g }] : []; }),
+          ...pts.filter((p) => p.at >= x0 - 1e-9 && (p.at < x1 - 1e-9 || s === xs.length - 2)).map((p) => ({ at: p.at - x0, P: p.P, g: "SP" })),
         ];
-        const torque = (ln.torsion ?? []).map((q) => q.m * Math.max(0, Math.min(q.b, x1) - Math.max(q.a, x0))).filter(Boolean);
-        members.push({ i: node(p0[0], p0[1], zk), j: node(p1[0], p1[1], zk), kind: "beam", floor: k, line: ln.id, x0, x1, b: ty.b, h: ty.h, loads, torque,
+        const ov = (q) => Math.max(0, Math.min(q.b, x1) - Math.max(q.a, x0)), torque = (ln.torsion ?? []).map((q) => q.m * ov(q)).filter(Boolean), torqueL = (ln.torsion ?? []).map((q) => (q.mL ?? 0) * ov(q)).filter(Boolean);
+        members.push({ i: node(p0[0], p0[1], zk), j: node(p1[0], p1[1], zk), kind: "beam", floor: k, line: ln.id, x0, x1, b: ty.b, h: ty.h, loads, torque, torqueL,
           release: [s === 0 && carried.has(+x0.toFixed(4)), s === xs.length - 2 && carried.has(+x1.toFixed(4))] });
       }
     }
   });
-  const E = EcOf(frame.mat), sol = solveFrame3D({ nodes, members, nodeLoads, lateral: opt.lateral ?? [], E, pDelta: opt.pDelta ?? true });
-  if (sol.error) return { error: sol.error, warnings };
+  // lateral loads (opt.lateral = { cases: [{ key, F: [[Fx, Fy] per floor] }], combos }): every floor is a rigid diaphragm with a
+  // master node at the centroid of its joints; the live load is solved as its own case so that D = (D + L) − L
+  const latOn = !!opt.lateral?.cases?.length, diaphragms = [];
+  if (latOn) Z.forEach((zk) => {
+    const slaves = nodes.map((n, i) => (Math.abs(n.z - zk) < 1e-6 && !n.fixed && !n.pinned ? i : -1)).filter((i) => i >= 0);
+    if (slaves.length < 2) return;
+    const cx = slaves.reduce((s, i) => s + nodes[i].x, 0) / slaves.length, cy = slaves.reduce((s, i) => s + nodes[i].y, 0) / slaves.length;
+    nodes.push({ x: cx, y: cy, z: zk, master: true }); diaphragms.push({ master: nodes.length - 1, slaves, z: zk });
+  });
+  const cases = latOn ? [
+    { key: "L", loads: members.map((m) => ({ loads: (m.loads ?? []).filter((l) => l.g === "LL"), torque: m.torqueL ?? [] })) },
+    ...opt.lateral.cases.map((c) => ({ key: c.key, lateral: diaphragms.map((d) => { const k = Z.findIndex((zk) => Math.abs(zk - d.z) < 1e-6); return { n: d.master, F: [c.F[k]?.[0] ?? 0, c.F[k]?.[1] ?? 0, 0] }; }) })),
+  ] : [];
+  const E = EcOf(frame.mat), sol = solveFrame3D({ nodes, members, nodeLoads, lateral: [], E, pDelta: opt.pDelta ?? true, diaphragms, cases });
+  if (sol.error && !sol.members) return { error: sol.error, warnings };
+  if (sol.error) warnings.push(sol.error);
   // spans of the floor analysis → frame results (max sagging, hogging at the supports, shear, torsion)
-  const spans = res.floors.flatMap((an, k) => an.spans.map((sp) => {
-    const ms = sol.members.filter((m) => m.kind === "beam" && m.floor === k && m.line === sp.line && m.x0 >= sp.x0 - 1e-6 && m.x1 <= sp.x1 + 1e-6);
+  const spansOf = (ms0) => res.floors.flatMap((an, k) => an.spans.map((sp) => {
+    const ms = ms0.filter((m) => m.kind === "beam" && m.floor === k && m.line === sp.line && m.x0 >= sp.x0 - 1e-6 && m.x1 <= sp.x1 + 1e-6);
     if (!ms.length) return null;
-    return { floor: k, id: sp.id, Mpos: Math.max(0, ...ms.map((m) => m.Mmax)), Mneg: Math.max(0, -ms[0].ML, -ms[ms.length - 1].MR), V: Math.max(...ms.map((m) => m.Vmax)), T: Math.max(...ms.map((m) => m.T)),
-      cont: { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V } };
+    return { floor: k, id: sp.id, Mpos: Math.max(0, ...ms.map((m) => m.Mmax)), Mneg: Math.max(0, -ms[0].ML, -ms[ms.length - 1].MR),
+      V: Math.max(...ms.map((m) => m.Vmax)), T: Math.max(...ms.map((m) => m.T)), cont: { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V } };
   }).filter(Boolean));
-  const columns = sol.members.filter((m) => m.kind === "column").map((m) => ({ floor: m.floor, ci: m.ci, N: -m.N, Mx: Math.max(Math.abs(m.Mz[0]), Math.abs(m.Mz[1])), My: Math.max(Math.abs(m.My[0]), Math.abs(m.My[1])) }));
-  const base = nodes.map((n, i) => (n.fixed || n.pinned ? { p: [n.x, n.y], R: sol.R[i] } : null)).filter(Boolean);
+  const columnsOf = (ms) => ms.filter((m) => m.kind === "column").map((m) => ({ floor: m.floor, ci: m.ci, N: -m.N, Mx: Math.max(Math.abs(m.Mz[0]), Math.abs(m.Mz[1])), My: Math.max(Math.abs(m.My[0]), Math.abs(m.My[1])) }));
+  const held = nodes.map((n, i) => (n.fixed || n.pinned ? i : -1)).filter((i) => i >= 0);
+  const spans = spansOf(sol.members), columns = columnsOf(sol.members);
+  const base = held.map((i) => ({ p: [nodes[i].x, nodes[i].y], R: sol.R[i] }));
   const load = nodeLoads.reduce((s, l) => s + l.P, 0) + members.reduce((s, m) => s + (m.loads ?? []).reduce((t, l) => t + (l.P ?? ((l.wa + l.wb) / 2) * (l.b - l.a)), 0), 0);
   const drift = Math.max(...nodes.map((n, i) => Math.hypot(sol.u[i * 6], sol.u[i * 6 + 1])));
-  return { nodes, members: sol.members, spans, columns, base, load, drift, warnings, input: { nodes, members, nodeLoads, E } };
+  const out = { nodes, members: sol.members, spans, columns, base, load, drift, warnings, input: { nodes, members, nodeLoads, E } };
+  if (!latOn || !sol.cases) return out;
+  // load combinations by superposition: D = main − L; each combo = D·(main − L) + L·Lcase + Σ lateral cases
+  const byKey = Object.fromEntries(cases.map((c, q) => [c.key, sol.cases[q]]));
+  const combine = (parts) => sol.members.map((m0, k) => {
+    const ps = parts.filter(([c, r]) => c && r).map(([c, r]) => [c, r.members[k]]);
+    const f = m0.f.map((_, i) => ps.reduce((s, [c, m]) => s + c * m.f[i], 0)), M = (x) => ps.reduce((s, [c, m]) => s + c * m.M(x), 0), V = (x) => ps.reduce((s, [c, m]) => s + c * m.V(x), 0);
+    const xs = Array.from({ length: 21 }, (_, i) => (m0.L * i) / 20), Ms = xs.map(M);
+    return { ...m0, f, M, V, N: -f[0], T: Math.max(Math.abs(f[3]), Math.abs(f[9])), Mmax: Math.max(0, ...Ms), Mmin: Math.min(0, ...Ms), ML: M(0), MR: M(m0.L),
+      Vmax: Math.max(...xs.map((x) => Math.abs(V(x)))), My: [f[4], f[10]], Mz: [f[5], f[11]] };
+  });
+  const mainR = { members: sol.members, R: sol.R };
+  const combos = (opt.lateral.combos ?? []).map((cb) => {
+    const parts = [[cb.D, mainR], [cb.L - cb.D, byKey.L], ...["Wx", "Wy", "Ex", "Ey"].map((key) => [cb[key] ?? 0, byKey[key]])];
+    const ms = combine(parts), R = held.map((i) => [0, 1, 2, 3, 4, 5].map((d) => parts.filter(([c, r]) => c && r).reduce((s, [c, r]) => s + c * r.R[i][d], 0)));
+    return { ...cb, spans: spansOf(ms), columns: columnsOf(ms), base: held.map((i, j) => ({ p: [nodes[i].x, nodes[i].y], R: R[j] })) };
+  });
+  // storey drift of each lateral case (unfactored): largest horizontal movement of a joint at the level minus the level below
+  const driftOf = (r) => diaphragms.map((d, k) => {
+    const mv = (ids) => Math.max(0, ...ids.map((i) => Math.hypot(r.u[i * 6], r.u[i * 6 + 1])));
+    const below = k ? diaphragms[k - 1].slaves : [];
+    return { z: d.z, d: mv(d.slaves), dd: mv(d.slaves) - (k ? mv(below) : 0) };
+  });
+  const drifts = Object.fromEntries(opt.lateral.cases.map((c) => [c.key, driftOf(byKey[c.key])]));
+  return { ...out, combos, drifts, diaphragms };
 }

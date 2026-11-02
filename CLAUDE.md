@@ -172,5 +172,19 @@ buttons show their hint on hover. `src/ReportDiagrams.jsx` (SVG, prints sharp): 
 (loads, V, M full load + live-load envelope band (floor.js env[].curve, 41 pts) + 3D-frame M dashed), SlabStrip per designed slab/stair
 (two-way strips from the coefficient moments [discontinuous, mid, continuous]), ColumnChart (P per floor, 3D max(Mx,My)), FrameIso (3D model),
 MemberDiagram (contBeam) for purlin (3-span, illustrative — design uses wL²/9) and rafter in the roof report. Yasothon PDF now 39 pages.
+B BUILT 2026-11-02 (user approved: มยผ. 1311-50 wind, มยผ. 1301/1302-61 seismic, WSD combos D+L / D+0.75L+0.75W / 0.6D+W / D+0.7E /
+D+0.75L+0.525E / 0.6D+0.7E each ±X ±Y, rigid diaphragm every floor; NO default on/off — step 0 card asks the user, `frame.lateral.asked`):
+`engine/lateral.js` (DEFAULT_LATERAL, windForces: p = Iw·q·Cg·(Cpw·Ce(z band top) + |Cpl|·Ce(H/2)) × width × band height, Cpl auto by H/D;
+seismicForces: Fa/Fv tables, T = Ct·H (0.02), Cs = Sa·I/R ≥ 0.01, Fx ∝ w·h^k; expandCombos). frame3d.js solveFrame3D now takes
+`diaphragms` (penalty 1e3×max translational stiffness on ux, uy, rz to a `master` node per floor at the joints' centroid) and `cases`
+(extra RHS with the same K incl. P-Delta of the main loads, one elimination). frame3dModel(opt.lateral {cases, combos}): L case alone
+(loads tagged g; torsion mL), combos by superposition D = main − L, per combo spans/columns/base, drifts per lateral case.
+analyzeFrame: lateralLoads (seismic W = groups − LL − columns standing on beams + half columns) inside the type loop → span envF max over
+combos (`sp.gov` names, src "LAT" → ᴸ in tables), columns checked per combo (`check.combo`), footings: gravity + max P / max Mx / max My
+combos, uplift warning; res.lateral {wind, seismic, weights, combos, drift (wind ≤ h/400, EQ Cd·δ/I ≤ 0.02h), ok}. UI: `src/LateralPanel.jsx`
+(LateralChoice in step 0, LateralPanel = step 6 tab). Report section "แรงด้านข้างและชุดผสมแรง". Tests `node cli/lateral-check.mjs` (27 hand checks
+incl. diaphragm torsion vs hand 3×3 solution). Lateral off → regression identical. Yasothon with wind only: Wy drift NG at ชั้น 2 (10.7 > 9.0 mm)
+and roof (7.9 > 6.5), 4 columns NG at 10.5 line under wind combos; uplift at 3 footings — real results, model left without lateral (user chooses).
+PyNite diff re-run after the solver refactor: frame3d 7/7 (20261102-101316), contBeam 2/2 (20261102-101325).
 Next agreed: C = 3D rigid-joint frame analysis + P-Delta (gravity first, compare with the current results), then B = wind / seismic / WSD
 combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).

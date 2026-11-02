@@ -17,6 +17,7 @@ import FloorBoard, { TYPE_COLORS } from "./FloorBoard.jsx";
 import ForceCharts from "./ForceCharts.jsx";
 import Frame3D from "./Frame3D.jsx";
 import { downloadDxf, framePlanModel } from "./drawings.js";
+import { LateralChoice, LateralPanel } from "./LateralPanel.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
@@ -205,6 +206,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             <Field label="คอนกรีตหุ้ม" unit="cm"><NumberInput value={frame.mat.cover} step="0.5" onChange={(v) => setMat("cover", v)} /></Field>
           </div>
         </Card>
+      <LateralChoice frame={frame} set={set} />
       <Card title="ข้อมูลโครงการและมาตรฐาน" icon={Building2}>
         <div className="space-y-2 text-[13px] text-gray-600">
           <p>ชื่อโครงการ เจ้าของ ที่ตั้ง วิศวกร — แก้ที่ <button onClick={onProjectInfo} className="font-medium text-brand-500">ข้อมูลโครงการ</button></p>
@@ -272,12 +274,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         </div>
       );
     })()
-    : step === "loads" && sub === "lateral" ? (
-      <div className="max-w-xl rounded-2xl border border-dashed border-gray-300 p-5 text-[13px] text-gray-500">
-        <p className="font-semibold text-gray-700">แรงลม · แผ่นดินไหว · Load combination</p>
-        <p className="mt-1">ส่วนนี้จะเปิดใช้เมื่อมีการวิเคราะห์โครง 3 มิติ (จุดต่อแข็ง) — แรงด้านข้างต้องมีโครงรับ ตอนนี้ใช้น้ำหนักใช้งาน DL + LL (WSD) และน้ำหนักจรแบบหมากรุก</p>
-      </div>
-    ) : null;
+    : step === "loads" && sub === "lateral" ? <LateralPanel frame={frame} set={set} res={res}
+    /> : null;
   const inspector = sel ? (          <Card title={beam ? `คาน (แนว ${line ? line.id + 1 : "-"})` : col ? `เสา #${sel.i + 1}` : panel ? `แผ่นพื้น P${an.panels.indexOf(panel) + 1}` : wall ? `ผนัง ${sel.i + 1}` : cant ? `พื้นยื่น ${sel.i + 1}` : stair ? `บันได ${sel.i + 1}` : lineL ? "น้ำหนักเส้น" : pointL ? "น้ำหนักจุด" : "เลือก"} icon={Ruler}>
             {wall && (() => { const r = an.walls[sel.i]; return (<div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Field label="ชนิดผนัง"><Select value={wall.kind} onChange={(v) => setWall({ kind: v })} options={wallOpts} /></Field></div>
@@ -447,7 +445,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                   <tr key={s.id} onClick={() => setSel({ kind: "beam", i: s.member })} className={`cursor-pointer border-b border-gray-100 tabular-nums ${sel?.kind === "beam" && sel.i === s.member ? "bg-brand-50" : "hover:bg-gray-50"}`}>
                     <td className="px-1 py-0.5">{s.id}</td><td className="px-1">{fmt(s.len, 2)}</td><td className="px-1">{KIND_TH[s.kind]}</td>
                     <td className="px-1 font-semibold" style={{ color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length] }}>{types[s.typeIdx]?.name}{s.own ? "" : " (อัตโนมัติ)"}</td>
-                    <td className="px-1">{fmt(s.Mpos, 0)}{s.src?.Mpos === "3D" && <sup className="text-brand-500"> 3D</sup>}</td><td className="px-1">{fmt(s.Mneg, 0)}{s.src?.Mneg === "3D" && <sup className="text-brand-500"> 3D</sup>}</td><td className="px-1">{fmt(s.V, 0)}{s.src?.V === "3D" && <sup className="text-brand-500"> 3D</sup>}</td>
+                    <td className="px-1">{fmt(s.Mpos, 0)}{s.src?.Mpos && s.src.Mpos !== "ต่อเนื่อง" && <sup className="text-brand-500" title={s.gov?.Mpos ?? "โครง 3 มิติ"}> {s.src.Mpos === "LAT" ? "L" : "3D"}</sup>}</td><td className="px-1">{fmt(s.Mneg, 0)}{s.src?.Mneg && s.src.Mneg !== "ต่อเนื่อง" && <sup className="text-brand-500" title={s.gov?.Mneg ?? "โครง 3 มิติ"}> {s.src.Mneg === "LAT" ? "L" : "3D"}</sup>}</td><td className="px-1">{fmt(s.V, 0)}{s.src?.V && s.src.V !== "ต่อเนื่อง" && <sup className="text-brand-500" title={s.gov?.V ?? "โครง 3 มิติ"}> {s.src.V === "LAT" ? "L" : "3D"}</sup>}</td>
                     <td className="px-1">{fmt(s.check.util * 100, 0)}%</td><td className={`px-1 ${s.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{s.ok ? "ผ่าน" : s.check.error ?? "ไม่ผ่าน"}</td>
                   </tr>))}</tbody>
               </table>

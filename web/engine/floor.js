@@ -243,7 +243,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     if (ln) {
       const a = Math.min(along(ln, c.a), along(ln, c.b)), b = Math.max(along(ln, c.a), along(ln, c.b));
       for (const [k, v] of Object.entries(g)) if (v > 0) ln.slab.push({ a, b, wa: v * L, wb: v * L, g: k, from: `พื้นยื่น ${i + 1}` });
-      ln.torsion.push({ a, b, m: ((g.DL + g.SDL + g.LL) * L * L) / 2 });
+      ln.torsion.push({ a, b, m: ((g.DL + g.SDL + g.LL) * L * L) / 2, mL: (g.LL * L * L) / 2 }); // mL = live part (load combinations)
     } else warnings.push(`พื้นยื่น ${i + 1} ไม่ได้วางบนคาน`);
     return { i, P, t, L, g, w: g.DL + g.SDL + g.LL, area: ab * L, line: ln?.id };
   });
@@ -288,7 +288,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     } else { put(E.start, scale(flight, Lr / 2), "below"); put(E.end, scale(flight, Lr / 2), "this"); } // long: simple span along the run
     if (st.kind === "cant") { // the supporting beam also takes the torque wB²/2 per metre
       const e = st.side === -1 ? E.sideA : E.sideB, ln = lines.find((o) => along(o, e[0]) !== null && along(o, e[1]) !== null);
-      if (ln) { const a = along(ln, e[0]), b = along(ln, e[1]); ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: ((flight.DL + flight.SDL + flight.LL) * B * B) / 2 }); }
+      if (ln) { const a = along(ln, e[0]), b = along(ln, e[1]); ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: ((flight.DL + flight.SDL + flight.LL) * B * B) / 2, mL: (flight.LL * B * B) / 2 }); }
     }
     return { i, P: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], kind: st.kind ?? "long", up: st.up ?? "+x", th, Lr, B, total, w: flight.DL + flight.SDL + flight.LL };
   });
@@ -304,7 +304,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     if (tip && tip.line !== undefined) {
       const ln = lines[tip.line], src = floor.cants[tip.i], a = along(ln, src.a), b = along(ln, src.b), f = L / dist(src.a, src.b);
       ln.slab.push({ a: Math.min(a, b), b: Math.max(a, b), wa: l.q * f, wb: l.q * f, g: "SP", from });
-      ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: l.q * f * tip.L });
+      ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: l.q * f * tip.L, mL: 0 });
       return { i, on: "cant" };
     }
     if (onBeam(l.a, l.b, l.q, "SP", from)) return { i, on: "beam" };
