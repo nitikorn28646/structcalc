@@ -41,7 +41,7 @@ const f2 = split([
 f2.walls.push({ a: [6, 3.4], b: [6, 7.9], kind: "brick", h: W2, open: 10, layers: 1 }, { a: [10.5, 3.4], b: [10.5, 6.9], kind: "brick", h: W2, open: 10, layers: 1 }, { a: [10.5, 7.9], b: [10.5, 8.5], kind: "brick", h: W2, open: 0, layers: 1 }, { a: [14, 3.4], b: [14, 8.5], kind: "brick", h: W2, open: 15, layers: 1 });
 const fl1 = { name: "ชั้น 2 +4.00", h: 3.6, t: 0.1, finish: 100, live: 200, grid: fl0.grid, columns: COLS, ...f2,
   cants: [{ a: [0, 2.4], b: [0, 6.9], L: 0.4, side: -1 }, { a: [0, 2.4], b: [3.5, 2.4], L: 0.4, side: 1 }],
-  stairs: [{ a: [3.5, 4.42], b: [6, 7.9], up: "-y", kind: "landing", t: 0.12, riser: 0.178, tread: 0.25, finish: 100, live: 300, landingL: 0.8, landingTo: "this" }],
+  stairs: [{ a: [3.5, 4.42], b: [6, 7.9], up: "-y", kind: "landing", t: 0.18, riser: 0.178, tread: 0.25, finish: 100, live: 300, landingL: 0.8, landingTo: "this" }],
   lineLoads: [{ a: [6.8, 1.0], b: [10.5, 1.0], q: 100, name: "ราวกันตกระเบียง" }, { a: [6, 1.8], b: [6.8, 1.0], q: 100, name: "ราวกันตกระเบียง" }],
   pointLoads: [], panels: {} };
 
@@ -74,8 +74,13 @@ kinds(fl1, [
 
 // B1–B6 = the drawing's schedule; B7/B8 added for the floor-2 spans that B1–B6 cannot carry (E/F lines under the cantilevered box, C line, stair hall)
 const T = (name, b, h, top, bot, topX, botX, st, sSup, sMid) => ({ name, b, h, top, bot, topX, botX, st, sSup, sMid });
-const beamTypes = [...DEFAULT_BEAM_TYPES, T("B7", 0.2, 0.5, "3-DB16", "3-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.15), T("B8", 0.2, 0.6, "2-DB16", "2-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.15)];
-const frame = { frameNo: "บ้านยโสธร", mat, cur: 1, floors: [fl0, fl1, fl2], beamTypes, colTypes: DEFAULT_COLUMN_TYPES, colPick: {}, wallTypes: DEFAULT_WALL_TYPES };
+const beamTypes = [...DEFAULT_BEAM_TYPES, T("B7", 0.2, 0.5, "3-DB16", "3-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.15), T("B8", 0.2, 0.6, "2-DB16", "2-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.15),
+  T("B9", 0.2, 0.6, "3-DB16", "3-DB16", "3-DB16", "3-DB16", "RB 9", 0.1, 0.15)]; // B9: line B short span over the stair (envelope M− 5.9 t-m)
+// C1 = drawing schedule (ties @0.20 fail 16db); C2 = C1 with ties @0.15; C3 = corner columns that take frame moments
+const CT = (level, B, n, bar, s) => ({ level, Bx: B, By: B, n, mainBar: bar, tieBar: "RB 6", s });
+const colTypes = [...DEFAULT_COLUMN_TYPES, { name: "C2", levels: [CT("ตอม่อ", 30, 8, "DB 12", 0.15), CT("ชั้น 1", 20, 6, "DB 12", 0.15), CT("ชั้น 2", 20, 4, "DB 12", 0.15)] },
+  { name: "C3", levels: [CT("ตอม่อ", 30, 8, "DB 20", 0.15), CT("ชั้น 1", 25, 8, "DB 16", 0.15), CT("ชั้น 2", 25, 8, "DB 16", 0.15)] }];
+const frame = { frameNo: "บ้านยโสธร", mat, cur: 1, floors: [fl0, fl1, fl2], beamTypes, colTypes, colPick: {}, analysis: "envelope", baseFixity: "pinned", wallTypes: DEFAULT_WALL_TYPES };
 // roof (EN-09/EN-11): hip roof, concrete tiles, plates on the 12 house columns
 const pts = [[0, 2.4], [6, 2.4], [6, 3.4], [14, 3.4], [14, 7.9], [3.5, 7.9], [3.5, 6.9], [0, 6.9]];
 const roof = { roofNo: "R1", slope: 30, overhang: 1.2, H: 7.25, snap: 0.5, supports: null, pts, edges: pts.map(() => ({ type: "hip" })),

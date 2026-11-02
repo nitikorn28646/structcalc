@@ -1728,7 +1728,7 @@
       ],
       "up": "-y",
       "kind": "landing",
-      "t": 0.12,
+      "t": 0.18,
       "riser": 0.178,
       "tread": 0.25,
       "finish": 100,
@@ -2168,6 +2168,18 @@
     "st": "RB 9",
     "sSup": 0.1,
     "sMid": 0.15
+   },
+   {
+    "name": "B9",
+    "b": 0.2,
+    "h": 0.6,
+    "top": "3-DB16",
+    "bot": "3-DB16",
+    "topX": "3-DB16",
+    "botX": "3-DB16",
+    "st": "RB 9",
+    "sSup": 0.1,
+    "sMid": 0.15
    }
   ],
   "colTypes": [
@@ -2202,9 +2214,75 @@
       "s": 0.2
      }
     ]
+   },
+   {
+    "name": "C2",
+    "levels": [
+     {
+      "level": "ตอม่อ",
+      "Bx": 30,
+      "By": 30,
+      "n": 8,
+      "mainBar": "DB 12",
+      "tieBar": "RB 6",
+      "s": 0.15
+     },
+     {
+      "level": "ชั้น 1",
+      "Bx": 20,
+      "By": 20,
+      "n": 6,
+      "mainBar": "DB 12",
+      "tieBar": "RB 6",
+      "s": 0.15
+     },
+     {
+      "level": "ชั้น 2",
+      "Bx": 20,
+      "By": 20,
+      "n": 4,
+      "mainBar": "DB 12",
+      "tieBar": "RB 6",
+      "s": 0.15
+     }
+    ]
+   },
+   {
+    "name": "C3",
+    "levels": [
+     {
+      "level": "ตอม่อ",
+      "Bx": 30,
+      "By": 30,
+      "n": 8,
+      "mainBar": "DB 20",
+      "tieBar": "RB 6",
+      "s": 0.15
+     },
+     {
+      "level": "ชั้น 1",
+      "Bx": 25,
+      "By": 25,
+      "n": 8,
+      "mainBar": "DB 16",
+      "tieBar": "RB 6",
+      "s": 0.15
+     },
+     {
+      "level": "ชั้น 2",
+      "Bx": 25,
+      "By": 25,
+      "n": 8,
+      "mainBar": "DB 16",
+      "tieBar": "RB 6",
+      "s": 0.15
+     }
+    ]
    }
   ],
   "colPick": {},
+  "analysis": "envelope",
+  "baseFixity": "pinned",
   "wallTypes": [
    {
     "id": "brick",

@@ -1,5 +1,6 @@
 ﻿// Thai calculation report for the steel roof: geometry, loads, member-by-member ASD checks, framing plan and schedule.
 import { Doc, Figure, Item, Note, Sec } from "./ReportKit.jsx";
+import { MemberDiagram } from "./ReportDiagrams.jsx";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { plateModel, plateText, roofPlanModel } from "./drawings.js";
@@ -86,6 +87,9 @@ export function RoofReport({ roof, project }) {
           <Item th="น้ำหนักตั้งฉากหลังคา / ตามแนวลาด" f="Wy / Wx = Wg·sinθ" v={`${fmt(pu.r.Wy)} / ${fmt(pu.r.Wx)}`} u="กก./ม." />
           <Item th="โมเมนต์แกนแข็ง / แกนอ่อน" f="Mx = Wy·L²/9 , My = Wx·Ly²/9" v={`${fmt(pu.r.Mx)} / ${fmt(pu.r.My)}`} u="กก.-ม." />
           <Bending x={pu} f="fb = Mx/Sx + My/Sy" />
+          <Figure caption={`แปต่อเนื่อง 3 ช่วง ช่วงละ ${fmt(roof.frame.rafterSp)} ม. รับ Wy = ${fmt(pu.r.Wy)} กก./ม. — รูปประกอบ (ออกแบบใช้ wL²/9 ซึ่งมากกว่า wL²/10 ของรูป)`}>
+            <MemberDiagram x={[0, 1, 2, 3].map((k) => k * roof.frame.rafterSp)} sup={[true, true, true, true]} loads={[{ a: 0, b: 3 * roof.frame.rafterSp, wa: pu.r.Wy, wb: pu.r.Wy }]} />
+          </Figure>
           <Item th="ระยะแอ่นแกนอ่อน" f="Δx ≤ Ly/360" v={`${fmt(pu.r.dx, 3)} ≤ ${fmt(pu.r.dxAllow, 3)}`} u="ซม." ok={pu.r.dx <= pu.r.dxAllow} />
           {pu.r.T !== undefined && <Item th="แรงดึงในเหล็กยึดแป" f="T = (น้ำหนักแผ่ + น้ำหนักแป)·sinθ" v={fmt(pu.r.T, 0)} u="กก."
             note={`As ต้องการ ${fmt(pu.r.AsReq, 3)} ซม.² → ใช้ RB 9 (0.636 ซม.²)`} ok={pu.r.AsReq <= 0.636} />}
@@ -99,6 +103,9 @@ export function RoofReport({ roof, project }) {
           <Item th="โมเมนต์ในช่วง / ที่ปลายยื่น" f="w(L+a)²(L−a)²/8L² , wa²/2" v={`${fmt(ra.r.Mspan)} / ${fmt(ra.r.Mcant)}`} u="กก.-ม." />
           <Bending x={ra} f="fb = Mx/Sx + My/Sy" />
           <Item th="แรงปฏิกิริยาที่อะเส / ที่ปลายบน" v={`${fmt(ra.r.Rwall)} / ${fmt(ra.r.Rridge)}`} u="กก." />
+          <Figure caption={`จันทัน: ยื่น ${fmt(ra.r.a)} ม. + ช่วง ${fmt(ra.r.L)} ม. (ตามแนวเอียง) รับ w = ${fmt(ra.r.w)} กก./ม.`}>
+            <MemberDiagram x={ra.r.a > 0.01 ? [0, ra.r.a, ra.r.a + ra.r.L] : [0, ra.r.L]} sup={ra.r.a > 0.01 ? [false, true, true] : [true, true]} loads={[{ a: 0, b: ra.r.a + ra.r.L, wa: ra.r.w, wb: ra.r.w }]} />
+          </Figure>
         </Sec>
 
         <Sec n={5} th="ตะเข้ อกไก่ และสะพานรับจันทัน" en="Hips, ridge & rafter supports"

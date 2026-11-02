@@ -1,0 +1,133 @@
+{
+ "name": "structcalc-frame3d-vs-pynite",
+ "targets": {
+  "reference": {
+   "cmd": [
+    "D:\\REA\\rea-lab\\.venv\\Scripts\\python.exe",
+    "-X",
+    "utf8",
+    "D:\\REA\\structcalc\\oracle\\pynite_frame.py"
+   ]
+  },
+  "candidate": {
+   "cmd": [
+    "node",
+    "D:\\REA\\structcalc\\cli\\frame3d-solve.mjs"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "portal-fixed",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\portal-fixed.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.0001
+   },
+   "timeout": 600
+  },
+  {
+   "id": "box-pinned-secondary",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\box-pinned-secondary.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.0001
+   },
+   "timeout": 600
+  },
+  {
+   "id": "box-fixed-secondary",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\box-fixed-secondary.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.0001
+   },
+   "timeout": 600
+  },
+  {
+   "id": "two-storey-lateral",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\two-storey-lateral.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.0001
+   },
+   "timeout": 600
+  },
+  {
+   "id": "two-storey-pdelta",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\two-storey-pdelta.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.005
+   },
+   "timeout": 600
+  },
+  {
+   "id": "yasothon-linear",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\yasothon-linear.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.0001
+   },
+   "timeout": 600
+  },
+  {
+   "id": "yasothon-pdelta",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\yasothon-pdelta.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.005
+   },
+   "timeout": 600
+  }
+ ]
+}

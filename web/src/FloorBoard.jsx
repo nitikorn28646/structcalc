@@ -214,8 +214,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       </div>
       <div className="flex min-h-0 flex-1 gap-2">
       <div className="flex w-[64px] shrink-0 flex-col gap-1">
-        {tools.map(([key, label, Icon]) => (
-          <button key={key} onClick={() => setTool(key)} title={label}
+        {tools.map(([key, label, Icon, hint]) => (
+          <button key={key} onClick={() => setTool(key)} title={hint ? `${label} — ${hint}` : label}
             className={`flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ring-1 ${tool === key ? "bg-brand-500 text-[#fff] ring-brand-500" : "bg-white text-gray-600 ring-gray-200 hover:bg-gray-50"}`}><Icon className="h-4 w-4" /><span className="leading-tight">{label}</span></button>
         ))}
       </div>

@@ -30,6 +30,10 @@ User data lives in project files (.json from "บันทึกโครงก�
 ## Status (latest runs in `D:\REA\rea-lab\results\`)
 beam 18/18 · slab 31/31 · tied column 12/16 (slender = Excel circular-ref defect) · spiral 12/12 · stair 7/7 · spread footing 8/8 ·
 pile caps 15/16 (6-pile = Excel defect) · steel roof 20/20 (run 20261030-153300, incl. C-Channel cases; purlin/rafter/hip/valley/ridge/pole-plate sheets).
+Analysis vs PyNite (open-source FEA, `pip install PyNiteFEA` in the rea-lab venv): frame3d 7/7 (run 20261102-093430: portal, boxes with pinned
+secondary + torque, 2 storeys lateral ± P-Delta, Yasothon linear + P-Delta; linear 0.01 %, P-Delta 0.5 %), contBeam 2/2 (run 20261102-093446:
+3 hand lines + all 37 Yasothon lines). Models: `node cli/frame3d-export.mjs` → difftest/frame3d/*.json; scenarios `difftest/frame3d_cases.py`;
+oracles `oracle/pynite_frame.py|pynite_beam.py`, candidates `cli/frame3d-solve.mjs|contbeam-solve.mjs`. Re-export + re-run after any frame3d/contBeam/floor change.
 Known Excel defects NOT replicated (documented in code comments): purlin fb with sag rods divides Sy by rod spans; rafter/hip tip deflection unit+sign bug;
 hip/ridge sheets check deflection only.
 
@@ -137,5 +141,50 @@ bottom drawer (spans/columns/groups/warnings) + status bar; App computes `fres =
 FloorBoard: vertical tool rail, no own undo, short labels (W# · kg/m, full text on hover), labels hidden when zoomed out. printReport joins every
 `.report` outside <main> (workflow prints roof + structure: `pdf_export.py work out.pdf "<url>?project=/projects/yasothon.json"` → 20 pages).
 Regression: `node cli/regress-yasothon.mjs` (baseline cli/regress-yasothon.baseline.json; `--save` to update) — must stay identical for UI work.
+C phase 1 BUILT 2026-11-02 (branch feature/frame3d): `engine/frame3d.js` solveFrame3D (6 DOF/node, local axes: beams z up / columns z = X,
+static condensation for pinned ends, cracked 0.5Ig beams / 0.7Ig columns / 0.2J, consistent geometric stiffness P-Delta iterated 4×,
+`lateral` nodal forces ready for B) + frame3dModel(frame, res) (columns fixed at the footing top, beams split where anything meets them,
+carried beam ends pinned, loads = ln.slab + self weight + point loads except columns above; X-crossings ARE joined here, unlike the
+continuous model). `node cli/frame3d-check.mjs` (12 closed-form: fixed / propped beam, cantilever column both axes, P-Delta, portal).
+Yasothon gravity: 90 nodes / 127 members, 0.13 s, ΣRz = 170.42 t exactly; vs continuous beams M+ ratio 0–2.7 (mean 0.85), one column in
+tension (B1 floor 2). Step 7 tab "โครง 3 มิติ (เทียบผล)" shows the comparison; DESIGN STILL USES THE CONTINUOUS BEAMS (regression unchanged).
+Fix: floor.js re-solves after the 4th type pass if types still changed (stair-landing load check had drifted 240 kg).
+C phase 2 BUILT 2026-11-02 (user decision: design with the MAX of both methods): `frame.analysis` "envelope" (default) | "continuous"
+(select in step 7). analyzeFrame = gravity() → designColumns() → frame3dModel → each auto drawn beam re-typed so all its spans pass
+with envF = max(continuous, 3D) of M+ / M− / V / T (analyzeFloor `minTypes`, repeat ≤ 4×) → spans keep `cont`, `f3`, `src` (³ᴰ in tables) →
+columns P = max(accumulated, frame N), Mx/My from the frame (≥ min eccentricity), length = clear height Lu = h − deepest beam at the top
+(user: drawings give 3.1 m = top of GB to soffit of floor-2 beam) → footings P = max(column, base Rz) + base moments to pileCap.
+Pinned secondary-beam ends also release torsion (compatibility torsion of 4.5 t-m was a modelling artefact). Baseline re-saved:
+Yasothon now beams 56/57 (11-2 short 1.0 m span on line B: M− 5.85 t-m > B8 → needs a stronger type), 10 types changed (B7/B2/B4/B5/B8),
+columns 12/43 (28 tie spacing + 3 strength: corner columns 20×20 with frame moments), footings 15/15, base ΣP 209 t. Edit → ~0.6 s re-analysis.
+Then (user: "เพิ่ม type ให้ผ่าน"): `frame.baseFixity` "pinned" (default; 1–2 pile caps take no moment) | "fixed" (select in step 7,
+frame3d nodes `pinned` = translations held); Yasothon types + B9 (20×60 3-DB16/3-DB16 + extras, RB9 @0.10/0.15), C2 (= C1 with ties @0.15),
+C3 (ตอม่อ 30×30 8-DB16, ชั้น 1/2 25×25 8-DB16, RB6 @0.15) → beams 57/57, columns 43/43, footings 15/15, base ΣP ≈ 209.6 t (baseline saved).
+PyNite diff (2026-11-02) found a mechanism: two beam lines meeting end to end at a corner without a column were each "carried" by the other
+(pinned both → hinge held only by the 1e-3 springs, deflection ~10⁷ m). Fix: frame3dModel pins an end only where the carrying beam passes
+through; such corners are rigid (monolithic). floor.js warns "มุมคาน… ไม่มีเสา" (continuous model still treats them as resting on each other).
+Baseline re-saved: Yasothon beams 55/57 — 3-3 (10.5, 7.9→8.5) and 15-1 (6, 1.8→2.4) short corner spans get torsion 0.8–1.1 t-m, no type passes
+(stirrup spacing); B9 with DB10 @0.10 passes both (proposed B10, not added yet). Columns 43/43, footings 15/15, base ΣP 210.6 t.
+บันได 1 t = 0.18 (user, 2026-11-02; was 0.12 → failed t ≥ 17.4 cm) → passes; heavier stair moved span 11-1 B8→B9 (baseline re-saved).
+HELP + REPORT FIGURES (2026-11-02): `src/Help.jsx` — per-step guide bar under the header (HELP text per workflow step, collapsed state in
+localStorage `structcalc.help`), first-run tour (`structcalc.tour`, ? button in the header, link to the Yasothon example); FloorBoard tool
+buttons show their hint on hover. `src/ReportDiagrams.jsx` (SVG, prints sharp): BeamDiagram/LineDiagram per beam line in the frame report
+(loads, V, M full load + live-load envelope band (floor.js env[].curve, 41 pts) + 3D-frame M dashed), SlabStrip per designed slab/stair
+(two-way strips from the coefficient moments [discontinuous, mid, continuous]), ColumnChart (P per floor, 3D max(Mx,My)), FrameIso (3D model),
+MemberDiagram (contBeam) for purlin (3-span, illustrative — design uses wL²/9) and rafter in the roof report. Yasothon PDF now 39 pages.
+B BUILT 2026-11-02 (user approved: มยผ. 1311-50 wind, มยผ. 1301/1302-61 seismic, WSD combos D+L / D+0.75L+0.75W / 0.6D+W / D+0.7E /
+D+0.75L+0.525E / 0.6D+0.7E each ±X ±Y, rigid diaphragm every floor; NO default on/off — step 0 card asks the user, `frame.lateral.asked`):
+`engine/lateral.js` (DEFAULT_LATERAL, windForces: p = Iw·q·Cg·(Cpw·Ce(z band top) + |Cpl|·Ce(H/2)) × width × band height, Cpl auto by H/D;
+seismicForces: Fa/Fv tables, T = Ct·H (0.02), Cs = Sa·I/R ≥ 0.01, Fx ∝ w·h^k; expandCombos). frame3d.js solveFrame3D now takes
+`diaphragms` (penalty 1e3×max translational stiffness on ux, uy, rz to a `master` node per floor at the joints' centroid) and `cases`
+(extra RHS with the same K incl. P-Delta of the main loads, one elimination). frame3dModel(opt.lateral {cases, combos}): L case alone
+(loads tagged g; torsion mL), combos by superposition D = main − L, per combo spans/columns/base, drifts per lateral case.
+analyzeFrame: lateralLoads (seismic W = groups − LL − columns standing on beams + half columns) inside the type loop → span envF max over
+combos (`sp.gov` names, src "LAT" → ᴸ in tables), columns checked per combo (`check.combo`), footings: gravity + max P / max Mx / max My
+combos, uplift warning; res.lateral {wind, seismic, weights, combos, drift (wind ≤ h/400, EQ Cd·δ/I ≤ 0.02h), ok}. UI: `src/LateralPanel.jsx`
+(LateralChoice in step 0, LateralPanel = step 6 tab). Report section "แรงด้านข้างและชุดผสมแรง". Tests `node cli/lateral-check.mjs` (27 hand checks
+incl. diaphragm torsion vs hand 3×3 solution). Lateral off → regression identical. Yasothon with wind only: Wy drift NG at ชั้น 2 (10.7 > 9.0 mm)
+and roof (7.9 > 6.5), 4 columns NG at 10.5 line under wind combos; uplift at 3 footings — real results, model left without lateral (user chooses).
+PyNite diff re-run after the solver refactor: frame3d 7/7 (20261102-101316), contBeam 2/2 (20261102-101325).
 Next agreed: C = 3D rigid-joint frame analysis + P-Delta (gravity first, compare with the current results), then B = wind / seismic / WSD
 combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).
