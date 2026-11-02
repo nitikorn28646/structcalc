@@ -26,7 +26,9 @@ const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
 export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
-  const svg = useRef(null), [tool, setToolState] = useState(tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
+  const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
+  // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
+  useEffect(() => { setToolState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
   const [start, setStart] = useState(null), [cur, setCur] = useState(null), [drag, setDrag] = useState(null), [hist, setHist] = useState({ undo: [], redo: [] });
   const [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null);
   useEffect(() => { setToolState(tools[1]?.[0] ?? "select"); setStart(null); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -210,7 +212,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             const role = (l) => ({ columns: "columns", plates: "beams", inner: "beams" }[guessRole(l)] ?? (/beam|คาน|^b\d/i.test(l) ? "beams" : "skip"));
             setImp({ name: f.name, dxf, scale: dxf.unit ?? (span > 300 ? 0.001 : 1), roles: Object.fromEntries(Object.keys(dxf.layers).map((l) => [l, role(l)])) });
           }} /></label>}
-        {onCopyBelow && <button onClick={onCopyBelow} title="แทนเสาและคานชั้นนี้ด้วยของชั้นล่าง (ย้อนกลับได้ Ctrl+Z)" className={`${btn} text-gray-600 ring-gray-300`}><Copy className="h-3.5 w-3.5" />คัดลอกจากชั้นล่าง</button>}
+        {onCopyBelow && <><button onClick={() => onCopyBelow(true)} title="แทนเสาและคานชั้นนี้ด้วยของชั้นล่าง (ย้อนกลับได้ Ctrl+Z)" className={`${btn} text-gray-600 ring-gray-300`}><Copy className="h-3.5 w-3.5" />คัดลอกชั้นล่าง</button>
+          <button onClick={() => onCopyBelow(false)} title="วางเสาตรงเสาชั้นล่างทุกต้น ลบคานชั้นนี้ (เช่น ชั้นอะเส / ชั้นที่มีแต่เสา)" className={`${btn} text-gray-600 ring-gray-300`}>เฉพาะเสา</button></>}
         {onDxf && <button onClick={onDxf} className={`${btn} text-gray-600 ring-gray-300`}><Download className="h-3.5 w-3.5" />DXF</button>}
         {modeBar && <div className="ml-auto">{modeBar}</div>}
       </div>

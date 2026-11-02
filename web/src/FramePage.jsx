@@ -154,7 +154,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   // one structural grid for the whole building (as on the drawings): a grid edit applies to every floor
   const setGrid = (g) => set("floors", frame.floors.map((f) => ({ ...f, grid: g })));
   // copy the floor below (columns and beams) — most floors repeat the one under them
-  const copyBelow = cur > 0 ? () => { const b = frame.floors[cur - 1]; setFloor({ columns: b.columns.map((c) => [...c]), beams: b.beams.map((x) => ({ ...x, a: [...x.a], b: [...x.b] })) }); } : null;
+  const copyBelow = cur > 0 ? (withBeams = true) => { const b = frame.floors[cur - 1]; setFloor({ columns: b.columns.map((c) => [...c]), beams: withBeams ? b.beams.map((x) => ({ ...x, a: [...x.a], b: [...x.b] })) : [] }); } : null;
   const goFloor = (i) => { set("cur", i); setSel(null); };
   const colsHere = res.columns.filter((c) => c.floor === cur), colAt = (i) => colsHere.find((c) => c.i === i);
   const setMat = (k, v) => set("mat", { ...frame.mat, [k]: v });
@@ -305,7 +305,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     })()
     : step === "loads" && sub === "lateral" ? <LateralPanel frame={frame} set={set} res={res}
     /> : null;
-  const inspector = sel ? (          <Card title={beam ? `คาน (แนว ${line ? line.id + 1 : "-"})` : col ? `เสา #${sel.i + 1}` : panel ? `แผ่นพื้น P${an.panels.indexOf(panel) + 1}` : wall ? `ผนัง ${sel.i + 1}` : cant ? `พื้นยื่น ${sel.i + 1}` : stair ? `บันได ${sel.i + 1}` : lineL ? "น้ำหนักเส้น" : pointL ? "น้ำหนักจุด" : "เลือก"} icon={Ruler}>
+  // a selection that no longer exists (new / opened project, deleted item, other floor) shows the floor cards, not an empty card
+  const selOk = !!(beam || col || panel || wall || cant || stair || lineL || pointL);
+  const inspector = sel && selOk ? (          <Card title={beam ? `คาน (แนว ${line ? line.id + 1 : "-"})` : col ? `เสา #${sel.i + 1}` : panel ? `แผ่นพื้น P${an.panels.indexOf(panel) + 1}` : wall ? `ผนัง ${sel.i + 1}` : cant ? `พื้นยื่น ${sel.i + 1}` : stair ? `บันได ${sel.i + 1}` : lineL ? "น้ำหนักเส้น" : pointL ? "น้ำหนักจุด" : "เลือก"} icon={Ruler}>
             {wall && (() => { const r = an.walls[sel.i]; return (<div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Field label="ชนิดผนัง"><Select value={wall.kind} onChange={(v) => setWall({ kind: v })} options={wallOpts} /></Field></div>
               <Field label="สูง" unit="m"><NumberInput value={wall.h} step="0.1" onChange={(v) => setWall({ h: v })} /></Field>

@@ -199,7 +199,7 @@ export default function App() {
   const setMod = (m) => { setModState(m); history.replaceState(null, "", `${location.search}#${m}`); };
   const [step, setStepState] = useState(() => { const q = new URLSearchParams(location.search).get("step"), h = location.hash.slice(1);
     return WORKFLOW.some((w) => w[0] === q) ? q : h === "roof" ? "roof" : h === "frame" ? "design" : "frame"; });
-  const setStep = (k) => { setStepState(k); setMod("work"); };
+  const setStep = (k) => { setStepState(k); setMod("work"); try { const q = new URLSearchParams(location.search); q.set("step", k); history.replaceState(null, "", `${location.pathname}?${q}#work`); } catch { /* ignore */ } }; // a reload stays on this step
   const [toolsOpen, setToolsOpen] = useState(false);
   const [tour, setTour] = useState(() => !tourSeen() && !new URLSearchParams(location.search).has("print"));
   const closeTour = () => { markTourSeen(); setTour(false); };
