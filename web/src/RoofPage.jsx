@@ -318,7 +318,7 @@ function SlopeFrom({ roof, g, set }) {
   </>);
 }
 
-export function RoofPage({ roof, set, dark }) {
+export function RoofPage({ roof, set, dark, onFromFrame = null }) {
   const sk = useSkeleton(), { g, fr, dz, error } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
   const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz);
   const modeBar = (
@@ -334,7 +334,7 @@ export function RoofPage({ roof, set, dark }) {
   const f = (key, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={roof[key]} step={step} onChange={(v) => set(key, v)} /></Field>;
   const setPt = (i, k, v) => set("pts", roof.pts.map((p, j) => (j === i ? (k ? [p[0], v] : [v, p[1]]) : p)));
   const del = (i) => { if (roof.pts.length <= 3) return; set("pts", roof.pts.filter((_, j) => j !== i)); set("edges", roof.edges.filter((_, j) => j !== i)); };
-  if (mode === "draw") return <DrawBoard roof={roof} set={set} g={g} fr={fr} loose={dz?.loose} modeBar={modeBar} dark={dark} />;
+  if (mode === "draw") return <DrawBoard roof={roof} set={set} g={g} fr={fr} loose={dz?.loose} modeBar={modeBar} dark={dark} onFromFrame={onFromFrame} />;
   return (
     <main className="grid min-h-0 flex-1 gap-4 p-4 md:p-5 xl:grid-cols-[300px_1fr_1fr_1.15fr] xl:grid-rows-[auto_1fr]">
       <div className="space-y-4 xl:row-span-2 xl:overflow-y-auto">

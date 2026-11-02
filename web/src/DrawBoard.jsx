@@ -32,7 +32,7 @@ function autoGrid(pts) {
   return { x0: xs[0], y0: ys[0], dx: gaps(xs), dy: gaps(ys), sub: 1 };
 }
 
-export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark }) {
+export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark, onFromFrame = null }) {
   const svg = useRef(null), [tool, setTool] = useState("column"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true);
   const [start, setStart] = useState(null), [draft, setDraft] = useState([]), [cur, setCur] = useState(null), [drag, setDrag] = useState(null);
   const [pick, setPick] = useState(null), [dims, setDims] = useState(true); // selected item {key, i} for the number panel; column dimensions on plates
@@ -374,7 +374,9 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark 
 
         <div className="space-y-3 overflow-y-auto">
           <section className="rounded-2xl border border-gray-200 bg-white p-3 text-[13px]">
-            <label className={`${btn} w-full cursor-pointer justify-center bg-brand-500 text-[#fff] ring-brand-500`}><FileUp className="h-3.5 w-3.5" />นำเข้าจาก CAD (DXF)
+            {onFromFrame && <button onClick={onFromFrame} title="แทนผนัง เสา อะเส และกริดของหลังคาด้วยขอบอาคารและเสาจากขั้น 2 แล้วส่งแรงหลังคาลงเสาชั้นบนสุด (ย้อนกลับได้ Ctrl+Z)"
+              className={`${btn} mb-2 w-full justify-center bg-brand-500 text-[#fff] ring-brand-500`}>ใช้แปลนจากโครงสร้าง (ขั้น 2)</button>}
+            <label className={`${btn} w-full cursor-pointer justify-center ${onFromFrame ? "text-gray-700 ring-gray-300" : "bg-brand-500 text-[#fff] ring-brand-500"}`}><FileUp className="h-3.5 w-3.5" />นำเข้าจาก CAD (DXF)
               <input type="file" accept=".dxf" className="hidden" onChange={async (e) => {
                 const f = e.target.files[0]; e.target.value = "";
                 if (!f) return;

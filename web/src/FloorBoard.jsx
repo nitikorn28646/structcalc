@@ -183,7 +183,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const autoCols = () => commit({ columns: GX.flatMap((x) => GY.map((y) => [x, y])) });
   const autoBeams = () => commit({ beams: [...GY.flatMap((y) => GX.slice(1).map((x, i) => [[GX[i], y], [x, y]])), ...GX.flatMap((x) => GY.slice(1).map((y, i) => [[x, GY[i]], [x, y]]))].map(([a, b]) => ({ a, b, type: null })) });
 
-  const txt = (p, s, color, size = 12, anchor = "middle", weight) => <text x={p[0]} y={-p[1]} fontSize={size * k} fill={color} textAnchor={anchor} dominantBaseline="middle" fontWeight={weight} stroke="none">{s}</text>;
+  // labels grow with the plan when zoomed in past "fit" (like CAD); zoomed out they keep their screen size so they stay readable
+  const kFit = fitBox().w / (svg.current?.clientWidth || 1000), kt = Math.max(k, kFit);
+  const txt = (p, s, color, size = 12, anchor = "middle", weight) => <text x={p[0]} y={-p[1]} fontSize={size * kt} fill={color} textAnchor={anchor} dominantBaseline="middle" fontWeight={weight} stroke="none">{s}</text>;
   const ext = { x0: Math.min(...SX) - 1.2, x1: Math.max(...SX) + 1.2, y0: Math.min(...SY) - 1.2, y1: Math.max(...SY) + 1.2 };
   const ink = dark ? "#cdd1e2" : "#344054", muted = dark ? "#9097b1" : "#667085", btn = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1";
   const spanOf = (bi) => an?.spans.filter((s) => s.member === bi) ?? [];

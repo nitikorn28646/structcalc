@@ -28,5 +28,50 @@ export async function roofPoints(roof) {
       if (host) { const L = Math.hypot(host.q[0] - host.p[0], host.q[1] - host.p[1]), a = Math.hypot(q[0] - host.p[0], q[1] - host.p[1]); addAt(host.p, (P * (L - a)) / L); addAt(host.q, (P * a) / L); }
       else addAt(q, P);
     }
+    // a point where no column stands (e.g. a plate corner without a post): the load must not vanish — it goes to the nearest
+    // column and the name says so (the floor analysis lists it as a warning-free point load on that column)
+    if (cols.length) for (const x of pts.filter((x) => !cols.some((c) => near(c, x.p)))) {
+      const c = cols.reduce((a, b) => (Math.hypot(b[0] - x.p[0], b[1] - x.p[1]) < Math.hypot(a[0] - x.p[0], a[1] - x.p[1]) ? b : a));
+      x.name = `หลังคา (จาก ${x.p[0].toFixed(2)}, ${x.p[1].toFixed(2)} ไม่มีเสา → ย้ายมาเสาใกล้สุด)`; x.p = [+c[0].toFixed(3), +c[1].toFixed(3)];
+    }
     return { pts: pts.map((x) => ({ ...x, P: Math.round(x.P) })), total: pts.reduce((s, x) => s + x.P, 0) };
+}
+
+// Roof plan from the structure (user: no second drawing of walls / columns): outline = the outer boundary of the slab panels of the
+// highest floor that has panels; columns = the top floor's columns; plates on every outline edge; same structural grid.
+// H (plate level) = top of the frame above the first floor. Returns a partial roof object or { error }.
+export function roofFromFrame(frame, res) {
+  const k = [...res.floors.keys()].reverse().find((i) => res.floors[i].panels?.length);
+  if (k === undefined) return { error: "ยังไม่มีแผ่นพื้น — วาดเสาและคานให้เป็นห้องปิดก่อน (ขั้น 2)" };
+  // outer face of the beam plan: split the beam lines at every crossing / T, drop dangling pieces (cantilevers), then walk the
+  // boundary from the lowest-left point taking the right-most turn each time (a slab-less corner does not break the outline)
+  const lines = res.floors[k].lines, V = [], vid = (p) => { let i = V.findIndex((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.02); if (i < 0) { V.push(p); i = V.length - 1; } return i; };
+  const adj = new Map(), link = (a, b) => { if (a === b) return; (adj.get(a) ?? adj.set(a, new Set()).get(a)).add(b); (adj.get(b) ?? adj.set(b, new Set()).get(b)).add(a); };
+  for (const ln of lines) {
+    const ts = [0, ln.L];
+    for (const o of lines) if (o !== ln) {
+      const den = ln.u[0] * o.u[1] - ln.u[1] * o.u[0], d = [o.A[0] - ln.A[0], o.A[1] - ln.A[1]];
+      if (Math.abs(den) > 1e-9) { const t = (d[0] * o.u[1] - d[1] * o.u[0]) / den, r = (d[0] * ln.u[1] - d[1] * ln.u[0]) / den; if (t > -0.02 && t < ln.L + 0.02 && r > -0.02 && r < o.L + 0.02) ts.push(t); }
+    }
+    const pts = [...new Set(ts.map((t) => +Math.min(ln.L, Math.max(0, t)).toFixed(3)))].sort((a, b) => a - b).map((t) => vid([ln.A[0] + ln.u[0] * t, ln.A[1] + ln.u[1] * t]));
+    for (let i = 0; i + 1 < pts.length; i++) link(pts[i], pts[i + 1]);
+  }
+  for (let pruned = true; pruned;) { pruned = false; for (const [v, n] of adj) if (n.size < 2) { for (const w of n) adj.get(w)?.delete(v); adj.delete(v); pruned = true; } }
+  if (adj.size < 3) return { error: "หาขอบอาคารไม่ได้ — แนวคานยังไม่ล้อมเป็นวง" };
+  const ids = [...adj.keys()], start = ids.reduce((a, b) => (V[b][1] < V[a][1] - 1e-6 || (Math.abs(V[b][1] - V[a][1]) < 1e-6 && V[b][0] < V[a][0]) ? b : a));
+  const ang = (a, b) => Math.atan2(V[b][1] - V[a][1], V[b][0] - V[a][0]);
+  let prevDir = -Math.PI / 2, cur = start; const loop = [start]; // arriving "from below"
+  for (let guard = 0; guard < 4 * V.length; guard++) {
+    let best = null, bestTurn = Infinity;
+    for (const w of adj.get(cur)) { let turn = ang(cur, w) - prevDir; while (turn <= -Math.PI) turn += 2 * Math.PI; while (turn > Math.PI) turn -= 2 * Math.PI; if (loop.length > 1 && w === loop[loop.length - 2]) turn = 10; if (turn < bestTurn) { bestTurn = turn; best = w; } }
+    if (best === null || best === start) break;
+    prevDir = ang(cur, best); cur = best; loop.push(best);
+  }
+  let P = loop.map((i) => V[i]);
+  P = P.filter((p, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length]; return Math.abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) > 1e-6; }); // drop collinear points
+  if (P.reduce((s, p, i) => { const q = P[(i + 1) % P.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) < 0) P.reverse(); // counter-clockwise
+  const top = frame.floors.length - 1, Z = frame.floors.reduce((s, f) => s + (f.h ?? 3), 0) - (frame.floors[0]?.h ?? 0);
+  const g = frame.floors[top].grid ?? frame.floors[0].grid;
+  return { pts: P, edges: P.map(() => ({ type: "hip" })), columns: frame.floors[top].columns.map((c) => [...c]), plates: P.map((a, i) => ({ a, b: P[(i + 1) % P.length] })),
+    innerPlates: [], dang: null, supports: null, H: +Z.toFixed(2), ...(g ? { grid: { x0: g.x0 ?? 0, y0: g.y0 ?? 0, dx: g.dx, dy: g.dy, sub: g.sub ?? 1 } } : {}), linkFloor: top };
 }

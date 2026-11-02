@@ -24,7 +24,7 @@ import { DEFAULT_FOOTING, FootingPage, FootingReport } from "./FootingPage.jsx";
 import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
-import { roofPoints } from "./roofLink.js";
+import { roofFromFrame, roofPoints } from "./roofLink.js";
 import { HelpCircle, Redo2, Undo2 } from "lucide-react";
 import { StepGuide, Tour, markTourSeen, tourSeen } from "./Help.jsx";
 
@@ -201,6 +201,15 @@ export default function App() {
     return WORKFLOW.some((w) => w[0] === q) ? q : h === "roof" ? "roof" : h === "frame" ? "design" : "frame"; });
   const setStep = (k) => { setStepState(k); setMod("work"); try { const q = new URLSearchParams(location.search); q.set("step", k); history.replaceState(null, "", `${location.pathname}?${q}#work`); } catch { /* ignore */ } }; // a reload stays on this step
   const [toolsOpen, setToolsOpen] = useState(false);
+  // roof plan from the structure: outline, columns, plates, grid, plate level; the roof loads then go to the top floor's columns
+  const roofFromStructure = () => {
+    const r = roofFromFrame(frame, fres);
+    if (r.error) { setNotice({ ok: false, text: r.error }); return; }
+    const { linkFloor, ...patch } = r;
+    remember(); setRoofState((x) => { const next = { ...x, ...patch }; try { localStorage.setItem("structcalc.roof", JSON.stringify(next)); } catch { /* ignore */ } return next; });
+    setFrame("roofLink", { on: true, floor: linkFloor });
+    setNotice({ ok: true, text: `หลังคาจากแปลนโครงสร้าง: ขอบ ${patch.pts.length} มุม · เสา ${patch.columns.length} ต้น · ส่งแรงลง ${frame.floors[linkFloor].name}` });
+  };
   const [tour, setTour] = useState(() => !tourSeen() && !new URLSearchParams(location.search).has("print"));
   const closeTour = () => { markTourSeen(); setTour(false); };
   const [slab, setSlabState] = useState(DEFAULT_SLAB);
@@ -439,7 +448,7 @@ export default function App() {
           {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} />}
 
           <ErrorBoundary resetKey={mod}>
-          {mod === "work" ? (step === "roof" ? <RoofPage roof={roof} set={setRoof} dark={dark} /> : step === "report" ? (
+          {mod === "work" ? (step === "roof" ? <RoofPage roof={roof} set={setRoof} dark={dark} onFromFrame={roofFromStructure} /> : step === "report" ? (
             <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
               <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง (หลังคา → โครงสร้าง → ฐานราก) · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
               <RoofReport roof={roof} project={st.project} /><FrameReport frame={frame} project={st.project} />
