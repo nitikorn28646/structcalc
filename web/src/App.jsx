@@ -25,7 +25,8 @@ import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
 import { roofPoints } from "./roofLink.js";
-import { Redo2, Undo2 } from "lucide-react";
+import { HelpCircle, Redo2, Undo2 } from "lucide-react";
+import { StepGuide, Tour, markTourSeen, tourSeen } from "./Help.jsx";
 
 const BAR_OPTS = [["", "—"], ...Object.keys(BARS).map((k) => [k, k])];
 // single-member calculators (tools); the building itself is designed in the workflow
@@ -195,6 +196,8 @@ export default function App() {
   const [step, setStepState] = useState(() => { const q = new URLSearchParams(location.search).get("step"), h = location.hash.slice(1);
     return WORKFLOW.some((w) => w[0] === q) ? q : h === "roof" ? "roof" : h === "frame" ? "design" : "frame"; });
   const setStep = (k) => { setStepState(k); setMod("work"); };
+  const [tour, setTour] = useState(() => !tourSeen() && !new URLSearchParams(location.search).has("print"));
+  const closeTour = () => { markTourSeen(); setTour(false); };
   const [slab, setSlabState] = useState(DEFAULT_SLAB);
   const [column, setColumnState] = useState(DEFAULT_COLUMN);
   const setColumn = (k, v) => setColumnState((c) => ({ ...c, [k]: v }));
@@ -368,6 +371,8 @@ export default function App() {
                   <button onClick={() => restore("undo", "redo")} disabled={!hist.current.undo.length} title="ย้อนกลับ (Ctrl+Z)" className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100 disabled:opacity-40"><Undo2 className="h-4 w-4" /></button>
                   <button onClick={() => restore("redo", "undo")} disabled={!hist.current.redo.length} title="ทำซ้ำ (Ctrl+Y)" className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100 disabled:opacity-40"><Redo2 className="h-4 w-4" /></button>
                 </>}
+                <button onClick={() => setTour(true)} title="วิธีใช้โปรแกรม"
+                  className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100"><HelpCircle className="h-4 w-4" /></button>
                 <button onClick={() => setDark(!dark)} title={dark ? "ธีมสว่าง" : "ธีมมืด"}
                   className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100">
                   {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -381,6 +386,8 @@ export default function App() {
               </div>
             </div>
           </header>
+          {mod === "work" && <StepGuide key={step} step={step} index={WORKFLOW.findIndex((w) => w[0] === step)} />}
+          {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} />}
 
           <ErrorBoundary resetKey={mod}>
           {mod === "work" ? (step === "roof" ? <RoofPage roof={roof} set={setRoof} dark={dark} /> : step === "report" ? (

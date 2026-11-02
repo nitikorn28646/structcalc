@@ -7,6 +7,7 @@ import { SLAB_BARS } from "../engine/tables.js";
 import { CONC, DEFAULT_WALL_TYPES, GROUPS, STAIR_KINDS, faceBars, parseBars, wallsOf } from "../engine/floor.js";
 import { designSlabs } from "../engine/slabDesign.js";
 import { analyzeFrame } from "../engine/frame.js";
+import { ColumnChart, FrameIso, LineDiagram, SlabStrip } from "./ReportDiagrams.jsx";
 
 const ksc = "กก./ซม.²";
 const KIND_TH = { simple: "ช่วงเดียว", one_end: "ช่วงริม", both_ends: "ช่วงใน", cantilever: "คานยื่น" };
@@ -60,6 +61,7 @@ export function FrameReport({ frame, project }) {
           <Item th="กลุ่มน้ำหนัก" v={Object.values(GROUPS).map((g) => g[0]).join(" · ")} note="แยกแสดงทุกชั้น · วิเคราะห์ทุกกลุ่มรวมกัน (น้ำหนักใช้งาน) · คำนวณจากชั้นบนลงล่าง" />
           <Table head={["ระดับ (ล่าง → บน)", "เสาใต้ชั้นสูง (ม.)", "พื้นหนา (ม.)", "ปูผิว", "จร", "รวม w (กก./ม.²)"]}
             rows={floors.map((f) => [f.name, fmt(f.h, 2), f.t ? fmt(f.t, 2) : "ไม่มีพื้น", fmt(f.finish, 0), fmt(f.live, 0), f.t ? fmt(CONC * f.t + f.finish + f.live, 0) : "-"])} />
+          {res.frame3d && <Figure caption={`แบบจำลองโครง 3 มิติทั้งอาคาร (มุมมองไอโซเมตริก) — ใช้หาแรงร่วมกับคานต่อเนื่อง`}><FrameIso f3={res.frame3d} /></Figure>}
         </Sec>
 
         {floors.map((f, k) => {
@@ -89,11 +91,17 @@ export function FrameReport({ frame, project }) {
               {slabs.length > 0 && (<><p className="mt-2 font-semibold text-gray-800">ออกแบบพื้นและบันได (โมดูลพื้น WSD)</p>
                 <Table head={["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "M สูงสุด (กก.-ม./ม.)", "เหล็กเสริม", "ผล"]}
                   rows={slabs.map((x) => [x.name, x.way ?? ({ C: "พื้นยื่น", ST: "บันได", PS: "PS", GS: "GS" })[x.kind] ?? x.kind, x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-",
-                    x.cont !== undefined ? `${x.cont} ด้าน${x.case ? ` (กรณี ${x.case})` : ""}` : "-", x.r ? fmt(x.r.M ?? Math.max(...x.r.MS), 0) : "-", x.text ?? x.note, x.r ? pass(x.ok) : "-"])} /></>)}
+                    x.cont !== undefined ? `${x.cont} ด้าน${x.case ? ` (กรณี ${x.case})` : ""}` : "-", x.r ? fmt(x.r.M ?? Math.max(...x.r.MS), 0) : "-", x.text ?? x.note, x.r ? pass(x.ok) : "-"])} />
+                {slabs.filter((x) => x.r).map((x) => <Figure key={x.name} caption={`${x.name} — ${x.way ?? ({ C: "พื้นยื่น", ST: "บันได" })[x.kind]} · โมเมนต์ต่อความกว้าง 1 ม.${x.kind === "C" && x.note ? ` (ไม่รวมราว)` : ""}`}><SlabStrip row={x} /></Figure>)}</>)}
               <Table head={["ช่วง", "ยาว (ม.)", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "T (กก.-ม.)", "ใช้", "ผล"]}
                 rows={an.spans.map((s) => { const m = (k) => (s.src?.[k] === "3D" ? " ³ᴰ" : ""); return [s.id, fmt(s.len, 2), KIND_TH[s.kind], types[s.typeIdx]?.name, fmt(s.Mpos, 0) + m("Mpos"), fmt(s.Mneg, 0) + m("Mneg"), fmt(s.V, 0) + m("V"), fmt(s.Mt ?? 0, 0), `${fmt(s.check.util * 100, 0)}%`, pass(s.ok)]; })} />
               {res.analysis === "envelope" && <Note>³ᴰ = ค่าจากโครง 3 มิติมากกว่าคานต่อเนื่อง (ใช้ค่านี้ออกแบบ)</Note>}
               {an.warnings.map((w) => <Note key={w}>{w}</Note>)}
+              <p className="mt-3 font-semibold text-gray-800">รูปน้ำหนัก แรงเฉือน และโมเมนต์ของคานแต่ละแนว — {f.name}</p>
+              {an.lines.filter((ln) => ln.res).map((ln) => (
+                <Figure key={ln.id} caption={`แนว ${ln.id + 1}: (${fmt(ln.A[0], 2)}, ${fmt(ln.A[1], 2)}) → (${fmt(ln.B[0], 2)}, ${fmt(ln.B[1], 2)}) ยาว ${fmt(ln.L, 2)} ม. · ช่วง ${an.spans.filter((s) => s.line === ln.id).map((s) => `${s.id} ${types[s.typeIdx]?.name ?? ""}`).join(", ")}`}>
+                  <LineDiagram ln={ln} f3={res.frame3d?.members.filter((m) => m.floor === k)} />
+                </Figure>))}
             </Sec>
           );
         })}
@@ -117,6 +125,7 @@ export function FrameReport({ frame, project }) {
 
         <Sec n={++n} th="เสา" en="Columns"
           intro="แรงอัดเสาสะสมจากชั้นบนลงล่าง: แรงปฏิกิริยาคานทุกชั้นเหนือขึ้นไปรวมน้ำหนักเสาเอง เสาที่ไม่มีเสารองรับถ่ายแรงเป็นน้ำหนักจุดลงคานชั้นล่าง ตรวจตามโมดูลออกแบบเสา (WSD) ที่ระยะเยื้องศูนย์ขั้นต่ำ max(2.5 ซม., 0.1 × ด้านแคบ) โครงไม่เซ k = 1 และระยะปลอกไม่เกิน 16 เท่าเหล็กยืน / 48 เท่าเหล็กปลอก / ด้านแคบ">
+          <Figure caption="แรงอัดและโมเมนต์ของเสาทุกต้น แยกตามชั้น"><ColumnChart stacks={res.stacks} floors={floors} /></Figure>
           <Table head={["เสา (X, Y)", "Type", ...floors.map((f) => `ใต้ ${f.name} P (ตัน)`)]}
             rows={res.stacks.map((st) => [st.key, colTypes[st.typeIdx]?.name, ...floors.map((f, k) => { const c = st.list.find((x) => x.floor === k); return c ? `${fmt(c.Pbot / 1000, 2)} · ${c.lv.Bx}×${c.lv.By} · ${c.ok ? "ผ่าน" : "ไม่ผ่าน"}` : "—"; })])} />
           {colTypes.map((t, i) => t.levels.map((lv, j) => {

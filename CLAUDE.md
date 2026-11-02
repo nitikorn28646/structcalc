@@ -166,5 +166,11 @@ through; such corners are rigid (monolithic). floor.js warns "มุมคาน
 Baseline re-saved: Yasothon beams 55/57 — 3-3 (10.5, 7.9→8.5) and 15-1 (6, 1.8→2.4) short corner spans get torsion 0.8–1.1 t-m, no type passes
 (stirrup spacing); B9 with DB10 @0.10 passes both (proposed B10, not added yet). Columns 43/43, footings 15/15, base ΣP 210.6 t.
 บันได 1 t = 0.18 (user, 2026-11-02; was 0.12 → failed t ≥ 17.4 cm) → passes; heavier stair moved span 11-1 B8→B9 (baseline re-saved).
+HELP + REPORT FIGURES (2026-11-02): `src/Help.jsx` — per-step guide bar under the header (HELP text per workflow step, collapsed state in
+localStorage `structcalc.help`), first-run tour (`structcalc.tour`, ? button in the header, link to the Yasothon example); FloorBoard tool
+buttons show their hint on hover. `src/ReportDiagrams.jsx` (SVG, prints sharp): BeamDiagram/LineDiagram per beam line in the frame report
+(loads, V, M full load + live-load envelope band (floor.js env[].curve, 41 pts) + 3D-frame M dashed), SlabStrip per designed slab/stair
+(two-way strips from the coefficient moments [discontinuous, mid, continuous]), ColumnChart (P per floor, 3D max(Mx,My)), FrameIso (3D model),
+MemberDiagram (contBeam) for purlin (3-span, illustrative — design uses wL²/9) and rafter in the roof report. Yasothon PDF now 39 pages.
 Next agreed: C = 3D rigid-joint frame analysis + P-Delta (gravity first, compare with the current results), then B = wind / seismic / WSD
 combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).

@@ -464,7 +464,8 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
         const Ms = liveBy.map((r) => pts.map(r.el[e].M)), Vs = liveBy.map((r) => pts.flatMap((t) => [r.el[e].V(t), r.el[e].V(Math.min(el.L, t + 1e-6))]));
         const up = (base, list, f) => base.map((v, i) => v + list.reduce((t, l) => t + f(0, l[i]), 0));
         const Mmax = up(Md, Ms, Math.max), Mmin = up(Md, Ms, Math.min), Vmax = up(Vd, Vs, Math.max), Vmin = up(Vd, Vs, Math.min);
-        return { Mmax: Math.max(0, ...Mmax), Mmin: Math.min(0, ...Mmin), ML: Math.min(Mmin[0], 0), MR: Math.min(Mmin[40], 0), Vmax: Math.max(...Vmax.map(Math.abs), ...Vmin.map(Math.abs)) };
+        return { Mmax: Math.max(0, ...Mmax), Mmin: Math.min(0, ...Mmin), ML: Math.min(Mmin[0], 0), MR: Math.min(Mmin[40], 0), Vmax: Math.max(...Vmax.map(Math.abs), ...Vmin.map(Math.abs)),
+          curve: { x0: x[e], L: el.L, Mmax, Mmin } }; // 41 points along the element, for the report diagrams
       });
       const Renv = x.map((_, k) => dead.R[k] + liveBy.reduce((t, r) => t + Math.max(0, r.R[k]), 0));
       // deflections: dead (sustained, ×3 for creep and shrinkage) and full live load
