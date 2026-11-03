@@ -202,7 +202,7 @@ function designColumns(frame, cols) {
 const steelA = (s) => { const x = parseBars(s); return x ? x.n * BARS[x.bar].A : 0; };
 const tWeight = (t) => t.b * t.h * 1e4 + (steelA(t.top) + steelA(t.bot) + steelA(t.topX) + steelA(t.botX)) / 100;
 // a span checked with its design forces and its deflection scaled to another type: δ · I(span type) / I(t)
-function checkEnv(t, sp, mat) {
+export function checkEnv(t, sp, mat) {
   const c = checkSpan(t, sp, mat), d = sp.defl, f = (sp.type.b * sp.type.h ** 3) / (t.b * t.h ** 3);
   const dd = d ? { ...d, dL: d.dL * f, dT: d.dT * f, ok: d.dL * f <= d.limL + 1e-9 && d.dT * f <= d.limT + 1e-9 } : { ok: true };
   return { ...c, defl: dd, ok: c.ok && dd.ok, util: Math.max(c.util, d ? Math.max(dd.dT / d.limT, dd.dL / d.limL) : 0) };

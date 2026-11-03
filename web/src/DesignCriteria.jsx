@@ -33,7 +33,7 @@ export function DesignCriteria({ frame, set, setMat, defaults, onNotice }) {
           จำกัด fc ≤ 65 ksc (กฎกระทรวงกำหนดการออกแบบโครงสร้างอาคาร)</label>
         <Sub>เหล็กเสริม</Sub>
         {grade("fy", "เหล็กยืน / เหล็กหลัก")}{grade("fys", "เหล็กปลอก")}
-        {num("Es", "Es", "ksc", "10000", 2040000)}{num("barClear", "ช่องว่างเหล็กคานขั้นต่ำ", "cm", "0.5", 2.5)}
+        {num("Es", "Es", "ksc", "10000", 2040000)}{num("barClear", "ช่องว่างเหล็กคานขั้นต่ำ", "cm", "0.5", 3.5)}
         <Sub>ระยะคอนกรีตหุ้มเหล็ก</Sub>
         {num("cover", "คาน", "cm", "0.5", 3)}{num("coverCol", "เสา", "cm", "0.5", m.cover ?? 3)}{num("coverSlab", "พื้น / บันได", "cm", "0.5", 2)}{num("coverFoot", "ฐานราก", "cm", "0.5", 7.5)}
         <Sub>การแอ่นตัวของคาน</Sub>

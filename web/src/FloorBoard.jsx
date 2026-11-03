@@ -315,7 +315,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               <g key={`b${i}`}>
                 {isSel("beam", i) && <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke="#f79009" strokeOpacity={0.45} strokeWidth={14 * k} strokeLinecap="round" />}
                 <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={(result ? 5 : 4) * k} strokeLinecap="round" opacity={step === "wall" || step === "slab" ? 0.6 : 1} />
-                {result && ti !== undefined && txt([m[0] - n[0] * 11 * k, m[1] - n[1] * 11 * k], `${types[ti]?.name}${bad ? " ✕" : ""}`, color, 11, "middle", 600)}
+                {result && ti !== undefined && txt([m[0] - n[0] * 11 * k, m[1] - n[1] * 11 * k], `${types[ti]?.name}${sp.length && sp.every((x) => x.kind === "cantilever") ? "A" : ""}${bad ? " ✕" : ""}`, color, 11, "middle", 600)}
+                {/* a cantilever part of a longer drawn beam gets its own tag (B1A = B1, top bars the whole cantilever) */}
+                {result && sp.length > 1 && sp.filter((x) => x.kind === "cantilever").map((x) => { const q = [(x.a[0] + x.b[0]) / 2, (x.a[1] + x.b[1]) / 2]; return <g key={x.id}>{txt([q[0] + n[0] * 11 * k, q[1] + n[1] * 11 * k], `${x.typeName ?? ""}${x.ok ? "" : " ✕"}`, x.ok ? color : "#f04438", 10, "middle", 600)}</g>; })}
                 {!result && step === "frame" && b.type != null && txt([m[0] - n[0] * 11 * k, m[1] - n[1] * 11 * k], types[b.type]?.name, color, 11)}
               </g>
             );

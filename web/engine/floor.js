@@ -228,11 +228,13 @@ function panelLoads(P, w, dir) {
 }
 
 // bars of one face in layers (user: keep the clear spacing between bars; what does not fit goes to the next layer):
-// per layer n ≤ floor((b − 2·cover − 2·ds + s) / (db + s)) with clear spacing s = max(mat.barClear ?? 2.5 cm, db), at least the 2 corner
+// per layer n ≤ floor((b − 2·cover − 2·ds + s) / (db + s)) with clear spacing s = max(mat.barClear ?? DEFAULT_BAR_CLEAR (3.5) cm, db), at least the 2 corner
 // bars; main bars first, then the extra bars; the 3rd layer takes whatever is left. b in m, cover / bar sizes in cm.
+// clear spacing between bars of one layer (cm): user standard 3.5 (2026-11-03; was 2.5); per project mat.barClear
+export const DEFAULT_BAR_CLEAR = 3.5;
 export function barLayers(b, mat, st, main, special) {
   const ds = BARS[st]?.d ?? 0.6, L = [{}, {}, {}], used = (l) => (l.main?.n ?? 0) + (l.special?.n ?? 0);
-  const cap = (db) => { const s = Math.max(mat.barClear ?? 2.5, db); return Math.max(2, Math.floor((b * 100 - 2 * (mat.cover ?? 3) - 2 * ds + s) / (db + s) + 1e-9)); };
+  const cap = (db) => { const s = Math.max(mat.barClear ?? DEFAULT_BAR_CLEAR, db); return Math.max(2, Math.floor((b * 100 - 2 * (mat.cover ?? 3) - 2 * ds + s) / (db + s) + 1e-9)); };
   let i = 0;
   for (const g of [main, special]) {
     if (!g?.n) continue;
@@ -549,7 +551,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     sp.typeIdx = ti; const c = checkSpan(t, sp, mat), d = sp.defl;
     sp.check = { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) };
   }
-  for (const sp of result.spans) Object.assign(sp, { type: types[sp.typeIdx], ok: sp.check.ok });
+  // a cantilever span is shown as its type + "A" (user 2026-11-03: B1A = B1's section and support bars, top bars the whole length)
+  for (const sp of result.spans) Object.assign(sp, { type: types[sp.typeIdx], ok: sp.check.ok, typeName: `${types[sp.typeIdx]?.name ?? ""}${sp.kind === "cantilever" ? "A" : ""}` });
   // Cantilever detailing (user 2026-11-03: "คานยื่นต้องเน้นเหล็กบนยาวตลอด"): the top bars that take the root moment (through + extra)
   // run the whole cantilever, hooked down at the tip, and continue into the back span by max(cantilever length, ld) — not the L/4
   // cut-off of the extra top bars elsewhere. ld (WSD, ว.ส.ท. / ACI 318 working stress): 0.06·Ab·fy/√f'c ≥ 0.006·db·fy (cm), × 1.4

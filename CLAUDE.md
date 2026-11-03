@@ -330,6 +330,15 @@ REVIEW FIXES (2026-11-03, cloud session, branch feature/review-fixes; findings i
   leaf text boxes clipped by scroll containers, pairwise overlap, inputs < 38 px, text cut in inputs.
 - Yasothon now beams 56/57 (porch arc rests on the 15 cantilever), base ΣP 197.8 t (was 210.8: inflated reactions from the
   reversed cantilever / mutual corners), real weight (3D) 172.8 t unchanged.
+- AUTO BEAM TYPES (user 2026-11-03, like the spread-footing auto types, economy first): engine/beamTypes.js generateBeamTypes(frame, k)
+  — each span's cheapest passing section (b 0.20/0.25/0.30, h 0.30–0.80 step 0.05, DB12/16/20, stirrups RB9/DB10/DB12 @0.20→0.10,
+  ≤ 2 layers; cost = concrete 2,500 ฿/m³ + steel 28 ฿/kg + formwork 350 ฿/m²), sorted by cost, k groups of ~equal count, type =
+  cheapest passing the whole group, names B1… cheapest first; up to 4 re-analyses (self weight / 3D stiffness), best kept; all drawn
+  beams reset to auto, frame.beamAutoK. Step 8 tab Type คาน: "เพิ่ม type คานอัตโนมัติ (+1)" / "จัดใหม่". Cantilever spans are not
+  a group: span.typeName = type + "A" (B1A = B1 section and support bars, top bars full length) in plan, tables, report schedule.
+  Yasothon k = 1/2/3/5: 232k/179k/173k/158k ฿, all 57/57. Big house: ~12 s per press. Test: cli/beamtypes-check.mjs (in the gate).
+- Bar clear spacing default 3.5 cm (user; floor.js DEFAULT_BAR_CLEAR, was 2.5). 3D frame joins near-miss joints (≤ 3.5 cm) and
+  splits a host beam where the floor analysis put a beam on it (near-miss ends were loose → "unstable").
 - Baselines re-saved (regress + E2E). PyNite / Excel diffs NOT re-run here (cloud): re-run frame3d/contBeam PyNite and the beam Excel
   diff on the Windows PC (only V input changed for beams; beam.js untouched).
 

@@ -137,7 +137,7 @@ export function FrameReport({ frame, project }) {
                     x.cont !== undefined ? `${x.cont} ด้าน${x.case ? ` (กรณี ${x.case})` : ""}` : "-", x.r ? fmt(x.r.M ?? Math.max(...x.r.MS), 0) : "-", x.text ?? x.note, x.r ? pass(x.ok) : "-"])} />
                 {slabs.filter((x) => x.r).map((x) => <Figure key={x.name} caption={`${x.name} — ${x.way ?? ({ C: "พื้นยื่น", ST: "บันได" })[x.kind]} · โมเมนต์ต่อความกว้าง 1 ม.${x.kind === "C" && x.note ? ` (ไม่รวมราว)` : ""}`}><SlabStrip row={x} /></Figure>)}</>)}
               <Table head={["ช่วง", "ยาว (ม.)", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "T (กก.-ม.)", "ใช้", "ผล"]}
-                rows={an.spans.map((s) => { const m = (k) => (s.src?.[k] === "LAT" ? " ᴸ" : s.src?.[k] === "3D" ? " ³ᴰ" : ""); return [s.id, fmt(s.len, 2), KIND_TH[s.kind], types[s.typeIdx]?.name, fmt(s.Mpos, 0) + m("Mpos"), fmt(s.Mneg, 0) + m("Mneg"), fmt(s.V, 0) + m("V"), fmt(s.Mt ?? 0, 0), `${fmt(s.check.util * 100, 0)}%`, pass(s.ok)]; })} />
+                rows={an.spans.map((s) => { const m = (k) => (s.src?.[k] === "LAT" ? " ᴸ" : s.src?.[k] === "3D" ? " ³ᴰ" : ""); return [s.id, fmt(s.len, 2), KIND_TH[s.kind], s.typeName ?? types[s.typeIdx]?.name, fmt(s.Mpos, 0) + m("Mpos"), fmt(s.Mneg, 0) + m("Mneg"), fmt(s.V, 0) + m("V"), fmt(s.Mt ?? 0, 0), `${fmt(s.check.util * 100, 0)}%`, pass(s.ok)]; })} />
               {res.analysis === "envelope" && <Note>³ᴰ = ค่าจากโครง 3 มิติมากกว่าคานต่อเนื่อง (ใช้ค่านี้ออกแบบ){res.lateral ? " · ᴸ = ค่าจากชุดผสมแรงที่มีแรงลม / แผ่นดินไหว" : ""}</Note>}
               {an.lines.filter((ln) => ln.arc).map((ln) => { const g = arcGeom(ln.A, ln.B, ln.arc.s); return <Note key={`arc${ln.id}`}>คานโค้ง แนว {ln.id + 1}: รัศมี {fmt(g.R, 2)} ม. มุม {fmt((g.th * 180) / Math.PI, 0)}° ยาวตามส่วนโค้ง {fmt(g.L, 2)} ม. (คอร์ด {fmt(g.c, 2)} ม.) — โครง 3 มิติแบ่ง 12 ชิ้นตามส่วนโค้ง ได้โมเมนต์และแรงบิดจากความโค้ง (ใช้ออกแบบ) · คานต่อเนื่องคิดตามคอร์ด · พื้นระหว่างคอร์ดกับส่วนโค้ง {fmt(g.area, 2)} ม.² เพิ่มเป็นน้ำหนักบนคาน</Note>; })}
               {an.warnings.map((w) => <Note key={w}>{w}</Note>)}
@@ -204,20 +204,23 @@ export function FrameReport({ frame, project }) {
 
         <Sec n={++n} th="ตาราง type คานและเสา" en="Beam & column schedules" intro="ขนาดและเหล็กเสริมที่ใช้ ความยาวคานรวมวัดตามแนวศูนย์กลาง ยังไม่รวมระยะทาบและเศษเหล็ก">
           <Table head={["Type", "b × h (ซม.)", "เหล็กบน (+ เสริมหัวเสา L/4 · คานยื่น: ยาวตลอด)", "เหล็กล่าง (+ เสริมกลางคาน 3L/5)", "ปลอก หัวเสา / กลาง", "จำนวน", "ยาวรวม (ม.)"]}
-            rows={types.map((t, i) => { const l = spans.filter((s) => s.typeIdx === i); return [t.name, `${fmt(t.b * 100, 0)} × ${fmt(t.h * 100, 0)}`, bars(t), [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" "),
-              `${t.st} @${fmt(t.sSup, 2)} / @${fmt(t.sMid, 2)}`, `${l.length} ช่วง`, fmt(l.reduce((s, x) => s + x.len, 0), 2)]; })} />
+            rows={types.map((t, i) => { const l = spans.filter((s) => s.typeIdx === i && s.kind !== "cantilever"); return [t.name, `${fmt(t.b * 100, 0)} × ${fmt(t.h * 100, 0)}`, bars(t), [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" "),
+              `${t.st} @${fmt(t.sSup, 2)} / @${fmt(t.sMid, 2)}`, `${l.length} ช่วง`, fmt(l.reduce((s, x) => s + x.len, 0), 2)]; }).flatMap((row, i) => {
+                // cantilever variant: same section and support bars, the top bars run the whole cantilever (B1A …)
+                const c = spans.filter((s) => s.typeIdx === i && s.kind === "cantilever"), t = types[i];
+                return c.length ? [row, [`${t.name}A`, row[1], `${[t.top, t.topX].filter(Boolean).join(" + ")} ยาวตลอดคานยื่น + งอขอ`, t.bot, row[4], `${c.length} ช่วง (คานยื่น)`, fmt(c.reduce((s, x) => s + x.len, 0), 2)]] : [row]; })} />
           <Table head={["Type", "ระดับ", "ขนาด (ซม.)", "เหล็กยืน", "ปลอก", "จำนวน"]}
             rows={colTypes.flatMap((t, i) => t.levels.map((lv) => [t.name, lv.level, `${lv.Bx} × ${lv.By}`, `${lv.n}-${lv.mainBar}`, `${lv.tieBar} @${fmt(lv.s, 2)}`, `${res.columns.filter((c) => c.typeIdx === i && c.lv === lv).length} ต้น`]))} />
           {/* cantilevers: their own bar run (not the L/4 cut-off of the schedule) — user 2026-11-03 */}
           {(() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.detail).map((sp) => ({ sp, k }))); return cs.length ? (<>
             <p className="mt-3 font-semibold text-gray-800">คานยื่น — เหล็กบนยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลัง (แทนเหล็กเสริม L/4 ในตาราง)</p>
             <Table head={["ชั้น / ช่วง", "Type", "ยื่น (ม.)", "เหล็กบน", "ld (ม.)", "ฝากเข้าช่วงหลัง", "หมายเหตุ"]}
-              rows={cs.map(({ sp, k }) => [`${floors[k].name} ${sp.id}`, sp.type.name, fmt(sp.len, 2), `${sp.detail.bars} ยาวตลอด`, fmt(sp.detail.ld, 2),
+              rows={cs.map(({ sp, k }) => [`${floors[k].name} ${sp.id}`, sp.typeName, fmt(sp.len, 2), `${sp.detail.bars} ยาวตลอด`, fmt(sp.detail.ld, 2),
                 sp.detail.noBack ? "ฝังในเสา ≥ ld + งอขอ" : sp.detail.through ? `ตลอดช่วง ${sp.detail.back}` : `${fmt(sp.detail.ext, 2)} ม. (ช่วง ${sp.detail.back})`,
                 sp.detail.noBack ? "ไม่มีช่วงหลัง" : sp.detail.through ? "ช่วงหลังสั้นกว่าระยะฝาก" : ""])} />
             <Note>ld = 1.4 × max(0.06·Ab·fy/√f'c, 0.006·db·fy) (เหล็กบน, วิธีหน่วยแรงใช้งาน ว.ส.ท. / ACI 318) · ระยะฝาก = max(ความยาวคานยื่น, ld)</Note>
             <div className="grid grid-cols-2 gap-2">{[...new Map(cs.map(({ sp }) => [`${sp.type.name}|${fmt(sp.len, 2)}|${sp.detail.through}|${sp.detail.noBack}`, sp])).values()].map((sp) => (
-              <Figure key={sp.id} caption={`คานยื่น ${sp.id} (${sp.type.name})`}><CantileverDetail d={sp.detail} t={sp.type} L={sp.len} id={sp.id} /></Figure>))}</div>
+              <Figure key={sp.id} caption={`คานยื่น ${sp.id} (${sp.typeName})`}><CantileverDetail d={sp.detail} t={sp.type} L={sp.len} id={sp.id} /></Figure>))}</div>
           </>) : null; })()}
           {/* reinforcement sections of every beam type (support / mid-span) and column level in use */}
           <p className="mt-3 font-semibold text-gray-800">รูปตัดเหล็กเสริมคาน (ซ้าย: ช่วงหัวเสา · ขวา: ช่วงกลางคาน)</p>

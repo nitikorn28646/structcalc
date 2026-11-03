@@ -37,7 +37,7 @@ procedure and the non-negotiables. When this file and a request conflict, ask th
 3. **Tests** — add or extend a `cli/*-check.mjs` with closed-form or equilibrium checks for new engine behaviour.
    Gate before any commit:
    ```
-   node cli/contbeam-check.mjs && node cli/floor-check.mjs && node cli/floor-loads-check.mjs && node cli/frame-check.mjs && node cli/frame3d-check.mjs && node cli/lateral-check.mjs && node cli/arc-check.mjs && node cli/regress-yasothon.mjs
+   node cli/contbeam-check.mjs && node cli/floor-check.mjs && node cli/floor-loads-check.mjs && node cli/frame-check.mjs && node cli/frame3d-check.mjs && node cli/lateral-check.mjs && node cli/arc-check.mjs && node cli/beamtypes-check.mjs && node cli/regress-yasothon.mjs
    D:\REA\rea-lab\.venv\Scripts\python.exe -X utf8 cli/e2e/run.py   # browser E2E (dev server running), must print N/N passed
    cd web && npx vite build
    ```

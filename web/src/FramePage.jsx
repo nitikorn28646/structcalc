@@ -16,6 +16,7 @@ import { SVGRenderer } from "echarts/renderers";
 import { BrickWall, Building2, Columns3, Grid3x3, Layers, Plus, Ruler, Trash2, TriangleAlert } from "lucide-react";
 import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
+import { beamCost, generateBeamTypes } from "../engine/beamTypes.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, spanReasons, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { analyzeFrame, stackKey } from "../engine/frame.js";
@@ -83,6 +84,31 @@ function UtilBars({ items: raw, dark, height, onPick }) {
 const Handle = () => <PanelResizeHandle className="group relative w-1.5 bg-transparent outline-none"><div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gray-200 transition-colors group-hover:w-[3px] group-hover:bg-brand-400 group-data-[resize-handle-state=drag]:w-[3px] group-data-[resize-handle-state=drag]:bg-brand-500" /></PanelResizeHandle>;
 
 // editable beam-type table (B1, B2, …)
+// automatic beam types, one more per press (like the spread-footing types): engine/beamTypes.js generateBeamTypes
+function AutoBeamTypes({ frame, set, res }) {
+  const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null), k0 = frame.beamAutoK ?? 0;
+  const cost = res.floors.flatMap((a) => a.spans).reduce((s, x) => s + beamCost(x.type) * x.len, 0);
+  const run = (k) => { setBusy(true); setMsg(null); setTimeout(() => { // let "working…" paint first: a big house takes seconds
+    try {
+      const g = generateBeamTypes(frame, k);
+      if (!g) { setMsg({ ok: false, text: "ยังไม่มีคานให้จัด type" }); return; }
+      set("beamTypes", g.beamTypes); set("floors", g.floors); set("beamAutoK", k);
+      setMsg({ ok: g.ok === g.n, text: `${g.beamTypes.length} type · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})${g.unmatched.length ? ` · ไม่มีหน้าตัดในกรอบ (กว้าง ≥ 0.20, ลึก ≤ 0.80 ม., เหล็ก ≤ 2 ชั้น) สำหรับช่วง ${g.unmatched.join(", ")} — เพิ่ม type เอง` : ""}` });
+    } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(false); }
+  }, 30); };
+  return (
+    <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-white/[0.03]">
+      <div className="flex flex-wrap items-center gap-2">
+        <button disabled={busy} onClick={() => run(k0 + 1)} className="rounded-lg bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600 disabled:opacity-60">{busy ? "กำลังจัด type…" : `เพิ่ม type คานอัตโนมัติ (+1 → ${k0 + 1} type)`}</button>
+        {k0 > 0 && <button disabled={busy} onClick={() => run(k0)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50 disabled:opacity-60">↻ จัดใหม่ ({k0} type)</button>}
+        <span className="text-[12px] text-gray-500">ค่าคานตอนนี้ ≈ {Math.round(cost).toLocaleString()} บาท</span>
+      </div>
+      <p className="mt-1.5 text-[11px] text-gray-500">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ถูกที่สุดที่ผ่าน (กว้าง ≥ 0.20 ม. ลึก ≤ 0.80 ม. เหล็ก ≤ 2 ชั้น) เรียงตามราคาแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดถูกที่สุดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2, … จากถูกไปแพง · คานยื่นใช้ type ที่เหล็กหัวเสาพอ ชื่อ B1A (เหล็กบนยาวตลอด) · แทนที่ type คานทั้งหมดและตั้งทุกคานเป็นอัตโนมัติ (ย้อนกลับได้ Ctrl+Z) · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p>
+      {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
+    </div>
+  );
+}
+
 function TypeTable({ types, setTypes, an }) {
   const set = (i, k, v) => setTypes(types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const used = (i) => an?.spans.filter((s) => s.typeIdx === i) ?? [];
@@ -249,7 +275,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
   const coverBar = (keys, extra = null) => <div className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]"><span className="pb-2 text-xs font-medium text-gray-500">คอนกรีตหุ้ม</span>{coverFields.filter((_, i) => keys.includes(COVERS[i][0]))}{extra}</div>;
   // minimum clear spacing between beam bars: bars that do not fit in a layer go to the next layer (design + drawings)
-  const clearField = <><Field label="ระยะห่างเหล็กคานขั้นต่ำ (ช่องว่าง)" unit="cm"><NumberInput value={frame.mat.barClear ?? 2.5} step="0.5" onChange={(v) => setMat("barClear", v)} /></Field>
+  const clearField = <><Field label="ระยะห่างเหล็กคานขั้นต่ำ (ช่องว่าง)" unit="cm"><NumberInput value={frame.mat.barClear ?? 3.5} step="0.5" onChange={(v) => setMat("barClear", v)} /></Field>
     <span className="pb-2 text-[11px] text-gray-400">ใช้ค่ามากกว่าระหว่างค่านี้กับขนาดเหล็ก · เกินความกว้างคาน → ขึ้นชั้นที่ 2 (ห่างชั้น 2.5 ซม.)</span></>;
   const slabRows = step === "design" && sub === "slabs" ? designSlabs(an, fl, frame.mat) : [];
   const page = step === "project" ? (
@@ -266,7 +292,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </Card>
       </div>
     </div>
-  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
     : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol"])}<ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (
@@ -417,7 +443,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               {(step === "analysis" || step === "design") && (() => { const sps = an.spans.filter((s) => (s.members ?? [s.member]).includes(sel.i)); return sps.length ? (
                 <div className="col-span-2 space-y-1.5 text-[12px]">{sps.map((s) => { const why = spanReasons(s.check); return (
                   <div key={s.id} className={`rounded-md px-2 py-1.5 ring-1 ${s.ok ? "ring-gray-200" : "bg-red-50 ring-red-200 dark:bg-red-500/10"}`}>
-                    <div className="flex justify-between tabular-nums"><span className="font-medium">ช่วง {s.id} · {s.type.name} · {fmt(s.len, 2)} ม.</span><span className={s.ok ? "text-green-600" : "text-red-600"}>{s.ok ? "ผ่าน" : "ไม่ผ่าน"} · {s.check.util >= 8.99 ? "เกินกำลังหน้าตัด" : `ใช้ ${fmt(s.check.util * 100, 0)}%`}</span></div>
+                    <div className="flex justify-between tabular-nums"><span className="font-medium">ช่วง {s.id} · {s.typeName ?? s.type.name} · {fmt(s.len, 2)} ม.</span><span className={s.ok ? "text-green-600" : "text-red-600"}>{s.ok ? "ผ่าน" : "ไม่ผ่าน"} · {s.check.util >= 8.99 ? "เกินกำลังหน้าตัด" : `ใช้ ${fmt(s.check.util * 100, 0)}%`}</span></div>
                     <div className="text-gray-500 tabular-nums">M+ {fmt(s.Mpos, 0)} · M− {fmt(s.Mneg, 0)} กก.-ม. · V {fmt(s.V, 0)} กก.{s.Mt ? ` · T ${fmt(s.Mt, 0)} กก.-ม.` : ""}</div>
                     {s.detail && <div className="text-gray-600">คานยื่น: เหล็กบน {s.detail.bars} ยาวตลอด + งอขอที่ปลาย · {s.detail.noBack ? `ฝังในเสา ≥ ld ${fmt(s.detail.ld, 2)} ม.` : s.detail.through ? `ฝากตลอดช่วง ${s.detail.back}` : `ฝากเข้าช่วง ${s.detail.back} ${fmt(s.detail.ext, 2)} ม.`}</div>}
                     {why.map((t) => <div key={t} className="text-red-600">• {t}</div>)}
@@ -510,7 +536,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <div className="flex items-center justify-between px-1 text-sm font-semibold text-gray-800">{line?.res ? `แรงเฉือน / โมเมนต์ แนวคาน ${line.id + 1}` : (boardStep === "cols" ? `อัตราใช้งานเสา ใต้${fl.name}` : `อัตราใช้งานคาน ${fl.name}`)}
             <span className="text-[11px] font-normal text-gray-500">{line?.res ? `ยาว ${fmt(line.L, 2)} ม.` : "เหล็กที่ต้องการ / ที่ใส่"}</span></div>
           {line?.res ? <ForceCharts L={line.L} fns={{ V: line.res.V, M: line.res.M }} dark={dark} height={260} animate={false} /> : <UtilBars items={boardStep === "cols" ? colsHere.map((c) => ({ label: `${cTypes[c.typeIdx]?.name} ${stackKey(c.p)}`, util: c.check.util, ok: c.ok, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length], sel: { kind: "column", i: c.i } }))
-            : an.spans.map((s) => ({ label: `${s.id} ${types[s.typeIdx]?.name ?? ""}`, util: s.check.util, ok: s.ok, color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length], sel: { kind: "beam", i: s.member } }))} dark={dark} height={260} onPick={(x) => x?.sel && setSel(x.sel)} />}
+            : an.spans.map((s) => ({ label: `${s.id} ${s.typeName ?? types[s.typeIdx]?.name ?? ""}`, util: s.check.util, ok: s.ok, color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length], sel: { kind: "beam", i: s.member } }))} dark={dark} height={260} onPick={(x) => x?.sel && setSel(x.sel)} />}
         </section>
   ) : step === "footing" ? (<>
     <Card title="สรุปฐานราก" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums">
@@ -547,7 +573,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       <table className="mt-1 w-full border-collapse text-[12px] tabular-nums text-[#344054]">
         <thead><tr className="border-b border-[#e4e7ec] text-left text-[11px] text-[#667085]">{["ช่วง", "Type", "ยาว (ม.)", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "T (กก.-ม.)", "ใช้", "ผล"].map((h) => <th key={h} className="px-1 py-0.5 font-medium">{h}</th>)}</tr></thead>
         <tbody>{an.spans.filter((x) => x.line === showLine.id).map((x) => <tr key={x.id} onClick={() => setSel({ kind: "beam", i: x.member })} className="cursor-pointer border-b border-[#f2f4f7] hover:bg-[#f9fafb]">
-          <td className="px-1">{x.id}</td><td className="px-1 font-semibold" style={{ color: TYPE_COLORS[x.typeIdx % TYPE_COLORS.length] }}>{types[x.typeIdx]?.name}</td><td className="px-1">{fmt(x.len, 2)}</td>
+          <td className="px-1">{x.id}</td><td className="px-1 font-semibold" style={{ color: TYPE_COLORS[x.typeIdx % TYPE_COLORS.length] }}>{x.typeName ?? types[x.typeIdx]?.name}</td><td className="px-1">{fmt(x.len, 2)}</td>
           <td className="px-1">{fmt(x.Mpos, 0)}</td><td className="px-1">{fmt(x.Mneg, 0)}</td><td className="px-1">{fmt(x.V, 0)}</td><td className="px-1">{x.Mt ? fmt(x.Mt, 0) : "-"}</td>
           <td className="px-1">{fmt(x.check.util * 100, 0)}%</td><td className={`px-1 ${x.ok ? "text-[#12b76a]" : "font-semibold text-[#d92d20]"}`}>{x.ok ? "ผ่าน" : "ไม่ผ่าน"}</td></tr>)}</tbody>
       </table>
@@ -581,7 +607,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 <tbody>{an.spans.map((s) => (
                   <tr key={s.id} onClick={() => setSel({ kind: "beam", i: s.member })} className={`cursor-pointer border-b border-gray-100 tabular-nums ${sel?.kind === "beam" && sel.i === s.member ? "bg-brand-50" : "hover:bg-gray-50"}`}>
                     <td className="px-1 py-0.5">{s.id}</td><td className="px-1">{fmt(s.len, 2)}</td><td className="px-1">{KIND_TH[s.kind]}</td>
-                    <td className="px-1 font-semibold" style={{ color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length] }}>{types[s.typeIdx]?.name}{s.own ? "" : " (อัตโนมัติ)"}</td>
+                    <td className="px-1 font-semibold" style={{ color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length] }}>{s.typeName ?? types[s.typeIdx]?.name}{s.own ? "" : " (อัตโนมัติ)"}</td>
                     <td className="px-1">{fmt(s.Mpos, 0)}{s.src?.Mpos && s.src.Mpos !== "ต่อเนื่อง" && <sup className="text-brand-500" title={s.gov?.Mpos ?? "โครง 3 มิติ"}> {s.src.Mpos === "LAT" ? "L" : "3D"}</sup>}</td><td className="px-1">{fmt(s.Mneg, 0)}{s.src?.Mneg && s.src.Mneg !== "ต่อเนื่อง" && <sup className="text-brand-500" title={s.gov?.Mneg ?? "โครง 3 มิติ"}> {s.src.Mneg === "LAT" ? "L" : "3D"}</sup>}</td><td className="px-1">{fmt(s.V, 0)}{s.src?.V && s.src.V !== "ต่อเนื่อง" && <sup className="text-brand-500" title={s.gov?.V ?? "โครง 3 มิติ"}> {s.src.V === "LAT" ? "L" : "3D"}</sup>}</td>
                     <td className="px-1">{fmt(s.check.util * 100, 0)}%</td><td className={`px-1 ${s.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{s.ok ? "ผ่าน" : s.check.error ?? "ไม่ผ่าน"}</td>
                   </tr>))}</tbody>
