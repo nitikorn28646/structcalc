@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColumnChart, LineDiagram, SlabStrip } from "./ReportDiagrams.jsx";
 import { StoreyTable } from "./StoreyTable.jsx";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tip } from "@/components/ui/tooltip";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { StairDetail, StairInputs } from "./StairPanel.jsx";
 import { DesignCriteria } from "./DesignCriteria.jsx";
@@ -550,8 +552,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         <Panel id="centre" order={1} minSize={30} className="flex min-w-0 flex-col">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-2">
-            {subs && <span className="flex rounded-lg bg-gray-100 p-0.5">{subs.map(([k, t]) => <button key={k} onClick={() => { setSubState(k); setSel(null); }} className={tab(sub === k)}>{t}</button>)}</span>}
-            {!page && step !== "footing" && <span className="ml-auto flex rounded-lg bg-gray-100 p-0.5">{[["2d", "แปลน 2D"], ["3d", "3D"], ["split", "2D + 3D"]].map(([k, t]) => <button key={k} onClick={() => setView(k)} className={tab(view === k)}>{t}</button>)}</span>}
+            {subs && <Tabs value={sub} onValueChange={(k) => { setSubState(k); setSel(null); }}><TabsList>{subs.map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
+            {!page && step !== "footing" && <Tabs value={view} onValueChange={setView} className="ml-auto"><TabsList>{[["2d", "แปลน 2D"], ["3d", "3D"], ["split", "2D + 3D"]].map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
           </div>
           <div className="flex min-h-0 flex-1 flex-col p-3">{center}</div>
         </section>
@@ -560,7 +562,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2 text-sm font-semibold text-gray-800">{tabsNow.find(([x]) => x === dTab)?.[1]}
             <button onClick={() => setDrawer(null)} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">ปิด ✕</button></div>
           <div className="min-h-0 flex-1 overflow-auto p-3">
-              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} dark={dark} /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} resolveW={resolveW} dark={dark} /> : dTab === "spans" ?             <div className="max-h-[260px] min-h-0 flex-[2] overflow-auto text-[12px]">
+              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} dark={dark} /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} resolveW={resolveW} dark={dark} /> : dTab === "spans" ?             <div className="text-[12px]">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 bg-white"><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["ช่วง", "ยาว", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "ใช้", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
                 <tbody>{an.spans.map((s) => (
@@ -571,7 +573,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                     <td className="px-1">{fmt(s.check.util * 100, 0)}%</td><td className={`px-1 ${s.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{s.ok ? "ผ่าน" : s.check.error ?? "ไม่ผ่าน"}</td>
                   </tr>))}</tbody>
               </table>
-            </div> : dTab === "cols" ?             <div className="max-h-[260px] min-h-0 flex-[2] overflow-auto text-[12px]">
+            </div> : dTab === "cols" ?             <div className="text-[12px]">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 bg-white"><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["เสา (X, Y)", "Type", ...frame.floors.map((f) => `ใต้ ${f.name}`)].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
                 <tbody>{res.stacks.map((st) => (
@@ -599,10 +601,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         <Panel id="inspector" order={3} defaultSize={20} minSize={14} maxSize={40}><aside className="h-full space-y-3 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3">{inspector}</aside></Panel>
         </PanelGroup>
         <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-l border-gray-200 bg-white py-2">
-          {tabsNow.map(([k, t]) => <button key={k} onClick={() => setDrawer(dTab === k ? null : k)} title={t}
+          {tabsNow.map(([k, t]) => <Tip key={k} text={t} side="left"><button onClick={() => setDrawer(dTab === k ? null : k)}
             className={`flex w-[46px] flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-[10px] font-medium leading-tight ${dTab === k ? "bg-brand-500 text-[#fff]" : k === "warn" && res.warnings.length ? "text-red-600 hover:bg-red-50" : "text-gray-600 hover:bg-gray-50"}`}>
             {({ spans: <Ruler className="h-4 w-4" />, cols: <Columns3 className="h-4 w-4" />, groups: <Layers className="h-4 w-4" />, warn: <TriangleAlert className="h-4 w-4" />, panels: <Grid3x3 className="h-4 w-4" />, bwalls: <BrickWall className="h-4 w-4" /> })[k]}
-            <span className="text-center">{t.replace(/\s*\(.*\)/, "")}</span>{/\((\d+)\)/.test(t) && <span className="opacity-70">{t.match(/\((\d+)\)/)[1]}</span>}</button>)}
+            <span className="text-center">{t.replace(/\s*\(.*\)/, "")}</span>{/\((\d+)\)/.test(t) && <span className="opacity-70">{t.match(/\((\d+)\)/)[1]}</span>}</button></Tip>)}
         </nav>
       </div>
       <div className="flex items-center gap-4 border-t border-gray-200 bg-white px-4 py-1.5 text-[12px] tabular-nums text-gray-600">

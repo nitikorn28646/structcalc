@@ -282,3 +282,8 @@ lines = beams at their level, levels = column ends + beam heights above the lowe
 (one line may span storeys) + beams at level k. Step 2 "นำเข้า DXF" shows the levels (tick / rename) → FramePage importFrame replaces all
 floors (slab defaults of the current floor, grid from the columns, frame.baseLevel = column base). Ole file: +1.50 35 beams, +4.50 columns
 only; analysis beams 30/30, columns 38/38, footings 19/19. Layer-role import (one floor) still below it.
+SHADCN/UI (2026-11-03): real shadcn/ui components in web/src/components/ui (button, card, input, label, badge, separator, tabs, tooltip, dialog;
+Radix + class-variance-authority + tailwind-merge, `@` alias → src in vite.config.js, colours mapped to the app palette so the dark theme
+follows). ui.jsx Card / Field / NumberInput / TextInput / Select (native, shadcn style) / Badge / Button wrap them; FramePage sub-tabs and view
+switch = Tabs; tool rail + side-panel rail = Tooltip (TooltipProvider in main.jsx); DXF import (floor + roof) and the tour = Dialog.
+Side-panel tables fill the panel height (no fixed 260 px).

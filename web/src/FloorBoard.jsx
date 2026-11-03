@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { arcPolyline } from "../engine/arc.js";
 import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Hand, Magnet, MousePointer2, PanelTop, Redo2, Ruler, Undo2, Wand2, Copy } from "lucide-react";
 import { frame3dFromDxf, guessRole, parseDxf, toPlan } from "./dxfImport.js";
+import { Tip } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "./beamModel.js";
 import { dist, gridAxes, round3, segCross, segDist } from "./planKit.js";
 import { GROUPS, STAIR_KINDS, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
@@ -227,8 +229,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       <div className="flex min-h-0 flex-1 gap-2">
       {tools.length > 1 && <div className="flex w-[64px] shrink-0 flex-col gap-1">
         {tools.map(([key, label, Icon, hint]) => (
-          <button key={key} onClick={() => setTool(key)} title={hint ? `${label} — ${hint}` : label}
-            className={`flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ring-1 ${tool === key ? "bg-brand-500 text-[#fff] ring-brand-500" : "bg-white text-gray-600 ring-gray-200 hover:bg-gray-50"}`}><Icon className="h-4 w-4" /><span className="leading-tight">{label}</span></button>
+          <Tip key={key} text={hint ? `${label} — ${hint}` : label}><button onClick={() => setTool(key)}
+            className={`flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ring-1 ${tool === key ? "bg-brand-500 text-[#fff] ring-brand-500" : "bg-white text-gray-600 ring-gray-200 hover:bg-gray-50"}`}><Icon className="h-4 w-4" /><span className="leading-tight">{label}</span></button></Tip>
         ))}
       </div>}
       <div className={`relative ${compact ? "min-h-[180px]" : "min-h-[420px]"} flex-1 overflow-hidden rounded-xl bg-gray-50`}>
@@ -362,9 +364,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       </div>
       </div>
       {imp && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setImp(null)}>
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-theme-xs" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-1 text-base font-semibold text-gray-800">นำเข้า {imp.name}</div>
+        <Dialog open onOpenChange={(o) => !o && setImp(null)}>
+          <DialogContent>
+            <DialogTitle>นำเข้า {imp.name}</DialogTitle>
             {imp.f3 && <div className="mb-4 rounded-xl bg-brand-50/60 p-3 text-[13px] text-gray-700 ring-1 ring-brand-100">
               <p className="font-semibold text-brand-600">พบโครงสร้าง 3 มิติ — แยกจากรูปทรง (เส้นตั้ง = เสา · เส้นนอน = คานของระดับนั้น)</p>
               <p className="text-[12px] text-gray-500">โคนเสา (หลังฐานราก) ที่ระดับ {imp.f3.base.toFixed(2)} · เสา {imp.f3.counts.columns} ท่อน · คาน {imp.f3.counts.beams} เส้น{imp.f3.counts.sloped ? ` · เส้นเอียง ${imp.f3.counts.sloped} เส้น (ไม่ใช้)` : ""}</p>
@@ -406,8 +408,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
                 setImp(null);
               }} className={`${btn} bg-brand-500 text-[#fff] ring-brand-500`}>นำเข้า</button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
