@@ -1,6 +1,6 @@
 // 3D roof-frame DXF import on a synthetic file: plates at +4.50 (one split at a node), a ridge at +5.50, two vertical ดั้ง,
 // one hip — every line on layer 0. Expected: 2 interior plates (merged), 2 posts, 1 ridge, slope from rise / distance to the outline.
-import { parseDxf, roof3d, roof3dPatch } from "../web/src/dxfImport.js";
+import { frame3dFromDxf, parseDxf, roof3d, roof3dPatch } from "../web/src/dxfImport.js";
 
 const L = (a, b) => `0\nLINE\n8\n0\n10\n${a[0]}\n20\n${a[1]}\n30\n${a[2]}\n11\n${b[0]}\n21\n${b[1]}\n31\n${b[2]}\n`;
 const dxf = `0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n` +
@@ -19,5 +19,10 @@ const p = roof3dPatch(r, { pts: [[0, 0], [8, 0], [8, 6], [0, 6]] });
 eq("interior plates (none on the outline)", p.innerPlates.length, 2);
 eq("slope = atan(1.0 / 3.0)", p.slope, +((Math.atan(1 / 3) * 180) / Math.PI).toFixed(1));
 eq("flat drawing → null", roof3d(parseDxf(dxf.replace(/\n5\.5\n/g, "\n4.5\n")), 1), null);
+// structural frame: columns 0 → 1.5 and one running 0 → 4.5 (two storeys), beams at +1.5 only
+const F = `0\nSECTION\n2\nENTITIES\n` + L([0, 0, 0], [0, 0, 1.5]) + L([0, 0, 1.5], [0, 0, 4.5]) + L([4, 0, 0], [4, 0, 4.5]) + L([0, 0, 1.5], [4, 0, 1.5]) + `0\nENDSEC\n0\nEOF\n`;
+const f = frame3dFromDxf(parseDxf(F), 1);
+eq("frame: levels", f.floors.map((x) => x.z), [1.5, 4.5]); eq("frame: storey heights", f.floors.map((x) => x.h), [1.5, 3]);
+eq("frame: columns per storey (one line spans two)", f.floors.map((x) => x.columns.length), [2, 2]); eq("frame: beams per level", f.floors.map((x) => x.beams.length), [1, 0]);
 console.log(bad ? `${bad} FAILED` : "all ok");
 process.exit(bad ? 1 : 0);

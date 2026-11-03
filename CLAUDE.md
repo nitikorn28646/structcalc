@@ -277,3 +277,8 @@ Excel at the focused cell, Ctrl+D fills the focused column over the ticked rows 
 used by PanelTable / BeamLoadTable; ui.jsx primitives restyled shadcn-like (cards, inputs h-8, badges, buttons).
 E2E fix: the project tests now wait until the app drops ?project= (before, they could read the default example → wrong expected values;
 Ole's real result is beams 24/59, columns 19/57 with its drawing types — not looked at yet).
+DXF 3D FRAME (2026-11-03, user's real file: one layer "Beam", SketchUp export): dxfImport frame3dFromDxf — vertical lines = columns, horizontal
+lines = beams at their level, levels = column ends + beam heights above the lowest column base; floor k = columns spanning level k−1 → k
+(one line may span storeys) + beams at level k. Step 2 "นำเข้า DXF" shows the levels (tick / rename) → FramePage importFrame replaces all
+floors (slab defaults of the current floor, grid from the columns, frame.baseLevel = column base). Ole file: +1.50 35 beams, +4.50 columns
+only; analysis beams 30/30, columns 38/38, footings 19/19. Layer-role import (one floor) still below it.

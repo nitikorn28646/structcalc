@@ -171,3 +171,29 @@ export function roof3dPatch(r, roof) {
   return { ...(roof?.pts?.length >= 3 ? {} : { pts: loop.map(R3), edges: loop.map(() => ({ type: "hip" })), plates: loop.map((p, i) => ({ a: R3(p), b: R3(loop[(i + 1) % loop.length]) })) }),
     innerPlates: inner.map((x) => ({ a: R3(x.a), b: R3(x.b) })), dang: r.posts, slope, rise: +(r.ridgeZ - r.H).toFixed(2) };
 }
+
+// ── 3D structural frame (e.g. SketchUp → DXF, any layers): vertical lines = columns, horizontal lines = beams of the level they sit at.
+// Levels = column ends and beam heights above the lowest column base (= top of the footings). Floor k gets the columns that run from
+// level k−1 to level k (one vertical line may span several storeys) and the beams at level k. Same coordinates as the drawing.
+export function frame3dFromDxf(dxf, scale = 1) {
+  const segs = [];
+  for (const ents of Object.values(dxf.layers)) for (const x of ents) {
+    if (x.mesh || x.type === "INSERT" || x.type === "CIRCLE" || x.type === "POINT") continue;
+    const P = x.pts.map((p) => [p[0] * scale, p[1] * scale, (p[2] ?? 0) * scale]);
+    for (let k = 0; k + 1 < P.length; k++) segs.push([P[k], P[k + 1]]);
+  }
+  const plan = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]), r3 = (v) => +v.toFixed(3), lvKey = (z) => Math.round(z * 50) / 50;
+  const verts = segs.filter(([a, b]) => plan(a, b) < 0.02 && Math.abs(b[2] - a[2]) > 0.05).map(([a, b]) => ({ p: [r3(a[0]), r3(a[1])], z0: Math.min(a[2], b[2]), z1: Math.max(a[2], b[2]) }));
+  const horiz = segs.filter(([a, b]) => plan(a, b) >= 0.05 && Math.abs(b[2] - a[2]) < 0.02);
+  if (!verts.length) return null;
+  const base = lvKey(Math.min(...verts.map((v) => v.z0)));
+  const levels = [...new Set([...verts.flatMap((v) => [lvKey(v.z0), lvKey(v.z1)]), ...horiz.map(([a]) => lvKey(a[2]))])].filter((z) => z > base + 0.05).sort((p, q) => p - q);
+  const sloped = segs.length - verts.length - horiz.length;
+  const floors = levels.map((z, k) => {
+    const below = k ? levels[k - 1] : base;
+    const columns = verts.filter((v) => v.z0 <= below + 0.02 && v.z1 >= z - 0.02).map((v) => v.p).filter((p, i, A) => A.findIndex((q) => plan(p, q) < 0.02) === i);
+    const beams = horiz.filter(([a]) => Math.abs(lvKey(a[2]) - z) < 0.01).map(([a, b]) => ({ a: [r3(a[0]), r3(a[1])], b: [r3(b[0]), r3(b[1])], type: null }));
+    return { z, h: +(z - below).toFixed(3), columns, beams };
+  });
+  return { base, floors, counts: { columns: verts.length, beams: horiz.length, sloped } };
+}

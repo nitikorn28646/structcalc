@@ -173,7 +173,20 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const setMat = (k, v) => set("mat", { ...frame.mat, [k]: v });
   const [critMsg, setCritMsg] = useState(""), [libSel, setLibSel] = useState(null);
   const loadLib = frame.loadLib ?? DEFAULT_LOAD_LIB, libItem = loadLib.find((x) => x.id === libSel) ?? null;
-  const resolveW = (w) => resolveWall(w, frame, cur); // clear height / doors / windows as the analysis sees the wall
+  const resolveW = (w) => resolveWall(w, frame, cur);
+  // whole structure from a 3D DXF (frame3dFromDxf): one floor per chosen level, slab / load defaults of the current floor,
+  // grid from all column positions, column base level kept for the storey table; everything else of the old floors is replaced
+  const importFrame = (f3, use, names) => {
+    const tpl = fl, pick = f3.floors.map((f, k) => ({ ...f, name: names[k] })).filter((_, k) => use[k]);
+    if (!pick.length) return;
+    const u = (a) => [...new Set(a.map((v) => +v.toFixed(3)))].sort((p, q) => p - q), gaps = (v) => v.slice(1).map((x, i) => +(x - v[i]).toFixed(3));
+    const all = pick.flatMap((f) => f.columns), xs = u(all.map((p) => p[0])), ys = u(all.map((p) => p[1]));
+    const grid = xs.length > 1 && ys.length > 1 ? { x0: xs[0], y0: ys[0], dx: gaps(xs), dy: gaps(ys), sub: 1 } : tpl.grid;
+    let prev = f3.base;
+    set("floors", pick.map((f) => { const h = +(f.z - prev).toFixed(3); prev = f.z;
+      return { name: f.name, h, t: tpl.t, finish: tpl.finish, live: tpl.live, grid, columns: f.columns, beams: f.beams, panels: {}, walls: [], cants: [], stairs: [], lineLoads: [], pointLoads: [] }; }));
+    set("baseLevel", f3.base); set("colPick", {}); goFloor(0);
+  }; // clear height / doors / windows as the analysis sees the wall
   const fv = (k, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={fl[k]} step={step} onChange={(v) => setFloor({ [k]: v })} /></Field>;
   const beam = sel?.kind === "beam" ? fl.beams[sel.i] : null, col = sel?.kind === "column" ? fl.columns[sel.i] : null, panel = sel?.kind === "panel" ? an.panels.find((p) => p.key === sel.key) : null;
   const line = beam ? an.lines.find((l) => l.members.includes(sel.i)) : null;
@@ -228,7 +241,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
-  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark} resolveW={resolveW} libItem={libItem}
+  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark} resolveW={resolveW} libItem={libItem} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
   const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);

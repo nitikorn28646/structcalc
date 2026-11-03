@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { arcPolyline } from "../engine/arc.js";
 import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Hand, Magnet, MousePointer2, PanelTop, Redo2, Ruler, Undo2, Wand2, Copy } from "lucide-react";
-import { guessRole, parseDxf, toPlan } from "./dxfImport.js";
+import { frame3dFromDxf, guessRole, parseDxf, toPlan } from "./dxfImport.js";
 import { fmt } from "./beamModel.js";
 import { dist, gridAxes, round3, segCross, segDist } from "./planKit.js";
 import { GROUPS, STAIR_KINDS, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
@@ -24,7 +24,7 @@ const TOOLS = {
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, onImportFrame = null }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -215,7 +215,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             const dxf = parseDxf(await f.text()), all = Object.values(dxf.layers).flat().flatMap((x) => x.pts);
             const span = all.length ? Math.max(...all.map((p) => p[0])) - Math.min(...all.map((p) => p[0])) : 0;
             const role = (l) => ({ columns: "columns", plates: "beams", inner: "beams" }[guessRole(l)] ?? (/beam|คาน|^b\d/i.test(l) ? "beams" : "skip"));
-            setImp({ name: f.name, dxf, scale: dxf.unit ?? (span > 300 ? 0.001 : 1), roles: Object.fromEntries(Object.keys(dxf.layers).map((l) => [l, role(l)])) });
+            const scale = dxf.unit ?? (span > 300 ? 0.001 : 1), f3 = onImportFrame ? frame3dFromDxf(dxf, scale) : null; // a 3D model: storeys / columns / beams from the geometry
+            setImp({ name: f.name, dxf, scale, f3, use: f3 ? f3.floors.map(() => true) : null, names: f3 ? f3.floors.map((fl, k) => `${k === 0 && fl.h <= 2 ? "คานคอดิน" : fl.beams.length ? `ชั้น ${k + (f3.floors[0].h <= 2 ? 1 : 1)}` : "หัวเสา"} ${fl.z >= 0 ? "+" : "−"}${Math.abs(fl.z).toFixed(2)}`) : null,
+              roles: Object.fromEntries(Object.keys(dxf.layers).map((l) => [l, role(l)])) });
           }} /></label>}
         {onCopyBelow && <><button onClick={() => onCopyBelow(true)} title="แทนเสาและคานชั้นนี้ด้วยของชั้นล่าง (ย้อนกลับได้ Ctrl+Z)" className={`${btn} text-gray-600 ring-gray-300`}><Copy className="h-3.5 w-3.5" />คัดลอกชั้นล่าง</button>
           <button onClick={() => onCopyBelow(false)} title="วางเสาตรงเสาชั้นล่างทุกต้น ลบคานชั้นนี้ (เช่น ชั้นอะเส / ชั้นที่มีแต่เสา)" className={`${btn} text-gray-600 ring-gray-300`}>เฉพาะเสา</button></>}
@@ -363,6 +365,18 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setImp(null)}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-theme-xs" onClick={(e) => e.stopPropagation()}>
             <div className="mb-1 text-base font-semibold text-gray-800">นำเข้า {imp.name}</div>
+            {imp.f3 && <div className="mb-4 rounded-xl bg-brand-50/60 p-3 text-[13px] text-gray-700 ring-1 ring-brand-100">
+              <p className="font-semibold text-brand-600">พบโครงสร้าง 3 มิติ — แยกจากรูปทรง (เส้นตั้ง = เสา · เส้นนอน = คานของระดับนั้น)</p>
+              <p className="text-[12px] text-gray-500">โคนเสา (หลังฐานราก) ที่ระดับ {imp.f3.base.toFixed(2)} · เสา {imp.f3.counts.columns} ท่อน · คาน {imp.f3.counts.beams} เส้น{imp.f3.counts.sloped ? ` · เส้นเอียง ${imp.f3.counts.sloped} เส้น (ไม่ใช้)` : ""}</p>
+              <table className="mt-2 w-full text-[12px] tabular-nums"><thead><tr className="text-left text-[11px] text-gray-500"><th>ใช้</th><th>ชื่อชั้น</th><th>ระดับ</th><th>สูงชั้น</th><th>เสา</th><th>คาน</th></tr></thead>
+                <tbody>{[...imp.f3.floors.keys()].reverse().map((k) => { const fl = imp.f3.floors[k]; return <tr key={k} className="border-t border-brand-100">
+                  <td><input type="checkbox" checked={imp.use[k]} onChange={() => setImp({ ...imp, use: imp.use.map((u, j) => (j === k ? !u : u)) })} /></td>
+                  <td><input value={imp.names[k]} onChange={(e) => setImp({ ...imp, names: imp.names.map((n, j) => (j === k ? e.target.value : n)) })} className="h-7 w-full rounded border border-gray-300 bg-white px-1" /></td>
+                  <td>{fl.z.toFixed(2)}</td><td>{fl.h.toFixed(2)}</td><td>{fl.columns.length}</td><td className={fl.beams.length ? "" : "text-[#b54708]"}>{fl.beams.length || "ไม่มีคาน"}</td></tr>; })}</tbody></table>
+              <p className="mt-1 text-[11px] text-gray-500">ชั้นที่ไม่มีคาน = มีแต่หัวเสา (เช่นระดับหลังคา) วาดคานเพิ่มหรือเชื่อมหลังคาภายหลังได้ · ทุกคานเป็น type อัตโนมัติ · แทนชั้นทั้งหมดของโครงการ (ย้อนกลับได้ Ctrl+Z)</p>
+              <button onClick={() => { onImportFrame(imp.f3, imp.use, imp.names); setImp(null); setTimeout(() => setVb(fit()), 80); }} className={`${btn} mt-2 bg-brand-500 text-[#fff] ring-brand-500`}>นำเข้าโครงสร้างทั้งหลัง ({imp.use.filter(Boolean).length} ชั้น)</button>
+              <p className="mt-3 border-t border-brand-100 pt-2 text-[11px] text-gray-500">หรือนำเข้าเฉพาะชั้นนี้ตามเลเยอร์ด้านล่าง</p>
+            </div>}
             <p className="mb-3 text-[12px] text-gray-500">เลือกว่าแต่ละเลเยอร์คืออะไร · เสา = วงกลม/บล็อก/สี่เหลี่ยมเล็ก (ใช้จุดกึ่งกลาง) · คาน = เส้น · แทนที่เสาและคานของชั้นนี้ (ย้อนกลับได้ Ctrl+Z) · กริดสร้างจากตำแหน่งเสา</p>
             <label className="mb-3 flex items-center gap-2 text-[13px] text-gray-600">หน่วยในแบบ CAD
               <select value={imp.scale} onChange={(e) => setImp({ ...imp, scale: Number(e.target.value) })} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">
