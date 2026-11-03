@@ -238,3 +238,4 @@ wL²/8) | "cont" (wL²/10, deflection × 0.53) | "beam" (on an RC ring beam, spa
 around the frozen simpleBeam in roofMembers plateRun. Yasothon A-plates 453 kg → L/240 362 → cont 349 → on beam 317.
 LAYOUT 2026-11-03: step 7 plan beside the force diagram (xl), span table under it; util bars sorted worst first, readable, scroll, click
 selects; guide bar one line by default; the tool rail is hidden where only "select" exists (result steps).
+Step 9 = the one footing place (types, per column, drawings, cover); step 8 has no footing tab; inspector = summary + small 3D.

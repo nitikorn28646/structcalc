@@ -150,20 +150,23 @@ def test_new_project(browser, expected, save):
         check("new: results = expected", s1 == expected["new"], f"got {s1} expected {expected['new']}")
     page.locator("header select").select_option(index=1)  # a floor with slabs
     page.wait_for_timeout(600)
-    for sub, what in [("พื้น / บันได", "input[type=number]"), ("ฐานราก", "text=เพิ่ม type ฐานราก")]:
-        page.click(f"main button:has-text('{sub}')")
-        page.wait_for_timeout(600)
-        check(f"new: step 8 tab {sub} editable", page.locator(what).count() > 0 and not page_problems(page), ", ".join(page_problems(page)))
+    page.click("main button:has-text('พื้น / บันได')")
+    page.wait_for_timeout(600)
+    check("new: step 8 tab slabs editable", page.locator("input[type=number]").count() > 0 and not page_problems(page), ", ".join(page_problems(page)))
+    step(page, "ฐานราก")  # footing types / per column / drawings live in step 9
+    page.wait_for_timeout(600)
+    check("new: step 9 footings editable", page.locator("text=เพิ่ม type ฐานราก").count() > 0 and not page_problems(page), ", ".join(page_problems(page)))
     page.click("text=เพิ่ม type ฐานราก")
     page.locator("main table").nth(1).locator("select").first.select_option(index=1)
     page.wait_for_timeout(1500)
     check("new: footing type picked", "F1" in page.inner_text("main"), "")
     check("new: footing drawings", page.locator("main figure svg").count() > 0)
+    step(page, "ออกแบบสมาชิก")
     for sub in ["Type คาน", "Type เสา"]:
         page.click(f"main button:has-text('{sub}')")
         page.wait_for_timeout(800)
         check(f"new: {sub} section drawings", page.locator("main svg").count() > 3 and not page_problems(page), ", ".join(page_problems(page)))
-    page.click("main button:has-text('ฐานราก')")
+    step(page, "ฐานราก")
     page.wait_for_timeout(600)
     page.locator("button[title='ลบ type']").first.click()  # back to the built-in options (s1 was measured without types)
     page.wait_for_timeout(1500)

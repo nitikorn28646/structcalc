@@ -209,10 +209,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
 
   // ---- workflow layout: sub-tabs + view switch, centre (2D / 3D / split or a table page), inspector on the right, drawer, status bar
   const SUBS = { analysis: [["cont", "แรงภายในคาน"], ["colf", "แรงในเสา"], ["frame3d", "เทียบ 2 วิธี / ตั้งค่า"]], loads: [["wall", "ผนัง"], ["other", "น้ำหนักอื่น / หลังคา"], ["groups", "สรุปกลุ่มน้ำหนัก"], ["lateral", "ลม / แผ่นดินไหว / Combination"]],
-    design: [["result", "คาน"], ["cols", "เสา"], ["slabs", "พื้น / บันได"], ["types", "Type คาน"], ["ctypes", "Type เสา"], ["foot", "ฐานราก"]] };
+    design: [["result", "คาน"], ["cols", "เสา"], ["slabs", "พื้น / บันได"], ["types", "Type คาน"], ["ctypes", "Type เสา"]] };
   const subs = SUBS[step], sub = subs ? (subs.some((x) => x[0] === subState) ? subState : subs[0][0]) : null;
   const boardStep = { frame: "frame", grid: "grid", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
-  const tablePage = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs", "foot"].includes(sub)) || (step === "loads" && ["groups", "lateral"].includes(sub));
+  const tablePage = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || step === "footing" || (step === "loads" && ["groups", "lateral"].includes(sub));
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
@@ -245,7 +245,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     </div>
   ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"])}<TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
     : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol"])}<ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
-    : step === "design" && sub === "foot" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
+    : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (
       <div className="space-y-3">
       {coverBar(["coverSlab"])}
@@ -467,11 +467,14 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           {line?.res ? <ForceCharts L={line.L} fns={{ V: line.res.V, M: line.res.M }} dark={dark} height={260} animate={false} /> : <UtilBars items={boardStep === "cols" ? colsHere.map((c) => ({ label: `${cTypes[c.typeIdx]?.name} ${stackKey(c.p)}`, util: c.check.util, ok: c.ok, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length], sel: { kind: "column", i: c.i } }))
             : an.spans.map((s) => ({ label: `${s.id} ${types[s.typeIdx]?.name ?? ""}`, util: s.check.util, ok: s.ok, color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length], sel: { kind: "beam", i: s.member } }))} dark={dark} height={260} onPick={(x) => x?.sel && setSel(x.sel)} />}
         </section>
-  ) : step === "footing" ? (
-    <Card title="ฐานราก" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums">
-      {res.footings.map((f) => <p key={f.stack} className={f.ok ? "" : "text-red-600"}>{f.stack}: {fmt(f.P / 1000, 1)} ตัน → {f.kind === "spread" ? "ฐานแผ่" : `${f.n} × ${f.pile}`}{f.r ? ` · ${fmt(f.r.Bx, 2)}×${fmt(f.r.By, 2)} ม.` : ""} {f.ok ? "" : "ไม่ผ่าน"}</p>)}
+  ) : step === "footing" ? (<>
+    <Card title="สรุปฐานราก" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums">
+      <p className={res.footings.every((f) => f.ok) ? "font-semibold text-green-600" : "font-semibold text-red-600"}>ผ่าน {res.footings.filter((f) => f.ok).length}/{res.footings.length} ฐาน · แรงรวม {fmt(res.footings.reduce((a, f) => a + f.P, 0) / 1000, 1)} ตัน</p>
+      {[...new Set(res.footings.map((f) => f.type ?? "อัตโนมัติ"))].map((ty) => { const fs = res.footings.filter((f) => (f.type ?? "อัตโนมัติ") === ty), g = fs[0];
+        return <p key={ty} className="flex justify-between border-b border-gray-100 py-0.5"><span className="font-medium">{ty}</span><span>{g.kind === "spread" ? `ฐานแผ่ ${fmt(g.r?.Bx ?? 0, 2)}×${fmt(g.r?.By ?? 0, 2)}` : `${g.n} × ${g.pile}`}</span><span>{fs.length} ฐาน</span></p>; })}
     </div></Card>
-  ) : <Card title="ชั้นและน้ำหนัก" icon={Layers}>
+    <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-[300px] overflow-hidden rounded-xl border border-gray-200" />
+  </>  ) : <Card title="ชั้นและน้ำหนัก" icon={Layers}>
           <div className="grid grid-cols-2 gap-3">
             <Field label="ชื่อชั้น"><input value={fl.name} onChange={(e) => setFloor({ name: e.target.value })} className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm" /></Field>
             {fv("h", "ความสูงเสาใต้ชั้นนี้", "m", "0.1")}{fv("t", "พื้นหนา", "m", "0.01")}{fv("finish", "วัสดุปูผิว", "kg/m²", "10")}{fv("live", "น้ำหนักจร", "kg/m²", "50")}
