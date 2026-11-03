@@ -5,7 +5,7 @@ import { CircleDot, Columns3, Eraser, FileUp, GitCommitHorizontal, Hand, Magnet,
 import { fmt } from "./beamModel.js";
 import { autoInnerPlates } from "../engine/roofMembers.js";
 import { LINE_COLORS } from "./Roof3D.jsx";
-import { guessRole, parseDxf, toPlan } from "./dxfImport.js";
+import { guessRole, parseDxf, roof3d, roof3dPatch, toPlan } from "./dxfImport.js";
 
 const TOOLS = [
   ["select", "เลือก/ย้าย", MousePointer2, "คลิกเลือกเพื่อแก้ตัวเลข · ลากมุมผนัง เสา ดั้ง เพื่อย้าย · คลิกเส้นก่อนแล้วลากปลายเส้น · ลากพื้นที่ว่างเพื่อเลื่อนภาพ · หมุนล้อเมาส์เพื่อซูม"],
@@ -43,13 +43,14 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
   const ridgeSegs = (g?.lines ?? []).filter((l) => l.type === "ridge" || l.type === "hip" || l.type === "valley").map((l) => [[l.p[0], l.p[1]], [l.q[0], l.q[1]], "แนวอกไก่/ตะเข้"]);
   // view box in model metres (y up): fit the eave once, then free pan / zoom
   const fit = () => {
-    const P = g?.eave ?? roof.pts, xs = P.map((p) => p[0]), ys = P.map((p) => p[1]), pad = 2;
+    const P = g?.eave ?? (roof.pts?.length ? roof.pts : [[0, 0], [12, 10]]), xs = P.map((p) => p[0]), ys = P.map((p) => p[1]), pad = 2;
     const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad;
     return { x: x0, y: y0, w: Math.max(...xs) - x0 + pad, h: Math.max(...ys) - y0 + pad };
   };
   const [vb, setVb] = useState(fit);
   // structural grid (STAAD-style): axis spacings → grid lines A, B, … / 1, 2, …, optional subdivision of every bay
-  const G = roof.grid ?? autoGrid(roof.pts), nsub = G.sub || 1;
+  // an empty roof (new project) gets a 12 × 10 m working area until walls are drawn / imported
+  const G = roof.grid ?? (roof.pts?.length >= 3 ? autoGrid(roof.pts) : { x0: 0, y0: 0, dx: [4, 4, 4], dy: [5, 5], sub: 1 }), nsub = G.sub || 1;
   const axis = (o, ds) => ds.reduce((a, d) => [...a, +(a[a.length - 1] + d).toFixed(4)], [o]);
   const GX = axis(G.x0, G.dx), GY = axis(G.y0, G.dy);
   const subdiv = (P) => P.flatMap((v, i) => (i ? Array.from({ length: nsub }, (_, k) => +(P[i - 1] + ((v - P[i - 1]) * (k + 1)) / nsub).toFixed(4)) : [v]));
@@ -382,7 +383,8 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
                 if (!f) return;
                 const dxf = parseDxf(await f.text()), all = Object.values(dxf.layers).flat().flatMap((x) => x.pts);
                 const span = all.length ? Math.max(...all.map((p) => p[0])) - Math.min(...all.map((p) => p[0])) : 0;
-                setImp({ name: f.name, dxf, scale: dxf.unit ?? (span > 300 ? 0.001 : 1), roles: Object.fromEntries(Object.keys(dxf.layers).map((l) => [l, guessRole(l)])) });
+                const scale = dxf.unit ?? (span > 300 ? 0.001 : 1), r3 = roof3d(dxf, scale); // a 3D roof frame (e.g. SketchUp) is read by its levels, not its layers
+                setImp({ name: f.name, dxf, scale, r3, useSlope: true, roles: Object.fromEntries(Object.keys(dxf.layers).map((l) => [l, guessRole(l)])) });
               }} />
             </label>
             <p className="mt-1 text-[11px] text-gray-400">วาดใน AutoCAD แยกเลเยอร์ ผนัง / เสา / อะเส / อะเสรับดั้ง แล้ว Save As DXF</p>
@@ -467,6 +469,19 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setImp(null)}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-theme-xs" onClick={(e) => e.stopPropagation()}>
             <div className="mb-1 text-base font-semibold text-gray-800">นำเข้า {imp.name}</div>
+            {imp.r3 && (() => { const p3 = roof3dPatch(imp.r3, roof), c = imp.r3.counts; return (
+              <div className="mb-4 rounded-xl bg-brand-50/60 p-3 text-[13px] text-gray-700 ring-1 ring-brand-100">
+                <p className="font-semibold text-brand-600">พบโครงหลังคา 3 มิติ (แยกจากระดับความสูง ไม่ต้องแยกเลเยอร์)</p>
+                <ul className="mt-1 list-disc pl-5 text-[12px] tabular-nums">
+                  <li>ระดับอะเส +{imp.r3.H.toFixed(2)} · อกไก่ +{imp.r3.ridgeZ.toFixed(2)} (สูง {p3?.rise} ม.){p3?.slope ? ` → ความชันประมาณ ${p3.slope}°` : ""}</li>
+                  <li>อะเสรับดั้ง {p3?.innerPlates.length ?? 0} เส้น (เส้นที่ระดับอะเสซึ่งไม่อยู่บนขอบหลังคา) · ดั้ง {c.posts} ต้น (เส้นตั้ง) · อกไก่ {c.ridges} เส้น (ใช้หาความชัน)</li>
+                  <li>{roof.pts?.length >= 3 ? "คงขอบหลังคา / เสา / อะเสรอบนอกเดิม (จากโครงสร้าง) · พิกัดตามแบบ ไม่เลื่อน" : "ยังไม่มีขอบหลังคา → ใช้วงนอกของเส้นระดับอะเสเป็นขอบ"}</li>
+                  {c.sloped > 0 && <li>เส้นเอียง {c.sloped} เส้น (ตะเข้ / จันทัน) — โปรแกรมสร้างใหม่จากรูปทรง</li>}
+                </ul>
+                <label className="mt-2 flex items-center gap-2 text-[12px]"><input type="checkbox" checked={imp.useSlope} onChange={(e) => setImp({ ...imp, useSlope: e.target.checked })} />ใช้ความชันจากไฟล์{p3?.slope ? ` (${p3.slope}°)` : ""}</label>
+                <button disabled={!p3} onClick={() => { const { rise, slope, ...patch } = p3; commit({ ...patch, ...(imp.useSlope && slope ? { slope } : {}) }); setImp(null); setTimeout(() => setVb(fit()), 50); }}
+                  className={`${btn} mt-2 bg-brand-500 text-[#fff] ring-brand-500`}>นำเข้าโครงหลังคา 3 มิติ</button>
+              </div>); })()}
             <p className="mb-3 text-[12px] text-gray-500">เลือกว่าแต่ละเลเยอร์คืออะไร · ข้อมูลชั้นที่เลือกจะแทนที่ของเดิม (ย้อนกลับได้ด้วย Ctrl+Z)</p>
             <label className="mb-3 flex items-center gap-2 text-[13px] text-gray-600">หน่วยในแบบ CAD
               <select value={imp.scale} onChange={(e) => setImp({ ...imp, scale: Number(e.target.value) })} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">

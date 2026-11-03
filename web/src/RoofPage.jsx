@@ -41,8 +41,12 @@ export function useSkeleton() {
   return fn;
 }
 
+// a new project starts with no roof (user: a sample roof appeared from nowhere) — outline from the structure, DXF or drawing
+export const EMPTY_ROOF = { ...DEFAULT_ROOF, pts: [], edges: [], columns: [], plates: [], innerPlates: [], dang: null, supports: null, grid: null };
+
 export function runRoof(roof, sk) {
   if (!sk) return {};
+  if (!(roof?.pts?.length >= 3)) return { empty: true };
   try { const g = roofGeometry(roof, sk); const fr = frameRoof(g, roof, roof.supports); return { g, fr, dz: designRoof(g, fr, roof, roof.design) }; } catch (e) { return { error: e.message }; }
 }
 
@@ -332,7 +336,7 @@ function SlopeFrom({ roof, g, set }) {
 }
 
 export function RoofPage({ roof, set, dark, onFromFrame = null }) {
-  const sk = useSkeleton(), { g, fr, dz, error } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|loads|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
+  const sk = useSkeleton(), { g, fr, dz, error, empty } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|loads|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
   const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz);
   const modeBar = (
     <span className="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
@@ -433,7 +437,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null }) {
             className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50"><Download className="h-3.5 w-3.5" />DXF</button>
           {modeBar}</span></span>}>
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : !g ? <p className="text-sm text-gray-400">กำลังโหลดตัวคำนวณรูปทรงหลังคา…</p> : (
+        {error ? <p className="text-sm text-red-600">{error}</p> : empty ? <p className="text-sm text-gray-500">ยังไม่มีหลังคา — ไปแท็บ "1 วาดแปลน" แล้วกด "ใช้แปลนจากโครงสร้าง" (แนะนำ), นำเข้า DXF หรือวาดผนังเอง</p> : !g ? <p className="text-sm text-gray-400">กำลังโหลดตัวคำนวณรูปทรงหลังคา…</p> : (
           mode === "plate" ? (
             <div className="flex h-full min-h-0 flex-col gap-2">
               <div className="min-h-[300px] flex-[3] rounded-xl bg-gray-50 p-2"><PlatePlan g={g} plates={pl.plates} posts={fr?.posts} loose={dz?.loose}columns={roof.columns?.length ? roof.columns : null} hover={hover} setHover={setHover} dark={dark} /></div>

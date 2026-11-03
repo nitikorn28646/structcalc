@@ -18,7 +18,7 @@ import BeamCage3D from "./BeamCage3D.jsx";
 import { DEFAULT_SLAB, SlabPage, SlabReport } from "./SlabPage.jsx";
 import { ColumnPage, ColumnReport, DEFAULT_COLUMN } from "./ColumnPage.jsx";
 import { DEFAULT_STAIR, StairPage, StairReport } from "./StairPage.jsx";
-import { DEFAULT_ROOF, RoofPage } from "./RoofPage.jsx";
+import { DEFAULT_ROOF, EMPTY_ROOF, RoofPage } from "./RoofPage.jsx";
 import { RoofReport } from "./RoofReport.jsx";
 import { DEFAULT_FOOTING, FootingPage, FootingReport } from "./FootingPage.jsx";
 import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
@@ -236,8 +236,8 @@ export default function App() {
     try {
       const s = JSON.parse(localStorage.getItem("structcalc.roof"));
       if (s?.pts) return mergeRoof(s);
-    } catch { /* unavailable or corrupt: start from the example */ }
-    return DEFAULT_ROOF;
+    } catch { /* unavailable or corrupt: start empty */ }
+    return EMPTY_ROOF;
   });
   // saved on edits only (an effect would also re-save a stale copy whenever another tab hot-reloads)
   // beam & column framing: kept in this browser like the roof
@@ -355,8 +355,8 @@ export default function App() {
     const empty = applyStandard({ ...DEFAULT_FRAME, cur: 0, colPick: {}, lateral: undefined, roofLink: undefined, roofPoints: [],
       floors: DEFAULT_FRAME.floors.map((f) => ({ ...f, columns: [], beams: [], walls: [], panels: {}, cants: [], stairs: [], lineLoads: [], pointLoads: [] })) }); // the engineer's saved standard, if any
     hist.current = { undo: [], redo: [], t: 0 };
-    replaceSt({ ...DEFAULT_STATE }); setFrameState(empty); setRoofState(DEFAULT_ROOF);
-    try { localStorage.setItem("structcalc.frame", JSON.stringify(empty)); localStorage.setItem("structcalc.roof", JSON.stringify(DEFAULT_ROOF)); } catch { /* ignore */ }
+    replaceSt({ ...DEFAULT_STATE }); setFrameState(empty); setRoofState(EMPTY_ROOF);
+    try { localStorage.setItem("structcalc.frame", JSON.stringify(empty)); localStorage.setItem("structcalc.roof", JSON.stringify(EMPTY_ROOF)); } catch { /* ignore */ }
     fileRef.current = null; setFileName(null); setDirty(false); setAskNew(false); setStep("project");
     setNotice({ ok: true, text: "เริ่มโครงการใหม่แล้ว — ใส่ข้อมูลโครงการ แล้วไปขั้น 1 กริด / ระดับชั้น" });
   };

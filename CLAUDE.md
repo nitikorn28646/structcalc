@@ -263,3 +263,11 @@ height = storey above − depth of the beam above, 0.40 when that beam is auto),
 true thickness with door swings / window lines, line loads with arrows. Load library `frame.loadLib` (DEFAULT_LOAD_LIB; line / point / area,
 in the saved standard): pick an item then draw with ราว/น้ำหนักเส้น, น้ำหนักจุด or the new tool "เพิ่มบนพื้น" (panel extra + extraItems).
 `node cli/wall-check.mjs`. Bottom drawer removed: tables / warnings open on demand as a right side panel from the tab rail at the far right.
+DXF 3D ROOF (2026-11-03, user's SketchUp export, all on layer 0): parseDxf keeps z (30/31) and skips polyface faces; roof3d(dxf, scale)
+classifies by level — horizontal lines at the plate level (the lowest level with ≥ 20 % of the horizontal length) = plates (collinear
+pieces merged), vertical lines = ดั้ง, higher horizontal lines = ridges, sloped = hips (rebuilt); roof3dPatch(r, roof) keeps an existing
+outline (from the structure; same coordinates, no shift) → innerPlates + dang + slope (median rise / distance ridge → outline); no outline →
+outer loop of the plate lines. Roof DXF modal shows the 3D summary + "นำเข้าโครงหลังคา 3 มิติ". `node cli/dxf3d-check.mjs`.
+Ole file: 16 interior plates, 18 ดั้ง, slope 29.4°, roof design passes (1 real warning: ดั้ง at (5.00, 3.20) on a plate end with no support).
+New project / first run = EMPTY_ROOF (no sample roof); runRoof returns { empty } and the roof page says how to start. Test files
+web/public/projects/_* are git-ignored (any extension).
