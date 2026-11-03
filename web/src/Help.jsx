@@ -1,5 +1,6 @@
 // In-app help: a short guide bar per workflow step (collapsible, remembered per browser) and a first-run tour of the
 // whole workflow with a link to the example house. Text only — no engine knowledge here.
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
 import { BookOpen, ChevronDown, ChevronUp, HelpCircle, X } from "lucide-react";
 
@@ -64,14 +65,13 @@ export function StepGuide({ step, index }) {
   );
 }
 
-// overview of the whole workflow; shown on the first visit and from the ? button
+// overview of the whole workflow (shadcn Dialog); shown on the first visit and from the ? button
 export function Tour({ steps, onClose, onGo }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center gap-2"><HelpCircle className="h-5 w-5 text-brand-500" />
-          <h2 className="text-lg font-semibold text-gray-800">วิธีใช้ StructCalc</h2>
-          <button onClick={onClose} className="ml-auto text-gray-400 hover:text-gray-600" title="ปิด"><X className="h-5 w-5" /></button></div>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent wide>
+        <div className="flex items-center gap-2"><HelpCircle className="h-5 w-5 text-brand-500" />
+          <DialogTitle className="text-lg">วิธีใช้ StructCalc</DialogTitle></div>
         <p className="mb-4 text-sm text-gray-600">ทำตามขั้นที่แถบซ้ายจากบนลงล่าง: สร้างโมเดลจากชั้นล่างขึ้นบน โปรแกรมคำนวณจากบนลงล่าง (หลังคา → คาน → เสา → ฐานราก) ให้เองทุกครั้งที่แก้ข้อมูล
           ทุกขั้นมีแถบ "วิธีใช้" ใต้หัวจอ และชี้เมาส์ที่เครื่องมือวาดเพื่อดูคำอธิบาย</p>
         <ol className="grid gap-2 text-[13px] md:grid-cols-2">
@@ -85,8 +85,8 @@ export function Tour({ steps, onClose, onGo }) {
           <button onClick={() => onGo("project")} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">เริ่มโครงการของฉัน</button>
         </div>
         <p className="mt-3 text-[11px] text-gray-400">ตัวอย่างจะแทนข้อมูลที่เปิดอยู่ — บันทึกโครงการของคุณก่อน (ปุ่ม "บันทึกโครงการ")</p>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

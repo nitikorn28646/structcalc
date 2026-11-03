@@ -1,49 +1,43 @@
 ﻿import { Component } from "react";
-// Small UI primitives in the shadcn/ui visual language (neutral borders, 6–8 px radius, small type, focus rings), Tailwind only.
+import { Card as UiCard, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input, inputClass } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge as UiBadge } from "@/components/ui/badge";
+import { Button as UiButton } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+// App primitives built on the shadcn/ui components (src/components/ui): same props as before, so every page uses shadcn.
 export function Card({ title, icon: Icon, children, className = "", bodyClass = "" }) {
   return (
-    <section className={`rounded-xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`}>
-      {title && (
-        <header className="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 text-[13px] font-semibold tracking-tight text-gray-800">
-          {Icon && <Icon className="h-4 w-4 shrink-0 text-gray-400" />}
-          {title}
-        </header>
-      )}
-      <div className={`px-4 pt-3 pb-4 ${bodyClass}`}>{children}</div>
-    </section>
+    <UiCard className={className}>
+      {title && <CardHeader>{Icon && <Icon className="h-4 w-4 shrink-0 text-gray-400" />}<CardTitle className="flex-1">{title}</CardTitle></CardHeader>}
+      <CardContent className={bodyClass}>{children}</CardContent>
+    </UiCard>
   );
 }
 
-export const inputCls =
-  "h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-[13px] text-gray-800 shadow-[0_1px_2px_rgba(16,24,40,0.04)] outline-none transition-colors " +
-  "placeholder:text-gray-400 hover:border-gray-300 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 tabular-nums";
+export const inputCls = inputClass;
 
 export function Field({ label, unit, children }) {
   return (
-    <label className="block">
-      <span className="mb-1 flex justify-between text-[11px] font-medium text-gray-500">
-        <span>{label}</span>
-        {unit && <span className="font-normal text-gray-400">{unit}</span>}
-      </span>
+    <Label className="block">
+      <span className="mb-1 flex justify-between"><span>{label}</span>{unit && <span className="font-normal text-gray-400">{unit}</span>}</span>
       {children}
-    </label>
+    </Label>
   );
 }
 
 export function NumberInput({ value, onChange, step = "any", min, className = "", placeholder }) {
-  return (
-    <input type="number" className={`${inputCls} ${className}`} value={value} step={step} min={min} placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))} />
-  );
+  return <Input type="number" className={className} value={value} step={step} min={min} placeholder={placeholder} onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))} />;
 }
 
 export function TextInput({ value, onChange }) {
-  return <input className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} />;
+  return <Input value={value} onChange={(e) => onChange(e.target.value)} />;
 }
 
+// native select (keyboard / mobile friendly, testable) in the shadcn input style
 export function Select({ value, onChange, options, className = "" }) {
   return (
-    <select className={`${inputCls} ${className}`} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select className={cn(inputClass, "pr-7", className)} value={value} onChange={(e) => onChange(e.target.value)}>
       {options.map((o) => {
         const [v, l] = Array.isArray(o) ? o : [o, o];
         return <option key={v} value={v}>{l}</option>;
@@ -53,20 +47,11 @@ export function Select({ value, onChange, options, className = "" }) {
 }
 
 export function Badge({ ok, children }) {
-  const cls = ok ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700";
-  return <span className={`inline-flex items-center rounded-md border px-1.5 py-px text-[11px] font-semibold ${cls}`}>{children ?? (ok ? "OK" : "NG")}</span>;
+  return <UiBadge variant={ok ? "ok" : "ng"}>{children ?? (ok ? "OK" : "NG")}</UiBadge>;
 }
 
 export function Button({ children, onClick, variant = "primary", icon: Icon, title }) {
-  const cls = variant === "primary"
-    ? "bg-brand-500 text-[#fff] shadow-theme-xs hover:bg-brand-600"
-    : "bg-white text-gray-700 border border-gray-200 shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:bg-gray-50";
-  return (
-    <button onClick={onClick} title={title} className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors ${cls}`}>
-      {Icon && <Icon className="h-4 w-4" />}
-      {children}
-    </button>
-  );
+  return <UiButton onClick={onClick} title={title} variant={variant === "primary" ? "default" : "outline"}>{Icon && <Icon />}{children}</UiButton>;
 }
 
 

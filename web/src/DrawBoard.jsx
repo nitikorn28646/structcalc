@@ -6,6 +6,7 @@ import { fmt } from "./beamModel.js";
 import { autoInnerPlates } from "../engine/roofMembers.js";
 import { LINE_COLORS } from "./Roof3D.jsx";
 import { guessRole, parseDxf, roof3d, roof3dPatch, toPlan } from "./dxfImport.js";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const TOOLS = [
   ["select", "เลือก/ย้าย", MousePointer2, "คลิกเลือกเพื่อแก้ตัวเลข · ลากมุมผนัง เสา ดั้ง เพื่อย้าย · คลิกเส้นก่อนแล้วลากปลายเส้น · ลากพื้นที่ว่างเพื่อเลื่อนภาพ · หมุนล้อเมาส์เพื่อซูม"],
@@ -466,9 +467,9 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
         </div>
       </div>
       {imp && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setImp(null)}>
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-theme-xs" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-1 text-base font-semibold text-gray-800">นำเข้า {imp.name}</div>
+        <Dialog open onOpenChange={(o) => !o && setImp(null)}>
+          <DialogContent>
+            <DialogTitle>นำเข้า {imp.name}</DialogTitle>
             {imp.r3 && (() => { const p3 = roof3dPatch(imp.r3, roof), c = imp.r3.counts; return (
               <div className="mb-4 rounded-xl bg-brand-50/60 p-3 text-[13px] text-gray-700 ring-1 ring-brand-100">
                 <p className="font-semibold text-brand-600">พบโครงหลังคา 3 มิติ (แยกจากระดับความสูง ไม่ต้องแยกเลเยอร์)</p>
@@ -512,8 +513,8 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
                 commit(patch); setImp(null); setTimeout(() => setVb(fit()), 50);
               }} className={`${btn} bg-brand-500 text-[#fff] ring-brand-500`}>นำเข้า</button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </main>
   );
