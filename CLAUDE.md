@@ -239,3 +239,20 @@ around the frozen simpleBeam in roofMembers plateRun. Yasothon A-plates 453 kg �
 LAYOUT 2026-11-03: step 7 plan beside the force diagram (xl), span table under it; util bars sorted worst first, readable, scroll, click
 selects; guide bar one line by default; the tool rail is hidden where only "select" exists (result steps).
 Step 9 = the one footing place (types, per column, drawings, cover); step 8 has no footing tab; inspector = summary + small 3D.
+BIG PASS 2026-11-03 (user's 6 points, "do it all at once"):
+1. Roof → structure: roofPoints(roof, host floor) — a roof bearing point within 0.30 m of a column of the linked floor goes to that column,
+   else within 0.30 m of a beam → point load on the beam (projected; the roof plan is drawn at wall faces, the frame at centres); only
+   points with neither → nearest column (warning with the fix). RoofLinkCard lists every point (where it goes, snap distance) with
+   "เพิ่มคานรับ" (carrierBeam: X/Y secondary beam between the nearest beams) / "เพิ่มเสา" per point or for all.
+2. Roof tabs: 1 วาดแปลน · 2 รูปทรง · 3 น้ำหนัก/วัสดุมุง (LoadInputs + load summary) · 4 โครงหลังคา · 5 ออกแบบเหล็ก · 6 อะเส (`?roof=loads`).
+3. Step 1 StoreyTable (src/StoreyTable.jsx): levels by elevation, storey heights computed, column base row (`frame.baseLevel`, display
+   only), names with +x.xx follow the level, elevation figure. Beam bars: floor.js barLayers (clear spacing max(mat.barClear 2.5, db);
+   overflow → next layer) used by checkSpan, type figures and the report. Yasothon 11-2 (B9, 5 top bars on b 0.20) now NG — baseline re-saved.
+4. Bulk tables in the bottom drawer: step 3 "แผ่นพื้นทั้งชั้น" (PanelTable: tick rows, set kind / t / finish / live / extra at once,
+   inline cells), step 6 walls "ผนัง / น้ำหนักบนคาน" (BeamLoadTable: wall type + height + opening or a line load on all ticked beams).
+5. Step 0 DesignCriteria: f'c per member (mat.fcBeam/fcCol/fcSlab/fcFoot), F, fc cap, fy/fys, Es, covers, barClear, beam deflection
+   limits (mat.deflTotal/deflLive), soil qa/γ, footing limit, base fixity, beam/column methods; "บันทึกเป็นค่ามาตรฐานของฉัน" →
+   localStorage structcalc.standard (also types, wall types, pile loads), applied to every new project (App newProject → applyStandard).
+6. Step 4 stairs: StairInputs (inspector: type, direction, geometry from the storey height, loads with occupancy presets, main bar) +
+   StairDetail beside the board (dimensioned side section, code checks riser ≤ 0.20, tread ≥ 0.22, width ≥ 0.80, 2R+T 0.60–0.65,
+   opening long enough, load table, WSD design of the waist slab via slabDesign).

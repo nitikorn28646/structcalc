@@ -4,7 +4,7 @@ import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { beamSectionModel, columnSectionModel, framePlanModel } from "./drawings.js";
 import { SLAB_BARS } from "../engine/tables.js";
-import { CONC, DEFAULT_WALL_TYPES, GROUPS, STAIR_KINDS, faceBars, parseBars, wallsOf } from "../engine/floor.js";
+import { CONC, DEFAULT_WALL_TYPES, GROUPS, STAIR_KINDS, barLayers, faceBars, parseBars, wallsOf } from "../engine/floor.js";
 import { designSlabs } from "../engine/slabDesign.js";
 import { analyzeFrame } from "../engine/frame.js";
 import { arcGeom } from "../engine/arc.js";
@@ -211,7 +211,7 @@ export function FrameReport({ frame, project }) {
           <p className="mt-3 font-semibold text-gray-800">รูปตัดเหล็กเสริมคาน (ซ้าย: ช่วงหัวเสา · ขวา: ช่วงกลางคาน)</p>
           <div className="grid grid-cols-4 gap-2">
             {types.filter((_, i) => spans.some((sp) => sp.typeIdx === i)).flatMap((t) => {
-              const L = (main, special) => [{ ...(parseBars(main) ? { main: parseBars(main) } : {}), ...(parseBars(special) ? { special: parseBars(special) } : {}) }, {}, {}];
+              const L = (main, special) => barLayers(t.b, mat, t.st, parseBars(main), parseBars(special));
               return [["หัวเสา", L(t.top, t.topX), L(t.bot)], ["กลางคาน", L(t.top), L(t.bot, t.botX)]].map(([where, top, bottom]) => (
                 <Figure key={`${t.name}${where}`} caption={`${t.name} ${where} · ${t.st} @${fmt(where === "หัวเสา" ? t.sSup : t.sMid, 2)}`}>
                   <Drawing model={beamSectionModel({ b: t.b, h: t.h, cover: mat.cover, stirrupBar: t.st, top, bottom })} className="mx-auto h-[38mm]" fontSize={8} width={150} />

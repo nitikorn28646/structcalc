@@ -1,6 +1,10 @@
 // Beam & column framing (P1: one floor): draw columns / beams on a grid, slab panels and loads, continuous beams, beam types.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColumnChart, LineDiagram, SlabStrip } from "./ReportDiagrams.jsx";
+import { StoreyTable } from "./StoreyTable.jsx";
+import { StairDetail, StairInputs } from "./StairPanel.jsx";
+import { DesignCriteria } from "./DesignCriteria.jsx";
+import { BeamLoadTable, PanelTable } from "./BulkTables.jsx";
 import { arcGeom, quarterSagitta } from "../engine/arc.js";
 import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
@@ -164,6 +168,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const goFloor = (i) => { set("cur", i); setSel(null); };
   const colsHere = res.columns.filter((c) => c.floor === cur), colAt = (i) => colsHere.find((c) => c.i === i);
   const setMat = (k, v) => set("mat", { ...frame.mat, [k]: v });
+  const [critMsg, setCritMsg] = useState("");
   const fv = (k, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={fl[k]} step={step} onChange={(v) => setFloor({ [k]: v })} /></Field>;
   const beam = sel?.kind === "beam" ? fl.beams[sel.i] : null, col = sel?.kind === "column" ? fl.columns[sel.i] : null, panel = sel?.kind === "panel" ? an.panels.find((p) => p.key === sel.key) : null;
   const line = beam ? an.lines.find((l) => l.members.includes(sel.i)) : null;
@@ -213,6 +218,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const subs = SUBS[step], sub = subs ? (subs.some((x) => x[0] === subState) ? subState : subs[0][0]) : null;
   const boardStep = { frame: "frame", grid: "grid", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
   const tablePage = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || step === "footing" || (step === "loads" && ["groups", "lateral"].includes(sub));
+  // bulk tables: slab panels (step 3) and beam walls / line loads (step 6 walls)
+  const bulkTab = step === "slab" ? ["panels", `แผ่นพื้นทั้งชั้น (${an.panels.length})`] : step === "loads" && sub === "wall" ? ["bwalls", `ผนัง / น้ำหนักบนคาน (${fl.beams.length})`] : null;
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
@@ -220,20 +227,15 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
   const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
-  const coverBar = (keys) => <div className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]"><span className="pb-2 text-xs font-medium text-gray-500">คอนกรีตหุ้ม</span>{coverFields.filter((_, i) => keys.includes(COVERS[i][0]))}</div>;
+  const coverBar = (keys, extra = null) => <div className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]"><span className="pb-2 text-xs font-medium text-gray-500">คอนกรีตหุ้ม</span>{coverFields.filter((_, i) => keys.includes(COVERS[i][0]))}{extra}</div>;
+  // minimum clear spacing between beam bars: bars that do not fit in a layer go to the next layer (design + drawings)
+  const clearField = <><Field label="ระยะห่างเหล็กคานขั้นต่ำ (ช่องว่าง)" unit="cm"><NumberInput value={frame.mat.barClear ?? 2.5} step="0.5" onChange={(v) => setMat("barClear", v)} /></Field>
+    <span className="pb-2 text-[11px] text-gray-400">ใช้ค่ามากกว่าระหว่างค่านี้กับขนาดเหล็ก · เกินความกว้างคาน → ขึ้นชั้นที่ 2 (ห่างชั้น 2.5 ซม.)</span></>;
   const slabRows = step === "design" && sub === "slabs" ? designSlabs(an, fl, frame.mat) : [];
   const page = step === "project" ? (
-    <div className="grid max-w-4xl gap-4 md:grid-cols-2">
-      <Card title="วัสดุ" icon={Building2}>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="f'c" unit="ksc"><NumberInput value={frame.mat.fcPrime} step="10" onChange={(v) => setMat("fcPrime", v)} /></Field>
-            <Field label="เหล็กยืน"><Select value={frame.mat.fy} onChange={(v) => setMat("fy", Number(v))} options={Object.entries(GRADES).map(([k, g]) => [k, g])} /></Field>
-          </div>
-          <div className="mt-3 text-xs font-medium text-gray-500">ระยะคอนกรีตหุ้มเหล็ก (ถึงผิวเหล็กปลอก / เหล็กนอกสุด)</div>
-          <div className="mt-1 grid grid-cols-2 gap-3">
-            {coverFields}
-          </div>
-        </Card>
+    <div className="grid max-w-6xl gap-4 xl:grid-cols-[1.3fr_1fr]">
+      <DesignCriteria frame={frame} set={set} setMat={setMat} defaults={DEFAULT_FRAME} onNotice={setCritMsg} />
+      <div className="space-y-4">{critMsg && <p className="rounded-lg bg-green-50 px-3 py-2 text-[12px] text-green-700">{critMsg}</p>}
       <LateralChoice frame={frame} set={set} />
       <Card title="ข้อมูลโครงการและมาตรฐาน" icon={Building2}>
         <div className="space-y-2 text-[13px] text-gray-600">
@@ -242,8 +244,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <p>ลำดับงาน: สร้างจากล่างขึ้นบน (ขั้น 1–6) · คำนวณจากบนลงล่าง (ขั้น 7–9) · ทุกการแก้ไขย้อนกลับได้ด้วยปุ่ม ↶ ↷ หรือ Ctrl+Z / Ctrl+Y</p>
         </div>
       </Card>
+      </div>
     </div>
-  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"])}<TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
     : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol"])}<ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (
@@ -339,21 +342,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <p className="col-span-2 rounded-lg bg-[#b54708]/10 px-2 py-1.5 text-[13px] font-semibold text-[#b54708]">{fmt(wallLoad(wall, wallTypes), 0)} กก./ม. · {r?.on.length ? `ลงคาน (แนว ${r.on.map((o) => o.line + 1).join(", ")})` : r?.panel ? `บนพื้น → กระจายลงแผ่นพื้น ${r.panel}` : r?.ground ? "บนพื้นวางบนดิน — ไม่ลงคาน" : "ไม่มีอะไรรับ"}</p>
               <button onClick={() => { setFloor({ walls: wallsOf(fl).filter((_, i) => i !== sel.i) }); setSel(null); }} className="col-span-2 text-left text-[12px] text-red-600">ลบผนังนี้</button>
             </div>); })()}
-            {stair && (() => { const L = stairLoads(stair), r = an.stairs?.[sel.i]; return (<div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2"><Field label="แบบบันได"><Select value={stair.kind ?? "long"} onChange={(v) => setList("stairs", { kind: v })} options={Object.entries(STAIR_KINDS)} /></Field></div>
-              <Field label="ทิศขึ้น"><Select value={stair.up ?? "+x"} onChange={(v) => setList("stairs", { up: v })} options={[["+x", "→ +X"], ["-x", "← −X"], ["+y", "↑ +Y"], ["-y", "↓ −Y"]]} /></Field>
-              <Field label="ท้องบันได" unit="m"><NumberInput value={stair.t ?? 0.12} step="0.01" onChange={(v) => setList("stairs", { t: v })} /></Field>
-              <Field label="ลูกตั้ง" unit="m"><NumberInput value={stair.riser ?? 0.17} step="0.005" onChange={(v) => setList("stairs", { riser: v })} /></Field>
-              <Field label="ลูกนอน" unit="m"><NumberInput value={stair.tread ?? 0.25} step="0.005" onChange={(v) => setList("stairs", { tread: v })} /></Field>
-              <Field label="ปูผิว" unit="kg/m²"><NumberInput value={stair.finish ?? 100} step="10" onChange={(v) => setList("stairs", { finish: v })} /></Field>
-              <Field label="จร" unit="kg/m²"><NumberInput value={stair.live ?? 300} step="50" onChange={(v) => setList("stairs", { live: v })} /></Field>
-              {stair.kind === "landing" && <><Field label="ชานพักยาว" unit="m"><NumberInput value={stair.landingL ?? 1.2} step="0.1" onChange={(v) => setList("stairs", { landingL: v })} /></Field>
-                <Field label="คานชานพักฝากกับ"><Select value={stair.landingTo ?? "below"} onChange={(v) => setList("stairs", { landingTo: v })} options={[["below", "คานชั้นล่าง"], ["this", "คานชั้นนี้"]]} /></Field></>}
-              {stair.kind === "cant" && <Field label="ยื่นจากด้าน"><Select value={stair.side ?? 1} onChange={(v) => setList("stairs", { side: Number(v) })} options={[[1, "ด้าน B"], [-1, "ด้าน A"]]} /></Field>}
-              <p className="col-span-2 rounded-lg bg-[#0e9384]/10 px-2 py-1.5 text-[12px] text-[#0e9384]">ช่วงขั้นบันได {fmt(L.flight.DL, 0)} + ปูผิว {fmt(L.flight.SDL, 0)} + จร {fmt(L.flight.LL, 0)} = {fmt(L.flight.DL + L.flight.SDL + L.flight.LL, 0)} กก./ม.² · มุม {fmt((L.th * 180) / Math.PI, 1)}° · รวม {fmt(((r?.total.DL ?? 0) + (r?.total.SDL ?? 0) + (r?.total.LL ?? 0)) / 1000, 2)} ตัน
-                {stair.kind === "long" || stair.kind === "landing" ? " · ปลายล่างลงคานชั้นล่าง" : ""} · แผ่นพื้นใต้บันไดถือเป็นช่องบันได</p>
-              <button onClick={() => delList("stairs")} className="col-span-2 text-left text-[12px] text-red-600">ลบบันไดนี้</button>
-            </div>); })()}
+            {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={fl.h} r0={an.stairs?.[sel.i]} />
+              <button onClick={() => delList("stairs")} className="mt-2 text-left text-[12px] text-red-600">ลบบันไดนี้</button></>}
             {lineL && (<div className="grid grid-cols-2 gap-3">
               <Field label="ชื่อ"><input value={lineL.name ?? ""} onChange={(e) => setList("lineLoads", { name: e.target.value })} className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm" /></Field>
               <Field label="น้ำหนัก" unit="kg/m"><NumberInput value={lineL.q} step="10" onChange={(v) => setList("lineLoads", { q: v })} /></Field>
@@ -419,7 +409,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           </Card>
   ) : step === "loads" && sub === "other" ? (          <Card title="น้ำหนักอื่น" icon={Ruler}>
             <div className="space-y-2 text-[12px] text-gray-500">
-              {onRoofFromFrame && <RoofLinkCard frame={frame} roof={roof} onFromFrame={onRoofFromFrame} />}
+              {onRoofFromFrame && <RoofLinkCard frame={frame} roof={roof} onFromFrame={onRoofFromFrame} set={set} />}
               <p>ราวกันตก/น้ำหนักเส้น: วาดที่ปลายพื้นยื่น (ลงคานริม + แรงบิด) บนคาน หรือบนพื้น · น้ำหนักจุด: คลิกวาง · ฝ้า/งานระบบ: แก้ที่แผ่นพื้น (ขั้น 2)</p>
               <button onClick={roofLoads} disabled={!roof?.pts} className="w-full rounded-lg px-3 py-2 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50 disabled:opacity-40">{frame.roofLink?.on ? `เชื่อมกับ ${frame.floors[frame.roofLink.floor]?.name ?? "-"} อยู่ · ย้ายมาชั้นนี้` : "เชื่อมแรงจากหลังคาลงชั้นนี้ (อัตโนมัติ)"}</button>
               {roofMsg && <p className="text-[#d6409f]">{roofMsg}</p>}
@@ -427,33 +417,14 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           </Card>
   ) : step === "stair" ? (          <Card title="บันได" icon={Ruler}><p className="text-[12px] text-gray-500">วางบันไดที่ชั้นที่ปลายบนไปถึง · วาดกรอบช่องบันได แล้วเลือกแบบ: {Object.values(STAIR_KINDS).join(" · ")} · ปลายล่างของแบบพาดตามยาว/มีชานพักลงคานชั้นล่างที่แนวเดียวกัน</p></Card>
   ) : step === "slab" ? (<>          <Card title="พื้น" icon={Ruler}><p className="text-[12px] text-gray-500">คลิกแผ่นพื้นเพื่อเลือกชนิด S หล่อในที่ / PS พื้นสำเร็จ (เลือกทิศวางแผ่น) / GS วางบนดิน หรือช่องเปิด · เครื่องมือ "พื้นยื่น" คลิกบนคานด้านที่จะยื่น · ค่าเริ่มต้นความหนา ปูผิว จร อยู่ในการ์ดชั้น</p></Card>
-    <Card title="ชั้นและน้ำหนัก" icon={Layers}>
+    <Card title={`ค่าเริ่มต้นแผ่นพื้น — ${fl.name}`} icon={Layers}>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="ชื่อชั้น"><input value={fl.name} onChange={(e) => setFloor({ name: e.target.value })} className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm" /></Field>
-            {fv("h", "ความสูงเสาใต้ชั้นนี้", "m", "0.1")}{fv("t", "พื้นหนา", "m", "0.01")}{fv("finish", "วัสดุปูผิว", "kg/m²", "10")}{fv("live", "น้ำหนักจร", "kg/m²", "50")}
+            {fv("t", "พื้นหนา", "m", "0.01")}{fv("finish", "วัสดุปูผิว", "kg/m²", "10")}{fv("live", "น้ำหนักจร", "kg/m²", "50")}
           </div>
+          <p className="mt-1 text-[11px] text-gray-400">ใช้กับทุกแผ่นที่ไม่ได้กำหนดเอง · แก้ทีละหลายแผ่นได้ในตาราง "แผ่นพื้นทั้งชั้น" ด้านล่าง</p>
         </Card></>
   ) : step === "grid" ? (<>
-    <Card title="ระดับชั้น (ล่าง → บน)" icon={Layers}>
-      <div className="space-y-1 text-[13px]">
-        {frame.floors.map((f, i) => (
-          <button key={i} onClick={() => goFloor(i)} className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 ${i === cur ? "bg-brand-50 text-brand-500" : "hover:bg-gray-50"}`}>
-            <span>{f.name}</span><span className="tabular-nums text-gray-500">เสาสูง {fmt(f.h, 2)} ม.</span></button>
-        ))}
-        <div className="flex gap-2 pt-1">
-          <button onClick={() => { set("floors", [...frame.floors.slice(0, cur + 1), { ...fl, name: `ชั้นใหม่ ${frame.floors.length + 1}` }, ...frame.floors.slice(cur + 1)]); goFloor(cur + 1); }}
-            className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่มชั้นบน (คัดลอก)</button>
-          {frame.floors.length > 1 && <button onClick={() => { set("floors", frame.floors.filter((_, i) => i !== cur)); goFloor(Math.max(0, cur - 1)); }}
-            className="inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-600 ring-1 ring-red-200 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" />ลบ</button>}
-        </div>
-      </div>
-    </Card>
-    <Card title="ชั้นและน้ำหนัก" icon={Layers}>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="ชื่อชั้น"><input value={fl.name} onChange={(e) => setFloor({ name: e.target.value })} className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm" /></Field>
-            {fv("h", "ความสูงเสาใต้ชั้นนี้", "m", "0.1")}{fv("t", "พื้นหนา", "m", "0.01")}{fv("finish", "วัสดุปูผิว", "kg/m²", "10")}{fv("live", "น้ำหนักจร", "kg/m²", "50")}
-          </div>
-        </Card>
+    <StoreyTable frame={frame} set={set} cur={cur} goFloor={goFloor} />
               <Card title="กริด (ระยะแกน ม.)" icon={Ruler}>
             <div className="space-y-2">
               {gridInput("dx", "แกน X (A, B, …)")}{gridInput("dy", "แกน Y (ล่าง → บน)")}
@@ -474,14 +445,19 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         return <p key={ty} className="flex justify-between border-b border-gray-100 py-0.5"><span className="font-medium">{ty}</span><span>{g.kind === "spread" ? `ฐานแผ่ ${fmt(g.r?.Bx ?? 0, 2)}×${fmt(g.r?.By ?? 0, 2)}` : `${g.n} × ${g.pile}`}</span><span>{fs.length} ฐาน</span></p>; })}
     </div></Card>
     <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-[300px] overflow-hidden rounded-xl border border-gray-200" />
-  </>  ) : <Card title="ชั้นและน้ำหนัก" icon={Layers}>
+  </>  ) : step === "project" ? (
+    <Card title="ภาพรวมโครงการ" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums text-gray-600">
+      {[...frame.floors.keys()].reverse().map((k) => <p key={k} className="flex justify-between border-b border-gray-100 py-0.5"><span>{frame.floors[k].name}</span><span>{frame.floors[k].columns.length} เสา · {frame.floors[k].beams.length} คาน</span></p>)}
+      <p className="pt-1 text-[11px] text-gray-400">ระดับและความสูงชั้นแก้ในขั้น 1 · น้ำหนักพื้นแก้ในขั้น 3 / ตาราง "แผ่นพื้นทั้งชั้น"</p>
+    </div></Card>
+  ) : <Card title={`ชั้น ${fl.name}`} icon={Layers}>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="ชื่อชั้น"><input value={fl.name} onChange={(e) => setFloor({ name: e.target.value })} className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm" /></Field>
-            {fv("h", "ความสูงเสาใต้ชั้นนี้", "m", "0.1")}{fv("t", "พื้นหนา", "m", "0.01")}{fv("finish", "วัสดุปูผิว", "kg/m²", "10")}{fv("live", "น้ำหนักจร", "kg/m²", "50")}
+            {fv("t", "พื้นหนา", "m", "0.01")}{fv("finish", "วัสดุปูผิว", "kg/m²", "10")}{fv("live", "น้ำหนักจร", "kg/m²", "50")}
           </div>
+          <p className="mt-1 text-[11px] text-gray-400">ค่าเริ่มต้นของแผ่นพื้นในชั้นนี้ · ระดับ / ความสูงชั้นแก้ในขั้น 1</p>
         </Card>;
   const [drawer, setDrawer] = useState(null), resultStep = ["analysis", "design", "footing"].includes(step);
-  const dTab = drawer ?? (resultStep && !(step === "analysis" && sub === "cont") ? (step === "footing" || sub === "cols" ? "cols" : "spans") : null);
+  const dTab = (drawer && (drawer === "warn" || drawer === "" || (resultStep ? drawer !== "panels" && drawer !== "bwalls" : drawer === bulkTab?.[0])) ? drawer : null) ?? (bulkTab ? bulkTab[0] : resultStep && !(step === "analysis" && sub === "cont") ? (step === "footing" || sub === "cols" ? "cols" : "spans") : null);
   const lineDiagram = showLine && (
     <div className="min-h-0 overflow-auto rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200">
       <div className="mb-1 flex flex-wrap items-center gap-2 text-[12px] text-[#344054]">
@@ -501,6 +477,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </table>
     </div>);
   const center = page ? <div className="min-h-0 flex-1 overflow-auto p-1">{page}</div>
+    : step === "stair" && stair && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,1fr)_1fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>
+      <StairDetail st={stair} i={sel.i} H={fl.h} r0={an.stairs?.[sel.i]} row={designSlabs(an, fl, frame.mat).find((x) => x.kind === "ST" && x.si === sel.i)} /></div>
     : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,2fr)_3fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>{lineDiagram}</div>
     : step === "footing" ? view3d
     : view === "3d" ? view3d : view === "split" ? <div className="grid min-h-0 flex-1 grid-cols-2 gap-3"><div className="min-h-0">{boardEl}</div>{view3d}</div> : boardEl;
@@ -515,11 +493,11 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <div className="flex min-h-0 flex-1 flex-col p-3">{center}</div>
           <div className="border-t border-gray-200 bg-white">
             <div className="flex items-center gap-1 px-3 py-1">
-              {(resultStep ? drawerTabs : drawerTabs.filter(([k]) => k === "warn")).map(([k, t]) => <button key={k} onClick={() => setDrawer(dTab === k ? "" : k)} className={`rounded-md px-2.5 py-1 text-xs font-medium ${dTab === k ? "bg-brand-50 text-brand-500" : k === "warn" && res.warnings.length ? "text-red-600" : "text-gray-500 hover:bg-gray-50"}`}>{t}</button>)}
+              {(resultStep ? drawerTabs : [...(bulkTab ? [bulkTab] : []), ...drawerTabs.filter(([k]) => k === "warn")]).map(([k, t]) => <button key={k} onClick={() => setDrawer(dTab === k ? "" : k)} className={`rounded-md px-2.5 py-1 text-xs font-medium ${dTab === k ? "bg-brand-50 text-brand-500" : k === "warn" && res.warnings.length ? "text-red-600" : "text-gray-500 hover:bg-gray-50"}`}>{t}</button>)}
               <span className="ml-auto text-[11px] text-gray-400">{dTab ? "คลิกแท็บอีกครั้งเพื่อพับ" : "ตาราง · คำเตือน"}</span>
             </div>
-            {dTab && <div className="h-[230px] overflow-auto px-3 pb-2">
-              {dTab === "spans" ?             <div className="max-h-[260px] min-h-0 flex-[2] overflow-auto text-[12px]">
+            {dTab && <div className={`${bulkTab && dTab === bulkTab[0] ? "h-[300px]" : "h-[230px]"} overflow-auto px-3 pb-2`}>
+              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} /> : dTab === "spans" ?             <div className="max-h-[260px] min-h-0 flex-[2] overflow-auto text-[12px]">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 bg-white"><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["ช่วง", "ยาว", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "ใช้", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
                 <tbody>{an.spans.map((s) => (

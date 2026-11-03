@@ -140,7 +140,7 @@ def test_new_project(browser, expected, save):
     page.click("button:has-text('ใช้แปลนจากโครงสร้าง')")
     page.wait_for_timeout(5000)
     check("new: roof from structure", "หลังคาจากแปลนโครงสร้าง" in page.inner_text("header"), page.inner_text("header")[:200])
-    card = page.locator("text=หลังคา → เสา").first.locator("xpath=..").inner_text()
+    card = page.locator("text=หลังคา → โครงสร้าง").first.locator("xpath=..").inner_text()
     check("new: roof loads reach the columns", "ตัน ลง" in card, card[:160])
     step(page, "ออกแบบสมาชิก")
     s1 = wait_status(page)

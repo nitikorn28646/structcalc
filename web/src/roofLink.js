@@ -1,7 +1,9 @@
 // Roof → structure link: wall-plate (and interior-plate / post) reactions of the roof module as point loads where they bear.
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 
-export async function roofPoints(roof) {
+// host: the linked floor of the structure { columns, beams } — a reaction where no column stands but a beam passes stays there as a
+// point load on that beam (the plate bears on the RC beam); only a point on neither goes to the nearest column (named, warned)
+export async function roofPoints(roof, host = {}) {
     const sk = await loadSkeleton(), { dz, fr, error } = runRoof(roof, sk);
     if (error || !dz) return { error: error ?? "ไม่มีข้อมูลหลังคา" };
     const pts = [], plates = dz.members.filter((x) => x.group === "plate"), cols = roof.columns ?? [];
@@ -28,18 +30,44 @@ export async function roofPoints(roof) {
       if (host) { const L = Math.hypot(host.q[0] - host.p[0], host.q[1] - host.p[1]), a = Math.hypot(q[0] - host.p[0], q[1] - host.p[1]); addAt(host.p, (P * (L - a)) / L); addAt(host.q, (P * a) / L); }
       else addAt(q, P);
     }
-    // a point where no column stands (e.g. a plate corner without a post): the load must not vanish — it goes to the nearest
-    // column and the name says so (the floor analysis lists it as a warning-free point load on that column)
-    if (cols.length) for (const x of pts.filter((x) => !cols.some((c) => near(c, x.p)))) {
-      const c = cols.reduce((a, b) => (Math.hypot(b[0] - x.p[0], b[1] - x.p[1]) < Math.hypot(a[0] - x.p[0], a[1] - x.p[1]) ? b : a));
-      x.name = `หลังคา (จาก ${x.p[0].toFixed(2)}, ${x.p[1].toFixed(2)} ไม่มีเสา → ย้ายมาเสาใกล้สุด)`; x.p = [+c[0].toFixed(3), +c[1].toFixed(3)];
+    // the roof plan and the structure are drawn separately: a bearing point a little off a column / beam (wall face vs column centre,
+    // e.g. 0.25 m) is the same support — within host.tol (default 0.30 m) it goes to that column, else onto that beam (projected)
+    const tol = host.tol ?? 0.3, fcols = host.columns?.length ? host.columns : cols, d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const onBeam = (p) => { let best = null;
+      for (const b of host.beams ?? []) { const L = Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]); if (!(L > 0)) continue;
+        const t = Math.max(0, Math.min(1, ((p[0] - b.a[0]) * (b.b[0] - b.a[0]) + (p[1] - b.a[1]) * (b.b[1] - b.a[1])) / (L * L))), q = [b.a[0] + (b.b[0] - b.a[0]) * t, b.a[1] + (b.b[1] - b.a[1]) * t];
+        if (d2(p, q) <= tol && (!best || d2(p, q) < best.d)) best = { q, d: d2(p, q) }; }
+      return best; };
+    for (const x of pts) {
+      x.at = [...x.p];
+      const c = fcols.length ? fcols.reduce((a, b) => (d2(b, x.p) < d2(a, x.p) ? b : a)) : null, bm = onBeam(x.p);
+      if (c && d2(c, x.p) <= tol) { x.to = "col"; x.snap = d2(c, x.p); x.p = [+c[0].toFixed(3), +c[1].toFixed(3)]; }
+      else if (bm) { x.to = "beam"; x.snap = bm.d; x.p = bm.q.map((v) => +v.toFixed(3)); x.name = "หลังคา (ลงคาน)"; }
+      else if (c) { x.to = "moved"; x.name = `หลังคา (จาก ${x.at[0].toFixed(2)}, ${x.at[1].toFixed(2)} ไม่มีเสา/คานใกล้ → ย้ายมาเสาใกล้สุด)`; x.p = [+c[0].toFixed(3), +c[1].toFixed(3)]; }
     }
+    // the same column / beam point reached from two nearby roof points: one load
+    for (let a = 0; a < pts.length; a++) for (let b = pts.length - 1; b > a; b--) if (d2(pts[a].p, pts[b].p) < 0.01) { pts[a].P += pts[b].P; pts.splice(b, 1); }
     return { pts: pts.map((x) => ({ ...x, P: Math.round(x.P) })), total: pts.reduce((s, x) => s + x.P, 0) };
 }
 
 // Roof plan from the structure (user: no second drawing of walls / columns): outline = the outer boundary of the slab panels of the
 // highest floor that has panels; columns = the top floor's columns; plates on every outline edge; same structural grid.
 // H (plate level) = top of the frame above the first floor. Returns a partial roof object or { error }.
+// a beam that carries a roof point with no column / beam under it: through p along X or Y (the shorter one) between the nearest
+// beams on both sides — a secondary beam, so the roof load bears where it really is
+export function carrierBeam(floor, p) {
+  const segs = (floor.beams ?? []).map((b) => [b.a, b.b]);
+  const hit = (d) => segs.reduce((best, [a, b]) => {
+    const e = [b[0] - a[0], b[1] - a[1]], den = d[0] * e[1] - d[1] * e[0];
+    if (Math.abs(den) < 1e-9) return best;
+    const w = [a[0] - p[0], a[1] - p[1]], t = (w[0] * e[1] - w[1] * e[0]) / den, u = (w[0] * d[1] - w[1] * d[0]) / den;
+    return t > 0.05 && u >= -1e-6 && u <= 1 + 1e-6 ? Math.min(best, t) : best;
+  }, Infinity);
+  const opts = [[[1, 0], [-1, 0]], [[0, 1], [0, -1]]].map(([d1, d2]) => { const t1 = hit(d1), t2 = hit(d2);
+    return { L: t1 + t2, a: [p[0] + d2[0] * t2, p[1] + d2[1] * t2], b: [p[0] + d1[0] * t1, p[1] + d1[1] * t1] }; }).filter((o) => Number.isFinite(o.L)).sort((x, y) => x.L - y.L);
+  return opts.length ? { a: opts[0].a.map((v) => +v.toFixed(3)), b: opts[0].b.map((v) => +v.toFixed(3)), type: null } : null;
+}
+
 export function roofFromFrame(frame, res) {
   const k = [...res.floors.keys()].reverse().find((i) => res.floors[i].panels?.length);
   if (k === undefined) return { error: "ยังไม่มีแผ่นพื้น — วาดเสาและคานให้เป็นห้องปิดก่อน (ขั้น 2)" };

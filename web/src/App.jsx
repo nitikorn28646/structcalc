@@ -22,6 +22,7 @@ import { DEFAULT_ROOF, RoofPage } from "./RoofPage.jsx";
 import { RoofReport } from "./RoofReport.jsx";
 import { DEFAULT_FOOTING, FootingPage, FootingReport } from "./FootingPage.jsx";
 import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
+import { applyStandard } from "./DesignCriteria.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
 import { roofFromFrame, roofPoints } from "./roofLink.js";
@@ -280,9 +281,9 @@ export default function App() {
   useEffect(() => { // roof → structure link: refresh the roof reactions (not an undo step) when the roof or the link changes
     if (!frame.roofLink?.on || !roof?.pts) return;
     let alive = true;
-    roofPoints(roof).then((r) => { if (!alive || r.error) return; setFrameState((x) => { const next = { ...x, roofPoints: r.pts }; try { localStorage.setItem("structcalc.frame", JSON.stringify(next)); } catch { /* ignore */ } return next; }); });
+    roofPoints(roof, frame.floors[frame.roofLink.floor ?? frame.floors.length - 1] ?? {}).then((r) => { if (!alive || r.error) return; setFrameState((x) => { const next = { ...x, roofPoints: r.pts }; try { localStorage.setItem("structcalc.frame", JSON.stringify(next)); } catch { /* ignore */ } return next; }); });
     return () => { alive = false; };
-  }, [roof, frame.roofLink?.on, frame.roofLink?.floor]); // the whole building, shared by every workflow step
+  }, [roof, frame.roofLink?.on, frame.roofLink?.floor, frame.floors[frame.roofLink?.floor ?? frame.floors.length - 1]?.beams, frame.floors[frame.roofLink?.floor ?? frame.floors.length - 1]?.columns]); // eslint-disable-line react-hooks/exhaustive-deps // the whole building, shared by every workflow step
   useEffect(() => {
     const k = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); (e.shiftKey ? saveAs : saveProject)(); return; } // also while typing
@@ -351,8 +352,8 @@ export default function App() {
   };
   const newProject = () => {
     snapshot();
-    const empty = { ...DEFAULT_FRAME, cur: 0, colPick: {}, lateral: undefined, roofLink: undefined, roofPoints: [],
-      floors: DEFAULT_FRAME.floors.map((f) => ({ ...f, columns: [], beams: [], walls: [], panels: {}, cants: [], stairs: [], lineLoads: [], pointLoads: [] })) };
+    const empty = applyStandard({ ...DEFAULT_FRAME, cur: 0, colPick: {}, lateral: undefined, roofLink: undefined, roofPoints: [],
+      floors: DEFAULT_FRAME.floors.map((f) => ({ ...f, columns: [], beams: [], walls: [], panels: {}, cants: [], stairs: [], lineLoads: [], pointLoads: [] })) }); // the engineer's saved standard, if any
     hist.current = { undo: [], redo: [], t: 0 };
     replaceSt({ ...DEFAULT_STATE }); setFrameState(empty); setRoofState(DEFAULT_ROOF);
     try { localStorage.setItem("structcalc.frame", JSON.stringify(empty)); localStorage.setItem("structcalc.roof", JSON.stringify(DEFAULT_ROOF)); } catch { /* ignore */ }
@@ -481,7 +482,7 @@ export default function App() {
           {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} />}
 
           <ErrorBoundary resetKey={mod}>
-          {mod === "work" ? (step === "roof" ? <div className="flex min-h-0 flex-1 flex-col"><div className="px-4 pt-3"><RoofLinkCard frame={frame} roof={roof} onFromFrame={roofFromStructure} /></div><RoofPage roof={roof} set={setRoof} dark={dark} onFromFrame={roofFromStructure} /></div> : step === "report" ? (
+          {mod === "work" ? (step === "roof" ? <div className="flex min-h-0 flex-1 flex-col"><div className="px-4 pt-3"><RoofLinkCard frame={frame} roof={roof} onFromFrame={roofFromStructure} set={setFrame} /></div><RoofPage roof={roof} set={setRoof} dark={dark} onFromFrame={roofFromStructure} /></div> : step === "report" ? (
             <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
               <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง (หลังคา → โครงสร้าง → ฐานราก) · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
               <RoofReport roof={roof} project={st.project} /><FrameReport frame={frame} project={st.project} />

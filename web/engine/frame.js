@@ -16,7 +16,7 @@ export const stackKey = (p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
 export function checkColumn(lv, P, L, mat, mom = {}) {
   const [nx, ny] = faceBars(lv.n), e = Math.max(2.5, 0.1 * Math.min(lv.Bx, lv.By)); // cm
   const ST = { L: L * 100, bx: lv.Bx, by: lv.By }, BM = { L: 400, b: 20, t: 40 }; // stiffness data only enter frame cases 3–4
-  const inp = { ...mat, cover: mat.coverCol ?? mat.cover, L, Bx: lv.Bx, By: lv.By, nx, ny, mainBar: lv.mainBar, tieBar: lv.tieBar, tieSets: 1, P: Math.max(P, 1), Mx: Math.max((Math.max(P, 1) * e) / 100, mom.Mx ?? 0), My: mom.My ?? 0,
+  const inp = { ...mat, fcPrime: mat.fcCol ?? mat.fcPrime, cover: mat.coverCol ?? mat.cover, L, Bx: lv.Bx, By: lv.By, nx, ny, mainBar: lv.mainBar, tieBar: lv.tieBar, tieSets: 1, P: Math.max(P, 1), Mx: Math.max((Math.max(P, 1) * e) / 100, mom.Mx ?? 0), My: mom.My ?? 0,
     frameCase: 2, beamTL: BM, beamTR: BM, beamBL: BM, beamBR: BM, colTop: ST, colThis: ST, colThisB: ST, colBot: ST };
   try {
     const r = tiedColumn(inp), sOk = lv.s * 100 <= r.sTie + 1e-6;
@@ -56,7 +56,7 @@ function designSpread(tt, P, pier, mat, fo, Mx, My) {
     // bar count ("6-DB 12"): the engine counts floor(B/s + 1) bars over the full width
     const tight = (x) => (sk < 1 ? Math.min(x, sk) : x); // sk 1 = the type's own spacing
     const sL = tt.nb > 1 ? (By / (tt.nb - 1)) * (1 - 1e-9) : tight(tt.s ?? 0.15), sS = tt.nbS > 1 ? (Bx / (tt.nbS - 1)) * (1 - 1e-9) : tight(tt.sS ?? tt.s ?? 0.15);
-    const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: tt.fy ?? fo.fy, cover: mat.coverFoot ?? fo.cover, t, Bx, By, Df, P, Mx, My, qa, gamma,
+    const inp = { fcPrime: mat.fcFoot ?? mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: tt.fy ?? fo.fy, cover: mat.coverFoot ?? fo.cover, t, Bx, By, Df, P, Mx, My, qa, gamma,
       pier: "rect", bx: pier.Bx / 100, by: pier.By / 100, D: 0.3, longBar: bar, shortBar: barS, sLong: sL, sShort: sS, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4 };
     try {
       // fo.utilMax: the engineer's limit on soil use (e.g. 0.9 = q ≤ 90 % of qa)
@@ -92,7 +92,7 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
       continue;
     }
     const { n, pile, s: bs, w: capWidth, bar } = tt, b = PILES[pile]?.b ?? Number(String(pile).split("-")[1]) / 100, s = Math.max(0.6, (tt.k ?? fo.spacing) * b);
-    const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: mat.coverFoot ?? fo.cover, t: tt.t ?? fo.t, Df: Math.max(tt.Df ?? fo.Df, tt.t ?? fo.t), P, Mx, My, gamma: 1800, pier: "rect",
+    const inp = { fcPrime: mat.fcFoot ?? mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: mat.coverFoot ?? fo.cover, t: tt.t ?? fo.t, Df: Math.max(tt.Df ?? fo.Df, tt.t ?? fo.t), P, Mx, My, gamma: 1800, pier: "rect",
       bx: pier.Bx / 100, by: pier.By / 100, longBar: bar, shortBar: tt.barS ?? fo.bar, sLong: bs, sShort: tt.sS ?? bs, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4, n, pile,
       pileL: tt.L ?? fo.pileL, fcPile: fo.fcPile, Ptest: safe(pile), sx: s, sy: s, capWidth };
     try {
@@ -122,7 +122,7 @@ function gravity(frame, minTypes) {
   for (let k = n - 1; k >= 0; k--) {
     // roof module reactions linked to this floor (frame.roofPoints, recomputed by the app whenever the roof changes)
     const fl = frame.roofLink?.on && frame.roofLink.floor === k ? { ...floors[k], pointLoads: [...(floors[k].pointLoads ?? []), ...(frame.roofPoints ?? [])] } : floors[k];
-    if (fl !== floors[k]) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — เพิ่มเสา / อะเสรับดั้งที่ตำแหน่งนั้นถ้าแบบมี`);
+    if (fl !== floors[k]) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — แก้: ขั้น 5 / 6 การ์ด "หลังคา → เสา" → ตารางจุดถ่ายแรง กด "เพิ่มคานรับ" หรือ "เพิ่มเสา" (หรือวาดคาน / เสาผ่านจุดนั้นในขั้น 2)`);
     // columns of the floor above with no column right under them stand on this floor's beams
     const extra = above.filter((c) => !fl.columns.some((q) => near(q, c.p))).map((c) => ({ p: c.p, P: c.Pbot, from: `เสา ${c.stack} (${floors[k + 1].name})` }));
     an[k] = analyzeFloor(fl, beamTypes, mat, extra, frame.wallTypes ?? DEFAULT_WALL_TYPES, downLines, minTypes?.[k]);

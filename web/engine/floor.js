@@ -158,7 +158,30 @@ function panelLoads(P, w, dir) {
   return { kind: "other", edges: P.map((p, i) => { const q = P[(i + 1) % n], A = Math.abs(cross(sub(p, c), sub(q, c))) / 2; return [{ s0: 0, s1: sides[i], w0: (w * A) / sides[i], w1: (w * A) / sides[i] }]; }) };
 }
 
-const layer = (main, special) => [{ ...(main ? { main } : {}), ...(special ? { special } : {}) }, {}, {}];
+// bars of one face in layers (user: keep the clear spacing between bars; what does not fit goes to the next layer):
+// per layer n ≤ floor((b − 2·cover − 2·ds + s) / (db + s)) with clear spacing s = max(mat.barClear ?? 2.5 cm, db), at least the 2 corner
+// bars; main bars first, then the extra bars; the 3rd layer takes whatever is left. b in m, cover / bar sizes in cm.
+export function barLayers(b, mat, st, main, special) {
+  const ds = BARS[st]?.d ?? 0.6, L = [{}, {}, {}], used = (l) => (l.main?.n ?? 0) + (l.special?.n ?? 0);
+  const cap = (db) => { const s = Math.max(mat.barClear ?? 2.5, db); return Math.max(2, Math.floor((b * 100 - 2 * (mat.cover ?? 3) - 2 * ds + s) / (db + s) + 1e-9)); };
+  let i = 0;
+  for (const g of [main, special]) {
+    if (!g?.n) continue;
+    let n = g.n;
+    const db = BARS[g.bar]?.d ?? 1.2;
+    while (n > 0) {
+      const l = L[i], room = i === 2 ? n : cap(db) - used(l);
+      if (room <= 0) { i++; continue; }
+      const k = Math.min(n, room);
+      if (!l.main) l.main = { n: k, bar: g.bar };
+      else if (l.main.bar === g.bar && !l.special) l.main = { n: l.main.n + k, bar: g.bar };
+      else if (!l.special || l.special.bar === g.bar) l.special = { n: (l.special?.n ?? 0) + k, bar: g.bar };
+      else { i++; continue; }
+      n -= k;
+    }
+  }
+  return L;
+}
 // "lighter" type: smaller concrete section first, then less steel
 const steel = (s) => { const x = parseBars(s); return x ? x.n * BARS[x.bar].A : 0; };
 const typeWeight = (t) => t.b * t.h * 1e4 + (steel(t.top) + steel(t.bot) + steel(t.topX) + steel(t.botX)) / 100;
@@ -166,11 +189,12 @@ const typeWeight = (t) => t.b * t.h * 1e4 + (steel(t.top) + steel(t.bot) + steel
 // WSD checks of one span with one beam type (mid-span sagging + support hogging), like the beam module
 export function checkSpan(t, sp, mat) {
   const top = parseBars(t.top), bot = parseBars(t.bot), topX = parseBars(t.topX), botX = parseBars(t.botX);
-  const base = { ...mat, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: sp.Mt ?? 0, stirrup: { bar: t.st, sets: 1 } };
+  const base = { ...mat, fcPrime: mat.fcBeam ?? mat.fcPrime, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: sp.Mt ?? 0, stirrup: { bar: t.st, sets: 1 } };
   const out = {};
   try {
-    if (sp.kind !== "cantilever") out.mid = designSection({ ...base, M: sp.Mpos, s: t.sMid, top: layer(top), bottom: layer(bot, botX) });
-    out.sup = designSection({ ...base, M: sp.Mneg, s: t.sSup, top: layer(bot), bottom: layer(top, topX) }); // tension at the top
+    const lay = (m, x) => barLayers(t.b, mat, t.st, m, x);
+    if (sp.kind !== "cantilever") out.mid = designSection({ ...base, M: sp.Mpos, s: t.sMid, top: lay(top), bottom: lay(bot, botX) });
+    out.sup = designSection({ ...base, M: sp.Mneg, s: t.sSup, top: lay(bot), bottom: lay(top, topX) }); // tension at the top
   } catch (e) { return { error: e.message, ok: false }; }
   // a short segment (span < 4h, e.g. between close columns) is a deep beam: its h/L ratio is reported, the WSD checks still apply
   const deep = sp.len < 4 * t.h;
@@ -414,7 +438,7 @@ function elementDeflections(res, EI) {
   });
 }
 // Ec (kg/m²) as in the beam module: 4270·w^1.5·√f'c ksc
-const EcOf = (mat) => 2.323 ** 1.5 * 4270 * Math.sqrt(mat.fcPrime) * 1e4;
+const EcOf = (mat) => 2.323 ** 1.5 * 4270 * Math.sqrt(mat.fcBeam ?? mat.fcPrime) * 1e4;
 
 function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
   const done = new Map(), cols = (floor.columns ?? []).map((p) => ({ p, R: 0, from: [] }));
@@ -497,7 +521,9 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
           Mpos: Math.max(0, ...env.slice(i0, i1).map((e) => e.Mmax)), Mneg: Math.max(0, -env[i0].ML, -env[i1 - 1].MR, ...(cant ? env.slice(i0, i1).map((e) => -e.Mmin) : [])),
           V: Math.max(...env.slice(i0, i1).map((e) => e.Vmax)),
           defl: (() => { const Le = (cant ? 2 : 1) * (x[i1] - x[i0]), dl = Math.max(0, ...dL.slice(i0, i1)), dt = 3 * Math.max(0, ...dD.slice(i0, i1)) + dl;
-            return { dL: dl, dT: dt, limL: Le / 360, limT: Le / 240, ok: dl <= Le / 360 + 1e-9 && dt <= Le / 240 + 1e-9, I: (els[0] && EI[i0]) || 0 }; })(),
+            // limits from the design criteria (mat.deflLive / mat.deflTotal, default L/360 and L/240)
+            const lL = Le / (mat.deflLive ?? 360), lT = Le / (mat.deflTotal ?? 240);
+            return { dL: dl, dT: dt, limL: lL, limT: lT, ok: dl <= lL + 1e-9 && dt <= lT + 1e-9, I: (els[0] && EI[i0]) || 0 }; })(),
           Mt: ln.torsion.reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2) });
       }
     }

@@ -34,9 +34,9 @@ export function Field({ label, unit, children }) {
   );
 }
 
-export function NumberInput({ value, onChange, step = "any", min, className = "" }) {
+export function NumberInput({ value, onChange, step = "any", min, className = "", placeholder }) {
   return (
-    <input type="number" className={`${inputCls} ${className}`} value={value} step={step} min={min}
+    <input type="number" className={`${inputCls} ${className}`} value={value} step={step} min={min} placeholder={placeholder}
       onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))} />
   );
 }

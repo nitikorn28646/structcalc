@@ -1,14 +1,45 @@
-// "Roof → columns" status card shown on top of step 5 and in step 6: one button builds the roof from the structure and links its
-// loads to the top floor; the card says what is linked, how much load, and where loads had to move to the nearest column.
-export function RoofLinkCard({ frame, roof, onFromFrame }) {
-  const link = frame.roofLink, pts = frame.roofPoints ?? [], total = pts.reduce((s, p) => s + p.P, 0), moved = pts.filter((p) => String(p.name).includes("ย้าย"));
-  const ready = roof?.fromFrame && link?.on;
+// "Roof → columns" card (top of step 5 and step 6 "น้ำหนักอื่น"): one button builds the roof from the structure and links its loads;
+// below it every roof bearing point is listed with where its load goes (column / beam / moved to the nearest column) and, for a
+// point with nothing under it, the fixes in one click: a carrier beam through it (between the nearest beams) or a column under it.
+import { useState } from "react";
+import { carrierBeam } from "./roofLink.js";
+
+const f2 = (v) => (+v).toFixed(2), near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
+const TO = { col: ["ลงเสา", "text-[#067647]"], beam: ["ลงคาน", "text-[#067647]"], moved: ["ไม่มีที่รับ → ย้ายไปเสาใกล้สุด", "font-semibold text-[#d92d20]"] };
+
+export function RoofLinkCard({ frame, roof, onFromFrame, set }) {
+  const link = frame.roofLink, pts = frame.roofPoints ?? [], total = pts.reduce((s, p) => s + p.P, 0);
+  const moved = pts.filter((p) => p.to === "moved" || String(p.name).includes("ย้าย")), ready = roof?.fromFrame && link?.on;
+  const [open, setOpen] = useState(false), k = link?.floor ?? frame.floors.length - 1, fl = frame.floors[k];
+  const setFloor = (patch) => set?.("floors", frame.floors.map((f, i) => (i === k ? { ...f, ...patch } : f)));
+  const addBeams = (list) => { let beams = [...(fl.beams ?? [])], n = 0;
+    for (const p of list) { const at = p.at ?? p.p, b = carrierBeam({ beams }, at); if (b) { beams = [...beams, b]; n++; } }
+    if (n) setFloor({ beams }); return n; };
+  const addCol = (p) => setFloor({ columns: [...fl.columns.filter((c) => !near(c, p.at ?? p.p)), (p.at ?? p.p).map((v) => +(+v).toFixed(3))] });
+  const show = open || moved.length > 0;
   return (
-    <div className={`flex flex-wrap items-center gap-3 rounded-xl px-3 py-2 text-[12px] ring-1 ${ready ? "bg-[#ecfdf3] text-[#067647] ring-[#abefc6]" : "bg-[#fffaeb] text-[#b54708] ring-[#fdb022]"}`}>
-      <span className="font-semibold">หลังคา → เสา</span>
-      {ready ? <span>แรงหลังคา {(total / 1000).toFixed(2)} ตัน ลง {pts.length} จุด ที่ {frame.floors[link.floor]?.name}{moved.length ? ` · ${moved.length} จุดไม่มีเสาใต้ ย้ายไปเสาใกล้สุด (ดูคำเตือน)` : ""} · อัปเดตเองเมื่อแก้หลังคา</span>
-        : <span>{roof?.fromFrame ? "สร้างหลังคาแล้วแต่ยังไม่ได้ส่งแรงลงเสา" : "หลังคายังไม่ได้ใช้แปลนจากโครงสร้าง — แรงหลังคายังไม่ลงเสา"}</span>}
-      <button onClick={onFromFrame} className={`ml-auto rounded-lg px-3 py-1 font-medium ${ready ? "ring-1 ring-current" : "bg-brand-500 text-[#fff]"}`}>{ready ? "สร้างใหม่จากโครงสร้าง" : "สร้างหลังคาจากโครงสร้าง + ส่งแรงลงเสา"}</button>
+    <div className={`rounded-xl px-3 py-2 text-[12px] ring-1 ${ready && !moved.length ? "bg-[#ecfdf3] text-[#067647] ring-[#abefc6]" : "bg-[#fffaeb] text-[#b54708] ring-[#fdb022]"}`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-semibold">หลังคา → โครงสร้าง</span>
+        {ready ? <span>แรงหลังคา {(total / 1000).toFixed(2)} ตัน ลง {pts.length} จุด ที่ {fl?.name}{moved.length ? ` · ${moved.length} จุดไม่มีเสา/คานรับ — แก้ในตารางด้านล่าง` : " · ทุกจุดมีเสาหรือคานรับ"}</span>
+          : <span>{roof?.fromFrame ? "สร้างหลังคาแล้วแต่ยังไม่ได้ส่งแรงลงโครงสร้าง" : "หลังคายังไม่ได้ใช้แปลนจากโครงสร้าง — กดปุ่มเพื่อสร้างหลังคาจากแปลนชั้นบนสุดและส่งแรงลงเสา/คานอัตโนมัติ"}</span>}
+        {ready && pts.length > 0 && <button onClick={() => setOpen(!open)} className="underline">{show ? "ซ่อนจุดถ่ายแรง" : "ดูจุดถ่ายแรง"}</button>}
+        <button onClick={onFromFrame} className={`ml-auto rounded-lg px-3 py-1 font-medium ${ready ? "ring-1 ring-current" : "bg-brand-500 text-[#fff]"}`}>{ready ? "สร้างใหม่จากโครงสร้าง" : "ใช้แปลนโครงสร้าง + ส่งแรงลงเสา"}</button>
+      </div>
+      {ready && show && pts.length > 0 && <div className="mt-2 rounded-lg bg-[#fff] p-2 text-[#344054] ring-1 ring-[#eaecf0]">
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <span className="font-semibold">จุดถ่ายแรงหลังคา ({pts.length})</span>
+          {moved.length > 0 && set && <button onClick={() => addBeams(moved)} className="rounded-md bg-brand-500 px-2.5 py-1 font-medium text-[#fff]">เพิ่มคานรับทุกจุดที่ไม่มีที่รับ ({moved.length})</button>}
+          <span className="text-[11px] text-[#667085]">คานรับ = คานซอยแนว X หรือ Y (ที่สั้นกว่า) ผ่านจุดนั้น ระหว่างคานสองข้าง ที่ {fl?.name} · เพิ่มเสา = เสาใต้จุดนั้น · จุดที่ห่างเสา/คานไม่เกิน 0.30 ม. ถือเป็นจุดเดียวกัน (แปลนหลังคาวาดที่ผิวผนัง โครงสร้างที่ศูนย์กลาง)</span>
+        </div>
+        <div className="max-h-[220px] overflow-auto"><table className="w-full tabular-nums"><thead><tr className="text-left text-[11px] text-[#667085]"><th className="py-0.5">จุด (X, Y)</th><th>แรง (กก.)</th><th>ลงที่</th><th /></tr></thead>
+          <tbody>{pts.map((p, i) => { const to = p.to ?? (String(p.name).includes("ย้าย") ? "moved" : "col"), at = p.at ?? p.p;
+            return <tr key={i} className="border-t border-[#f2f4f7]">
+              <td className="py-0.5">({f2(at[0])}, {f2(at[1])})</td><td>{Math.round(p.P).toLocaleString()}</td>
+              <td className={TO[to][1]}>{TO[to][0]}{to === "moved" ? ` (${f2(p.p[0])}, ${f2(p.p[1])})` : p.snap > 0.005 ? ` ที่ (${f2(p.p[0])}, ${f2(p.p[1])}) · แปลนหลังคาห่างโครงสร้าง ${f2(p.snap)} ม.` : ""}</td>
+              <td className="text-right">{to === "moved" && set && <><button onClick={() => addBeams([p])} className="mr-2 font-medium text-brand-600">เพิ่มคานรับ</button><button onClick={() => addCol(p)} className="font-medium text-brand-600">เพิ่มเสา</button></>}</td>
+            </tr>; })}</tbody></table></div>
+      </div>}
     </div>
   );
 }

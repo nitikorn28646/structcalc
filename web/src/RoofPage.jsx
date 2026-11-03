@@ -264,9 +264,9 @@ function MemberTable({ dz, d, setD, setHover }) {
 }
 const TILES = ["cpac", "ceramic"];
 
-function DesignInputs({ d, set, onRoofing = () => {} }) {
+function LoadInputs({ d, set, g, onRoofing = () => {} }) {
   const n = (key, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={d[key]} step={step} onChange={(v) => set(key, v)} /></Field>;
-  const TYPE_OPTS = Object.entries(SECTION_TYPES);
+  const roofing = ROOFINGS[d.roofing]?.[1] ?? 0, cos = g ? 1 / Math.sqrt(1 + g.tan * g.tan) : 1;
   return (<>
     <Card title="น้ำหนักบรรทุกและวัสดุ" icon={Triangle}>
       <div className="grid grid-cols-2 gap-3">
@@ -279,6 +279,19 @@ function DesignInputs({ d, set, onRoofing = () => {} }) {
         <Field label="ความหนาเหล็กขั้นต่ำ"><Select value={d.minT ?? 0} onChange={(v) => set("minT", Number(v))} options={[[0, "ไม่จำกัด"], [1.6, "1.6 มม."], [2, "2.0 มม."], [2.3, "2.3 มม."], [3.2, "3.2 มม."]]} /></Field>
       </div>
     </Card>
+    <Card title="สรุปน้ำหนักบนหลังคา (ต่อ ม.² ตามแนวราบ)" icon={Ruler}>
+      <table className="w-full text-[13px] tabular-nums"><tbody>
+        {[["วัสดุมุง " + (ROOFINGS[d.roofing]?.[0] ?? ""), roofing / cos], ["น้ำหนักอื่น (ฝ้า / ฉนวน)", (d.extra ?? 0) / cos], ["น้ำหนักจร", d.live ?? 0], ["แรงลม (ตั้งฉากหลังคา)", d.wind ?? 0]].map(([t, v]) =>
+          <tr key={t} className="border-b border-gray-100"><td className="py-1 text-gray-600">{t}</td><td className="text-right">{fmt(v, 1)} กก./ม.²</td></tr>)}
+        {g && <tr><td className="py-1 font-medium">พื้นที่หลังคา (ราบ / ตามแนวเอียง)</td><td className="text-right font-medium">{fmt(g.planArea, 1)} / {fmt(g.roofArea, 1)} ม.²</td></tr>}
+      </tbody></table>
+      <p className="pt-1 text-[11px] text-gray-400">ค่าในแท็บนี้ใช้กับแป จันทัน ตะเข้ อกไก่ สะพาน และอะเส — ตั้งก่อนออกแบบเหล็ก · น้ำหนักเหล็กโครงคิดจากหน้าตัดจริงในขั้นออกแบบ</p>
+    </Card>
+  </>);
+}
+
+function DesignInputs({ d, set }) {
+  return (<>
     <Card title="หน้าตัดเหล็ก" icon={Ruler}>
       <div className="space-y-1.5">
         <div className="grid grid-cols-[64px_1fr] items-center gap-1.5 text-[13px]">
@@ -319,11 +332,11 @@ function SlopeFrom({ roof, g, set }) {
 }
 
 export function RoofPage({ roof, set, dark, onFromFrame = null }) {
-  const sk = useSkeleton(), { g, fr, dz, error } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
+  const sk = useSkeleton(), { g, fr, dz, error } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|loads|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
   const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz);
   const modeBar = (
     <span className="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
-      {[["draw", "วาดแปลน"], ["shape", "รูปทรง"], ["plate", "อะเส"], ["frame", "โครงหลังคา"], ["design", "ออกแบบ"]].map(([k, t]) => (
+      {[["draw", "1 วาดแปลน"], ["shape", "2 รูปทรง"], ["loads", "3 น้ำหนัก / วัสดุมุง"], ["frame", "4 โครงหลังคา"], ["design", "5 ออกแบบเหล็ก"], ["plate", "6 อะเส"]].map(([k, t]) => (
         <button key={k} onClick={() => setMode(k)} className={`rounded-md px-3 py-1 ${mode === k ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500"}`}>{t}</button>
       ))}
     </span>
@@ -338,7 +351,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null }) {
   return (
     <main className="grid min-h-0 flex-1 gap-4 p-4 md:p-5 xl:grid-cols-[300px_1fr_1fr_1.15fr] xl:grid-rows-[auto_1fr]">
       <div className="space-y-4 xl:row-span-2 xl:overflow-y-auto">
-        {mode !== "design" && mode !== "plate" && <Card title="รูปทรงหลังคา" icon={Triangle}>
+        {mode !== "design" && mode !== "plate" && mode !== "loads" && <Card title="รูปทรงหลังคา" icon={Triangle}>
           <div className="grid grid-cols-2 gap-3">
             {f("slope", "ความชัน", "องศา", "1")}{f("overhang", "ชายคายื่น", "m", "0.1")}
             {g && <SlopeFrom roof={roof} g={g} set={set} />}
@@ -346,7 +359,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null }) {
             <Field label="กริดจับจุด"><Select value={roof.snap} onChange={(v) => set("snap", Number(v))} options={[[0.1, "0.10 ม."], [0.25, "0.25 ม."], [0.5, "0.50 ม."], [1, "1.00 ม."]]} /></Field>
           </div>
         </Card>}
-        {mode === "plate" && g ? <PlateInputs d={roof.design} setD={setD} g={g} plates={pl.plates} sizes={pl.sizes} setInner={(v) => set("innerPlates", v)} onAutoInner={() => set("innerPlates", autoInnerPlates(g, fr))} drawn={!!roof.plates?.length} /> : mode === "design" ? <DesignInputs d={roof.design} set={setD} onRoofing={(v) => TILES.includes(v) && (roof.frame.purlinSp < BATTEN_RANGE[0] || roof.frame.purlinSp > BATTEN_RANGE[1]) && set("frame", { ...roof.frame, purlinSp: 0.32 })} /> : mode === "frame" ? (<>
+        {mode === "plate" && g ? <PlateInputs d={roof.design} setD={setD} g={g} plates={pl.plates} sizes={pl.sizes} setInner={(v) => set("innerPlates", v)} onAutoInner={() => set("innerPlates", autoInnerPlates(g, fr))} drawn={!!roof.plates?.length} /> : mode === "loads" ? <LoadInputs d={roof.design} set={setD} g={g} onRoofing={(v) => TILES.includes(v) && (roof.frame.purlinSp < BATTEN_RANGE[0] || roof.frame.purlinSp > BATTEN_RANGE[1]) && set("frame", { ...roof.frame, purlinSp: 0.32 })} /> : mode === "design" ? <DesignInputs d={roof.design} set={setD} /> : mode === "frame" ? (<>
         <Card title="ระยะโครงหลังคา" icon={Ruler}>
           <div className="grid grid-cols-2 gap-3">
             {fv("rafterSp", "ระยะจันทัน", "m", "0.1")}{fv("purlinSp", "ระยะแป (ตามแนวเอียง)", "m", "0.05")}
