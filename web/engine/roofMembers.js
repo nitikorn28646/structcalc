@@ -198,7 +198,18 @@ export function designRoof(g, fr, roof, d) {
 
   // wall plate (อะเส): rafter reaction at the wall, spans between columns along each wall edge
   // (column count per edge from the column spacing, or set per edge in d.plateDiv)
-  const plateRun = (section, count, L) => simpleBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L, count });
+// options (d.plateSupport):
+  //   "span" (default): simple span between columns (the diff-tested simpleBeam, wL²/8, 5wL⁴/384EI)
+  //   "cont": continuous over the columns (welded / spliced through): max moment ≈ wL²/10, deflection ≈ 0.53 × simple span (3-span end span)
+  //   "beam": sitting on an RC ring beam (คานหลังคา) all along — it only spans between anchor bolts d.plateAnchor (m, default 1.0)
+  // d.plateDefl: deflection limit L/360 (default) or L/240 (roof without a hung ceiling); stress check unchanged (Fb = 0.6Fy)
+  const plateRun = (section, count, L) => {
+    const mode = d.plateSupport ?? "span", Ld = mode === "beam" ? Math.min(L, d.plateAnchor ?? 1.0) : L;
+    const r = simpleBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count });
+    const km = mode === "cont" ? 0.8 : 1, kd = mode === "cont" ? 0.53 : 1, lim = d.plateDefl === 240 ? 240 : 360;
+    const fb = r.fb * km, dd = r.d * kd, dAllow = (Ld * 100) / lim;
+    return { ...r, Mx: r.Mx * km, SxReq: r.SxReq * km, fb, d: dd, dAllow, Ld, mode, ok: fb <= r.Fb && dd <= dAllow };
+  };
   if (roof.plates?.length) {
     // plates drawn by the user: each line is split into spans at the drawn columns lying on it
     const cols = roof.columns ?? [];

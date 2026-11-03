@@ -52,24 +52,25 @@ export const DEFAULT_FRAME = {
 
 const KIND_TH = { simple: "ช่วงเดียว", one_end: "ช่วงริม", both_ends: "ช่วงใน", cantilever: "ยื่น" };
 
-function UtilBars({ items, dark, height }) {
-  const ref = useRef(null);
+function UtilBars({ items: raw, dark, height, onPick }) {
+  const ref = useRef(null), items = useMemo(() => [...raw].sort((a, b) => b.util - a.util), [raw]), h = Math.max(height, items.length * 18 + 40);
   useEffect(() => {
     const c = dark ? { axis: "#6e7591", label: "#9097b1", split: "#2c3250", lim: "#f87171" } : { axis: "#475467", label: "#667085", split: "#eaecf0", lim: "#f04438" };
-    const chart = echarts.init(ref.current, null, { renderer: "svg", height });
+    const chart = echarts.init(ref.current, null, { renderer: "svg", height: h });
     chart.setOption({
       textStyle: { fontFamily: "Sarabun, Leelawadee UI, sans-serif" },
       tooltip: { trigger: "axis", valueFormatter: (v) => `${v}%` },
-      grid: { left: 70, right: 20, top: 10, bottom: 26 },
-      yAxis: { type: "category", inverse: true, data: items.map((s) => s.label), axisLine: { lineStyle: { color: c.axis } }, axisLabel: { color: c.label, fontSize: items.length > 14 ? 9 : 11, interval: 0 } },
+      grid: { left: 92, right: 16, top: 6, bottom: 24 },
+      yAxis: { type: "category", inverse: true, data: items.map((s) => s.label), axisLine: { lineStyle: { color: c.axis } }, axisLabel: { color: c.label, fontSize: 11, interval: 0 } },
       xAxis: { type: "value", max: (v) => Math.max(120, Math.ceil(v.max / 20) * 20), axisLabel: { color: c.label, formatter: "{value}%" }, splitLine: { lineStyle: { color: c.split } } },
       series: [{ type: "bar", barMaxWidth: 10, data: items.map((s) => ({ value: +(Math.min(s.util, 3) * 100).toFixed(0), itemStyle: { color: s.ok ? s.color : c.lim, borderRadius: [0, 4, 4, 0] } })),
         markLine: { symbol: "none", silent: true, lineStyle: { color: c.lim, type: "dashed" }, label: { show: false }, data: [{ xAxis: 100 }] } }],
     });
+    if (onPick) chart.on("click", (e) => onPick(items[e.dataIndex]));
     const ro = new ResizeObserver(() => chart.resize()); ro.observe(ref.current);
     return () => { ro.disconnect(); chart.dispose(); };
-  }, [items, dark, height]);
-  return <div ref={ref} style={{ width: "100%", height }} />;
+  }, [items, dark, h]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <div className="max-h-[520px] overflow-y-auto"><div ref={ref} style={{ width: "100%", height: h }} /></div>;
 }
 
 // editable beam-type table (B1, B2, …)
@@ -463,8 +464,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     <section className="rounded-2xl border border-gray-200 bg-white px-3 pt-2">        
           <div className="flex items-center justify-between px-1 text-sm font-semibold text-gray-800">{line?.res ? `แรงเฉือน / โมเมนต์ แนวคาน ${line.id + 1}` : (boardStep === "cols" ? `อัตราใช้งานเสา ใต้${fl.name}` : `อัตราใช้งานคาน ${fl.name}`)}
             <span className="text-[11px] font-normal text-gray-500">{line?.res ? `ยาว ${fmt(line.L, 2)} ม.` : "เหล็กที่ต้องการ / ที่ใส่"}</span></div>
-          {line?.res ? <ForceCharts L={line.L} fns={{ V: line.res.V, M: line.res.M }} dark={dark} height={260} animate={false} /> : <UtilBars items={boardStep === "cols" ? colsHere.map((c) => ({ label: `${cTypes[c.typeIdx]?.name} ${stackKey(c.p)}`, util: c.check.util, ok: c.ok, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }))
-            : an.spans.map((s) => ({ label: `${s.id} ${types[s.typeIdx]?.name ?? ""}`, util: s.check.util, ok: s.ok, color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length] }))} dark={dark} height={260} />}
+          {line?.res ? <ForceCharts L={line.L} fns={{ V: line.res.V, M: line.res.M }} dark={dark} height={260} animate={false} /> : <UtilBars items={boardStep === "cols" ? colsHere.map((c) => ({ label: `${cTypes[c.typeIdx]?.name} ${stackKey(c.p)}`, util: c.check.util, ok: c.ok, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length], sel: { kind: "column", i: c.i } }))
+            : an.spans.map((s) => ({ label: `${s.id} ${types[s.typeIdx]?.name ?? ""}`, util: s.check.util, ok: s.ok, color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length], sel: { kind: "beam", i: s.member } }))} dark={dark} height={260} onPick={(x) => x?.sel && setSel(x.sel)} />}
         </section>
   ) : step === "footing" ? (
     <Card title="ฐานราก" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums">
@@ -485,13 +486,19 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         <select value={showLine.id} onChange={(e) => { setSel(null); setLineId(Number(e.target.value)); }} className="h-7 rounded-md border border-gray-300 bg-[#fff] px-1 text-[12px] text-[#344054]">
           {an.lines.filter((l) => l.res).map((l) => <option key={l.id} value={l.id}>แนว {l.id + 1}: ({fmt(l.A[0], 2)}, {fmt(l.A[1], 2)}) → ({fmt(l.B[0], 2)}, {fmt(l.B[1], 2)}){l.arc ? " โค้ง" : ""}</option>)}
         </select>
-        <span className="text-[#667085]">ช่วง {an.spans.filter((s) => s.line === showLine.id).map((s) => `${s.id} ${types[s.typeIdx]?.name ?? ""} M+ ${fmt(s.Mpos, 0)} M− ${fmt(s.Mneg, 0)} V ${fmt(s.V, 0)}${s.Mt ? ` T ${fmt(s.Mt, 0)}` : ""}`).join(" · ")}</span>
         <span className="ml-auto text-[11px] text-[#98a2b3]">คลิกคานบนแปลนเพื่อเลือกแนว</span>
       </div>
       <LineDiagram ln={showLine} f3={res.frame3d?.members.filter((m) => m.floor === cur)} wide />
+      <table className="mt-1 w-full border-collapse text-[12px] tabular-nums text-[#344054]">
+        <thead><tr className="border-b border-[#e4e7ec] text-left text-[11px] text-[#667085]">{["ช่วง", "Type", "ยาว (ม.)", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "T (กก.-ม.)", "ใช้", "ผล"].map((h) => <th key={h} className="px-1 py-0.5 font-medium">{h}</th>)}</tr></thead>
+        <tbody>{an.spans.filter((x) => x.line === showLine.id).map((x) => <tr key={x.id} onClick={() => setSel({ kind: "beam", i: x.member })} className="cursor-pointer border-b border-[#f2f4f7] hover:bg-[#f9fafb]">
+          <td className="px-1">{x.id}</td><td className="px-1 font-semibold" style={{ color: TYPE_COLORS[x.typeIdx % TYPE_COLORS.length] }}>{types[x.typeIdx]?.name}</td><td className="px-1">{fmt(x.len, 2)}</td>
+          <td className="px-1">{fmt(x.Mpos, 0)}</td><td className="px-1">{fmt(x.Mneg, 0)}</td><td className="px-1">{fmt(x.V, 0)}</td><td className="px-1">{x.Mt ? fmt(x.Mt, 0) : "-"}</td>
+          <td className="px-1">{fmt(x.check.util * 100, 0)}%</td><td className={`px-1 ${x.ok ? "text-[#12b76a]" : "font-semibold text-[#d92d20]"}`}>{x.ok ? "ผ่าน" : "ไม่ผ่าน"}</td></tr>)}</tbody>
+      </table>
     </div>);
   const center = page ? <div className="min-h-0 flex-1 overflow-auto p-1">{page}</div>
-    : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 grid-rows-[minmax(180px,1fr)_minmax(0,auto)] gap-3"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>{lineDiagram}</div>
+    : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,2fr)_3fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>{lineDiagram}</div>
     : step === "footing" ? view3d
     : view === "3d" ? view3d : view === "split" ? <div className="grid min-h-0 flex-1 grid-cols-2 gap-3"><div className="min-h-0">{boardEl}</div>{view3d}</div> : boardEl;
   return (

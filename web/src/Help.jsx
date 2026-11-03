@@ -44,11 +44,11 @@ const KEY = "structcalc.help";
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? {}; } catch { return {}; } };
 const save = (v) => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 
-// guide bar under the header of a workflow step; collapsed state remembered per step
+// guide bar under the header of a workflow step: one line by default, opened state remembered per step (false = opened)
 export function StepGuide({ step, index }) {
   const [st, setSt] = useState(load), h = HELP[step];
   if (!h) return null;
-  const open = !st[step], toggle = () => { const v = { ...st, [step]: open }; setSt(v); save(v); };
+  const open = st[step] === false, toggle = () => { const v = { ...st, [step]: open }; setSt(v); save(v); };
   return (
     <div className="border-b border-brand-100 bg-brand-50/60 px-4 text-[12px] text-gray-700 md:px-5">
       <button onClick={toggle} className="flex w-full items-center gap-2 py-1.5 text-left">

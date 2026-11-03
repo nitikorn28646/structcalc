@@ -32,7 +32,7 @@ function Bending({ x, f }) {
     <Item th="หน้าตัดที่ใช้" v={secText(x)} note={`${SECTION_TYPES[r.section.type]} · Ix ${fmt(r.section.Ix, 1)} ซม.⁴ · Sx ${fmt(r.section.Sx, 2)} ซม.³ · ${fmt(r.section.w, 2)} กก./ม.`} />
     <Item th="โมดูลัสหน้าตัดที่ต้องการ" f="Sx = M / Fb" v={fmt(r.SxReq, 2)} u="ซม.³" ok={r.SxReq <= (x.count || 1) * r.section.Sx} />
     <Item th="หน่วยแรงดัดที่เกิดขึ้น" f={f ?? `fb = M / ${k}Sx`} v={`${fmt(r.fb, 0)} ≤ ${fmt(r.Fb, 0)}`} u={ksc} ok={r.fb <= r.Fb} />
-    <Item th="ระยะแอ่นตัว" f="Δ ≤ L/360" v={`${fmt(r.d ?? r.dy, 3)} ≤ ${fmt(r.dAllow ?? r.dyAllow, 3)}`} u="ซม." ok={(r.d ?? r.dy) <= (r.dAllow ?? r.dyAllow)} />
+    <Item th="ระยะแอ่นตัว" f={r.mode ? `Δ ≤ L/${Math.round((r.Ld * 100) / r.dAllow)}` : "Δ ≤ L/360"} v={`${fmt(r.d ?? r.dy, 3)} ≤ ${fmt(r.dAllow ?? r.dyAllow, 3)}`} u="ซม." ok={(r.d ?? r.dy) <= (r.dAllow ?? r.dyAllow)} />
   </>);
 }
 
@@ -135,7 +135,7 @@ export function RoofReport({ roof, project }) {
           const { plates, sizes } = platesOf(dz), wall = plates.find((m) => !m.inner), inner = plates.filter((m) => m.inner);
           return (
             <Sec n={6} th="อะเส" en="Wall plate"
-              intro={`อะเสวางบนหัวผนังรับแรงปฏิกิริยาจากจันทัน ${fmt(wall?.r.w ?? 0)} กก./ม. (รวมน้ำหนักตัวเอง) คิดเป็นคานช่วงเดี่ยว wL²/8 ระหว่างเสา ส่วนอะเสช่วงใน (B…) รับดั้งเป็นแรงจุดจากอกไก่/ตะเข้ แต่ละช่วงเลือกขนาดเหล็กได้เอง แปลนแสดงรหัสช่วง (A1, A2, …) และสีตามขนาดเหล็ก`}>
+              intro={`อะเสวางบนหัวผนังรับแรงปฏิกิริยาจากจันทัน ${fmt(wall?.r.w ?? 0)} กก./ม. (รวมน้ำหนักตัวเอง) ${{ cont: "คิดเป็นคานต่อเนื่องผ่านเสา M ≈ wL²/10 ระยะแอ่น ≈ 0.53 เท่าของช่วงเดี่ยว", beam: `วางบนคาน คสล. ตลอดแนว รับแรงข้ามช่วงระยะพุก ${fmt(roof.design?.plateAnchor ?? 1, 2)} ม. (wL²/8)` }[roof.design?.plateSupport] ?? "คิดเป็นคานช่วงเดี่ยว wL²/8 ระหว่างเสา"} ระยะแอ่นตัวไม่เกิน L/${roof.design?.plateDefl === 240 ? 240 : 360} ส่วนอะเสช่วงใน (B…) รับดั้งเป็นแรงจุดจากอกไก่/ตะเข้ แต่ละช่วงเลือกขนาดเหล็กได้เอง แปลนแสดงรหัสช่วง (A1, A2, …) และสีตามขนาดเหล็ก`}>
               <Figure caption={`แปลนอะเส — ${plates.length} ช่วง · ${sizes.map((x) => plateText(x)).join(" / ")}`}>
                 <Drawing model={plateModel(g, plates, fr.posts)} className="mx-auto h-[105mm]" fontSize={10} width={640} />
               </Figure>

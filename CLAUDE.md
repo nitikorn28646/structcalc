@@ -233,3 +233,8 @@ Footing limit `frame.footUtil` (e.g. 0.85 = q ≤ 85 % qa / pile load ≤ 85 % s
 (+0.05 m steps) and closes spacing to @0.125/@0.10; auto button adds ONE type per press and re-spreads all spread types (columns sorted by
 needed size, k groups of ~equal count, type = largest of its group with that run's t and bar counts).
 Footing moments: step 8 footing tab has the base-fixity select (fixed → 3D base Mx/My into every footing, both axes; first spread type sets fixed when unset) and "↻ จัดขนาดใหม่" (re-size the same number of spread types after loads change).
+WALL PLATE OPTIONS (2026-11-03, user: plates over-designed — deflection L/360 governs, stress ~55 %): roof.design.plateSupport "span" (default,
+wL²/8) | "cont" (wL²/10, deflection × 0.53) | "beam" (on an RC ring beam, span = plateAnchor, default 1.0 m); plateDefl 360 | 240. Wrapper
+around the frozen simpleBeam in roofMembers plateRun. Yasothon A-plates 453 kg → L/240 362 → cont 349 → on beam 317.
+LAYOUT 2026-11-03: step 7 plan beside the force diagram (xl), span table under it; util bars sorted worst first, readable, scroll, click
+selects; guide bar one line by default; the tool rail is hidden where only "select" exists (result steps).

@@ -220,12 +220,12 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
         {modeBar && <div className="ml-auto">{modeBar}</div>}
       </div>
       <div className="flex min-h-0 flex-1 gap-2">
-      <div className="flex w-[64px] shrink-0 flex-col gap-1">
+      {tools.length > 1 && <div className="flex w-[64px] shrink-0 flex-col gap-1">
         {tools.map(([key, label, Icon, hint]) => (
           <button key={key} onClick={() => setTool(key)} title={hint ? `${label} — ${hint}` : label}
             className={`flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ring-1 ${tool === key ? "bg-brand-500 text-[#fff] ring-brand-500" : "bg-white text-gray-600 ring-gray-200 hover:bg-gray-50"}`}><Icon className="h-4 w-4" /><span className="leading-tight">{label}</span></button>
         ))}
-      </div>
+      </div>}
       <div className={`relative ${compact ? "min-h-[180px]" : "min-h-[420px]"} flex-1 overflow-hidden rounded-xl bg-gray-50`}>
         <svg ref={svg} viewBox={`${vb.x} ${-(vb.y + vb.h)} ${vb.w} ${vb.h}`} className={`h-full w-full select-none ${tool === "select" ? "cursor-default" : "cursor-crosshair"}`}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => setDrag(null)} onPointerLeave={() => { setDrag(null); setCur(null); }} onContextMenu={(e) => e.preventDefault()} onWheel={onWheel}>
