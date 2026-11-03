@@ -266,7 +266,7 @@ export function analyzeFrame(frame) {
       const order = beamTypes.map((t, i) => ({ t, i })).sort((a, b) => tWeight(a.t) - tWeight(b.t));
       frame.floors[k].beams.forEach((b, m) => {
         if (b.type != null) return;
-        const sps = an.spans.filter((sp) => sp.member === m);
+        const sps = an.spans.filter((sp) => (sp.members ?? [sp.member]).includes(m));
         if (!sps.length) return;
         const cur = sps[0].typeIdx, ok = (t) => sps.every((sp) => checkEnv(t, { ...sp, ...sp.envF, vDone: true }, mat).ok);
         if (ok(beamTypes[cur])) { if (minTypes?.[k]?.[m] != null) next[k][m] = minTypes[k][m]; return; }

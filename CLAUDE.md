@@ -297,6 +297,31 @@ in both boards; Shift / middle-drag pans. Plan text grows with zoom (kt = max(k,
 Ridge level / rise:run folded as optional (slope sets hip / gable roofs).
 TRUE SIZES (2026-11-03): plan columns at their type size per floor (FloorBoard colSize from res.columns lv; roof board roof.colSize ?? 0.20),
 min 6 px; roof wall plates drawn at flange width × count from the designed section (DrawBoard plateMembers = dz plate members; 2C100x50 = 0.10 m).
+REVIEW FIXES (2026-11-03, cloud session, branch feature/review-fixes; findings in docs/test-log.md):
+- Beam hierarchy (user: result must not depend on how beams are drawn): floor.js buildLines merges collinear runs first, then at a
+  crossing inside two runs with no column the secondary is cut and rests on the main — main = beam.role "main"/"secondary"
+  (inspector "บทบาท"), else the run on more columns, else the shorter, else drawn first (guess → warning, summarised if > 3).
+  Plan shows △ at secondary ends. A span over a missing column covers several drawn beams: span.members; all get its type.
+  If no type passes: lowest utilisation, ties → the strongest type (was the lightest).
+- Roof load path (roofMembers.js plate section rewritten): posts (ดั้ง/ตุ๊กตา) and interior-plate ends load the plate they stand on
+  (interior plate, else wall-plate span → pointBeam); crossing interior plates split (shorter = main); plate members carry `bear`
+  [{p, P}] = what goes down, posts on nothing → dz.bearLoose + warning; roofLink just sums bear + bearLoose. Yasothon: 3.9 t of
+  ตุ๊กตา load was lost (10.94 → 14.83 t). plateSupport "beam" now delivers w·L (was w·anchor spacing). carrierPlates() + button
+  "เพิ่มอะเสรับ" (tab อะเส) adds interior plates through loose posts (Yasothon: 16 short plates, all pass).
+- Columns: top with no beam = cantilever from the last braced level, L passed = 2·Lc (tiedColumn axial mode always uses k = 1),
+  frame.freeTop "cantilever" (default) | "braced" (step 0). checkColumn: klu/r > 100 or R ≤ 0 = NG (a negative R passed before).
+  Yasothon: porch column (14,0) = 6.2 m cantilever → NG; roof-level stacks now C3. Columns in tension (3D, D+L) warned.
+- Continuous-beam supports with a negative reaction (end pulled down) warned (Yasothon −9.5 t at (6.00,2.40)).
+- Shear at d (mat.shearAt "d" default | "max" = Excel): floor.js shearRange/vAtD from the |V| envelope (span.Vx, endCol, Pat):
+  only ends on a column without a point load within d; spans < 2d keep the largest V; frame3d spans give Vd; report labels it.
+- lateral.js: D+W added to DEFAULT_COMBOS. frame3d: member E from fcBeam / fcCol. Banded RCM solver (5.4 → 3.4 s on the big house).
+- UI: beam inspector = role, rests on / carries, spans with reasons (floor.js spanReasons); util-bar labels clickable; step 10
+  shows the report in the page (.report-preview); first-run tour "เริ่มโครงการของฉัน" = empty project; report As + 2·Ast labels.
+- Test house cli/models/bighouse.mjs → web/public/projects/_big.json (3 storeys, 20 × 14 m, X/T secondaries, transfer girder):
+  3D ΣRz = applied (0.0000 %), beams 228/232 (8 m transfer girder with a 17 t column on it: no type in the list is big enough).
+- Baselines re-saved (regress + E2E). PyNite / Excel diffs NOT re-run here (cloud): re-run frame3d/contBeam PyNite and the beam Excel
+  diff on the Windows PC (only V input changed for beams; beam.js untouched).
+
 OPEN ITEMS for the next session: (1) publish the web copy — dist-web is built and U+FFFD-escaped, the Artifact
 https://claude.ai/artifact/Dkq17UyCSdhSax9xtbiDWU still has the old version (read it first, then republish index.html + assets) so the user
 can work from another PC (projects move via บันทึก/เปิด .json); (2) E2E "new" expected base_t changed with the roof workflow (97.7 vs 98.5) —

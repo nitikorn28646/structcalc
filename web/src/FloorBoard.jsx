@@ -221,7 +221,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const txt = (p, s, color, size = 12, anchor = "middle", weight) => <text x={p[0]} y={-p[1]} fontSize={size * kt} fill={color} textAnchor={anchor} dominantBaseline="middle" fontWeight={weight} stroke="none">{s}</text>;
   const ext = { x0: Math.min(...SX) - 1.2, x1: Math.max(...SX) + 1.2, y0: Math.min(...SY) - 1.2, y1: Math.max(...SY) + 1.2 };
   const ink = dark ? "#cdd1e2" : "#344054", muted = dark ? "#9097b1" : "#667085", btn = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1";
-  const spanOf = (bi) => an?.spans.filter((s) => s.member === bi) ?? [];
+  const spanOf = (bi) => an?.spans.filter((s) => (s.members ?? [s.member]).includes(bi)) ?? [];
   const info = tools.find((t) => t[0] === tool) ?? SEL, labels = k < 0.045; // m per pixel: far out → no small labels
   const isSel = (kind, i) => sel?.kind === kind && sel.i === i;
   const from = lineTool ? start : null;
@@ -318,6 +318,11 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               </g>
             );
           })}
+          {(step === "frame" || result) && (an?.lines ?? []).flatMap((ln) => ln.carriers.map((c) => { // △ = end of a secondary beam resting on a main beam
+            const at = c.t < 1e-6 ? ln.A : ln.B, dir = c.t < 1e-6 ? 1 : -1, u = [ln.u[0] * dir, ln.u[1] * dir], s = 7 * k, tip = [at[0] + u[0] * 2 * k, at[1] + u[1] * 2 * k];
+            const P = [[tip[0], tip[1]], [tip[0] + u[0] * 1.7 * s - u[1] * s, tip[1] + u[1] * 1.7 * s + u[0] * s], [tip[0] + u[0] * 1.7 * s + u[1] * s, tip[1] + u[1] * 1.7 * s - u[0] * s]];
+            return <polygon key={`cr${ln.id}-${c.t}`} points={P.map((p) => `${p[0]},${-p[1]}`).join(" ")} fill={dark ? "#1d2939" : "#fff"} stroke={dark ? "#e3e6f0" : "#344054"} strokeWidth={1.2 * k}><title>{`แนว ${ln.id + 1} วางบนแนว ${c.host + 1} (คานซอยบนคานหลัก)`}</title></polygon>;
+          }))}
           {show.WALL && walls.map((w0, i) => { // walls: true thickness of the type centred on the line, openings cut out, label = load per metre
             const w = resolveW(w0), L = dist(w.a, w.b) || 1, u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L], n = [-u[1], u[0]], q = wallLoad(w, wallTypes), t = wallTypes.find((x) => x.id === w.kind) ?? wallTypes[0];
             const th = Math.max(0.06, (t?.core ? wallThick(t) : t?.id === "brick2" ? 0.2 : 0.1) * (w.layers ?? 1)), m = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2], P = (x, o) => [w.a[0] + u[0] * x + n[0] * o, w.a[1] + u[1] * x + n[1] * o];

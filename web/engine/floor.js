@@ -346,7 +346,9 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     }
   }
   // crossings decided by length only (no role, same number of columns): say which one was taken as the main beam
-  for (const J of lines.guess ?? []) {
+  const guesses = lines.guess ?? [];
+  if (guesses.length > 3) warnings.push(`คานตัดกัน ${guesses.length} จุดที่ไม่มีเสา — คิดว่าคานช่วงสั้นกว่า (หรือวาดก่อน) เป็นคานหลัก อีกตัววางบน · ตรวจบนแปลน (△ = ปลายคานซอย) แล้วเปลี่ยนได้ที่ "บทบาท" ของคาน`);
+  else for (const J of guesses) {
     const main = lines.find((o) => along(o, J, true) !== null), secs = lines.filter((o) => o !== main && (dist(o.A, J) < TOL || dist(o.B, J) < TOL));
     if (main && secs.length) warnings.push(`คานตัดกันที่ (${J[0].toFixed(2)}, ${J[1].toFixed(2)}) ไม่มีเสา — คิดว่าแนว ${secs.map((o) => o.id + 1).join(", ")} (คานซอย) วางบนแนว ${main.id + 1} (คานหลัก: ช่วงสั้นกว่าหรือวาดก่อน) · เปลี่ยนได้ที่ "บทบาท" ของคาน`);
   }
@@ -503,26 +505,28 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   const typeOf = new Map(); // drawn beam index → type index in use
   (floor.beams ?? []).forEach((b, i) => typeOf.set(i, b.type ?? minTypes?.[i] ?? order[0]?.i ?? 0));
   const allowed = (i, t) => minTypes?.[i] == null || typeWeight(t) >= typeWeight(types[minTypes[i]]) - 1e-9;
+  const heaviest = (list) => list.reduce((a, b) => (typeWeight(types[b]) > typeWeight(types[a]) ? b : a));
+  const spanType = (sp) => heaviest(sp.members.map((m) => typeOf.get(m)));
   let result, changed = false;
   for (let pass = 0; pass < 4; pass++) {
     result = solveFloor(floor, lines, types, mat, typeOf, warnings, pass === 3);
     changed = false;
     // deflection with another type: δ · I(current) / I(type)
-    const deflWith = (sp, t) => { const cur = types[typeOf.get(sp.member)] ?? types[0], f = (cur.b * cur.h ** 3) / (t.b * t.h ** 3), d = sp.defl;
+    const deflWith = (sp, t) => { const cur = types[spanType(sp)] ?? types[0], f = (cur.b * cur.h ** 3) / (t.b * t.h ** 3), d = sp.defl;
       return { ...d, dL: d.dL * f, dT: d.dT * f, ok: d.dL * f <= d.limL + 1e-9 && d.dT * f <= d.limT + 1e-9 }; };
     const withDefl = (c, sp, t) => { const d = deflWith(sp, t); return { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) }; };
     for (const sp of result.spans) {
-      const b = floor.beams[sp.member];
-      if (b.type != null) { sp.check = withDefl(checkSpan(types[b.type], sp, mat), sp, types[b.type]); sp.typeIdx = b.type; sp.own = true; continue; }
+      const fixed = sp.members.filter((m) => floor.beams[m].type != null).map((m) => floor.beams[m].type);
+      if (fixed.length) { const ft = heaviest(fixed); sp.check = withDefl(checkSpan(types[ft], sp, mat), sp, types[ft]); sp.typeIdx = ft; sp.own = true; continue; }
       let best = null;
-      for (const { t, i } of order) { if (!allowed(sp.member, t)) continue; const c = withDefl(checkSpan(t, sp, mat), sp, t); if (c.ok) { best = { c, i }; break; } if (!best || c.util < best.c.util) best = { c, i }; }
-      sp.check = best.c; sp.typeIdx = best.i;
+      for (const { t, i } of order) { if (!sp.members.every((m) => allowed(m, t))) continue; const c = withDefl(checkSpan(t, sp, mat), sp, t); if (c.ok) { best = { c, i }; break; } if (!best || c.util < best.c.util - 1e-9 || (Math.abs(c.util - best.c.util) < 1e-9 && typeWeight(t) > typeWeight(types[best.i]))) best = { c, i }; }
+      sp.check = best.c; sp.typeIdx = best.i; // none passes: the lowest utilisation, ties (sections that fail outright) → the strongest
     }
     // a drawn beam uses one type over all its spans: the heaviest its spans need
     for (const [i] of typeOf) {
-      const need = result.spans.filter((s) => s.member === i).map((s) => s.typeIdx);
+      const need = result.spans.filter((s) => s.members.includes(i)).map((s) => s.typeIdx);
       if (!need.length || floor.beams[i].type != null) continue;
-      const pick = need.reduce((a, b) => (typeWeight(types[b]) > typeWeight(types[a]) ? b : a));
+      const pick = heaviest(need);
       if (pick !== typeOf.get(i)) { typeOf.set(i, pick); changed = true; }
     }
     if (!changed) break;
@@ -530,9 +534,11 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   // types still moving after the last pass: solve once more so self weight / stiffness match the types reported
   if (changed) result = solveFloor(floor, lines, types, mat, typeOf, [], false);
   for (const sp of result.spans) {
-    const t = types[typeOf.get(sp.member)] ?? types[0], f = 1; // the last pass ran with these types: its deflections are current
-    sp.typeIdx = typeOf.get(sp.member); const c = checkSpan(t, sp, mat), d = sp.defl;
-    sp.check = { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) * f };
+    // the span is checked with the heaviest type of its drawn beams; sp.member = that beam (inspector, plan)
+    const ti = spanType(sp), t = types[ti] ?? types[0];
+    sp.member = sp.members.find((m) => typeOf.get(m) === ti) ?? sp.member;
+    sp.typeIdx = ti; const c = checkSpan(t, sp, mat), d = sp.defl;
+    sp.check = { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) };
   }
   for (const sp of result.spans) Object.assign(sp, { type: types[sp.typeIdx], ok: sp.check.ok });
   // a support that the continuous beam pulls down (negative reaction: a short end span next to a long one lifts its far end):
@@ -649,7 +655,9 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
         const i0 = cut[k], i1 = cut[k + 1], els = res.el.slice(i0, i1), cant = !sup[i0] || !sup[i1];
         const j = si.indexOf(i0), kind = cant ? "cantilever" : nIn === 1 ? "simple" : j === 0 || j === nIn - 1 ? "one_end" : "both_ends";
         const mid = (x[i0] + x[i1]) / 2, member = ln.parts.find((p) => mid >= p.t0 - 1e-6 && mid <= p.t1 + 1e-6)?.i ?? ln.members[0];
-        spans.push({ id: `${ln.id + 1}-${spans.filter((s) => s.line === ln.id).length + 1}`, line: ln.id, member, x0: x[i0], x1: x[i1], len: x[i1] - x[i0], kind,
+        // every drawn beam lying on this span (a span over a missing column covers two or more drawn beams; all get its type)
+        const members = ln.parts.filter((p) => Math.min(p.t1, x[i1]) - Math.max(p.t0, x[i0]) > 1e-6).map((p) => p.i);
+        spans.push({ id: `${ln.id + 1}-${spans.filter((s) => s.line === ln.id).length + 1}`, line: ln.id, member, members: members.length ? members : [member], x0: x[i0], x1: x[i1], len: x[i1] - x[i0], kind,
           a: [ln.A[0] + ln.u[0] * x[i0], ln.A[1] + ln.u[1] * x[i0]], b: [ln.A[0] + ln.u[0] * x[i1], ln.A[1] + ln.u[1] * x[i1]],
           Mpos: Math.max(0, ...env.slice(i0, i1).map((e) => e.Mmax)), Mneg: Math.max(0, -env[i0].ML, -env[i1 - 1].MR, ...(cant ? env.slice(i0, i1).map((e) => -e.Mmin) : [])),
           V: Math.max(...env.slice(i0, i1).map((e) => e.Vmax)),

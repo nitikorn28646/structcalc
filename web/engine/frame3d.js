@@ -56,8 +56,39 @@ function invert(M) {
   }
   return A.map((r) => r.slice(n));
 }
-// dense solve of K·x = F for several right-hand sides at once (Gaussian elimination, partial pivoting); null when singular
+// K·x = F for several right-hand sides: unknowns renumbered by reverse Cuthill–McKee so that K is banded, then banded
+// elimination without pivoting (a stiffness matrix of a stable frame is symmetric positive definite); a pivot that is tiny
+// compared with its diagonal falls back to the dense solve with partial pivoting. (Review 2026-11-03: a 3-storey house of
+// 215 joints took 5 s per analysis with the dense solve only.)
 function solveMany(K, Fs) {
+  const n = K.length;
+  if (n < 60) return solveDense(K, Fs);
+  const adj = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++) { const r = K[i]; for (let j = i + 1; j < n; j++) if (r[j] !== 0) { adj[i].push(j); adj[j].push(i); } }
+  const deg = adj.map((a) => a.length), seen = new Uint8Array(n), order = [];
+  while (order.length < n) {
+    let s = -1; for (let i = 0; i < n; i++) if (!seen[i] && (s < 0 || deg[i] < deg[s])) s = i;
+    seen[s] = 1; const q = [s];
+    for (let h = 0; h < q.length; h++) { order.push(q[h]); const nb = adj[q[h]].filter((j) => !seen[j]).sort((a, b) => deg[a] - deg[b]); for (const j of nb) { seen[j] = 1; q.push(j); } }
+  }
+  order.reverse();
+  const pos = new Int32Array(n); order.forEach((o, k) => (pos[o] = k));
+  let bw = 0; for (let i = 0; i < n; i++) for (const j of adj[i]) bw = Math.max(bw, Math.abs(pos[i] - pos[j]));
+  if (bw > n / 3) return solveDense(K, Fs); // no gain
+  const m = Fs.length, A = order.map((o) => { const row = new Float64Array(n + m), r = K[o]; for (const j of adj[o]) row[pos[j]] = r[j]; row[pos[o]] = r[o]; Fs.forEach((F, q) => (row[n + q] = F[o])); return row; });
+  for (let c = 0; c < n; c++) {
+    const rc = A[c], piv = rc[c], hi = Math.min(n - 1, c + bw);
+    if (!(Math.abs(piv) > 1e-10 * Math.abs(K[order[c]][order[c]]) && Math.abs(piv) > 1e-9)) return solveDense(K, Fs);
+    for (let r = c + 1; r <= hi; r++) { const f = A[r][c] / piv; if (f) { const rr = A[r]; for (let j = c; j <= hi; j++) rr[j] -= f * rc[j]; for (let q = 0; q < m; q++) rr[n + q] -= f * rc[n + q]; } }
+  }
+  return Fs.map((_, q) => {
+    const y = new Float64Array(n);
+    for (let i = n - 1; i >= 0; i--) { let s = A[i][n + q]; const hi = Math.min(n - 1, i + bw); for (let j = i + 1; j <= hi; j++) s -= A[i][j] * y[j]; y[i] = s / A[i][i]; }
+    const x = new Float64Array(n); order.forEach((o, k) => (x[o] = y[k])); return x;
+  });
+}
+// dense solve of K·x = F for several right-hand sides at once (Gaussian elimination, partial pivoting); null when singular
+function solveDense(K, Fs) {
   const n = K.length, m = Fs.length, A = K.map((r, i) => Float64Array.from([...r, ...Fs.map((F) => F[i])]));
   for (let c = 0; c < n; c++) {
     let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;

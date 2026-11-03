@@ -127,7 +127,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                   return <Box key={`c${i}`} p={[c[0] - B / 2, c[1]]} q={[c[0] + B / 2, c[1]]} w={D} z0={Zk - H} h={H} color={col && !col.ok ? "#f97066" : CONC} edges="#667085" />;
                 })}
                 {on.beam && fl.beams.map((b, i) => {
-                  const sp = an?.spans.find((s) => s.member === i), ti = sp?.typeIdx ?? b.type ?? 0, t = frame.beamTypes[ti] ?? frame.beamTypes[0];
+                  const sp = an?.spans.find((s) => (s.members ?? [s.member]).includes(i)), ti = sp?.typeIdx ?? b.type ?? 0, t = frame.beamTypes[ti] ?? frame.beamTypes[0];
                   const pts = arcPolyline(b.a, b.b, b.arc?.s, 12), color = sp && !sp.ok ? "#f04438" : byType ? TYPE_COLORS[ti % TYPE_COLORS.length] : CONC;
                   return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={color} edges={pts.length > 2 ? undefined : "#475467"} />);
                 })}
