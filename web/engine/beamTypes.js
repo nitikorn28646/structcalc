@@ -32,7 +32,7 @@ const fitsLayers = (t, mat, g) => {
 
 // cheapest type of one b × h × bar size that passes every span in `sps` (null if none): bars and stirrups grown from the minimum
 // start: grow an existing type instead of the minimum (repair after a re-analysis)
-function designBH(sps, b, h, bar, mat, g, start = null) {
+export function designBH(sps, b, h, bar, mat, g, start = null) {
   const t = { name: "", b, h, top: bars(2, bar), bot: bars(2, bar), topX: "", botX: "", st: g.stirrups[0][0], stSets: g.stirrups[0][1], sSup: g.sMax, sMid: g.sMax };
   const cnt = (x) => parseBars(x)?.n ?? 0;
   let nT = 2, nB = 2, xT = 0, xB = 0, si = 0;
@@ -50,9 +50,9 @@ function designBH(sps, b, h, bar, mat, g, start = null) {
     for (const c of cs.filter((x) => !x.ok)) {
       if (c.error || c.defl?.ok === false || c.mid?.minDepthOk === false || c.sup?.minDepthOk === false) return null; // needs another b × h
       const m = c.mid, s = c.sup;
-      if (m && (m.botOk === false || m.doublyCheck !== "OK")) { xB++; grew = true; }
+      if (m && (m.botOk === false || m.doublyCheck !== "OK" || m.AsMinOk === false)) { xB++; grew = true; } // As,min too: more bars, not a bigger size
       if (m && m.topOk === false) { nT++; grew = true; }
-      if (s && (s.botOk === false || (s.doublyCheck && s.doublyCheck !== "OK"))) { xT++; grew = true; }
+      if (s && (s.botOk === false || (s.doublyCheck && s.doublyCheck !== "OK") || s.AsMinOk === false)) { xT++; grew = true; }
       if (s && s.topOk === false) { nB++; grew = true; }
       for (const [r, k] of [[s, "sSup"], [m, "sMid"]]) if (r && (r.stirrup === "CHECK_SPACING" || r.AminOk === false || r.vOk === false)) {
         if (r.vOk === false || r.VpOk === false) return null; // shear / torsion stress beyond the section: deeper or wider
@@ -97,9 +97,13 @@ function trimType(t, sps, mat, g) {
 // cheapest of every b × h × bar size
 export function designGroup(sps, mat, g = BEAM_GEN) {
   let best = null;
+  // bar sizes in order (user 2026-11-03): DB12 until two layers are full, then DB16 until two layers are full, then DB20 — the first
+  // size that fits in two layers is taken for that b × h (designBH returns null when a third layer would be needed)
   for (const b of g.b) for (let h = Math.max(g.hMin, b); h <= g.hMax + 1e-9; h = +(h + g.dh).toFixed(3)) for (const bar of g.bars) {
     const t = designBH(sps, b, h, bar, mat, g);
-    if (t) { const c = beamCost(t, g); if (!best || c < best.cost) best = { t, cost: c }; }
+    if (!t) continue;
+    const c = beamCost(t, g); if (!best || c < best.cost) best = { t, cost: c };
+    break;
   }
   return best;
 }

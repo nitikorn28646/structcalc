@@ -331,7 +331,7 @@ REVIEW FIXES (2026-11-03, cloud session, branch feature/review-fixes; findings i
 - Yasothon now beams 56/57 (porch arc rests on the 15 cantilever), base ΣP 197.8 t (was 210.8: inflated reactions from the
   reversed cantilever / mutual corners), real weight (3D) 172.8 t unchanged.
 - AUTO BEAM TYPES (user 2026-11-03, like the spread-footing auto types, economy first): engine/beamTypes.js generateBeamTypes(frame, k)
-  — each span's cheapest passing section (b 0.20/0.30, h 0.30–0.80 step 0.10 — whole 10 cm, user, DB12/16/20, stirrups RB6 → RB9 → 2 sets of RB9 (user: RB9 at most; beam type stSets), @0.20→0.10,
+  — each span's cheapest passing section (b 0.20/0.30, h 0.30–0.80 step 0.10 — whole 10 cm, user, DB12 until two layers are full, then DB16, then DB20 (user), stirrups RB6 → RB9 → 2 sets of RB9 (user: RB9 at most; beam type stSets), @0.20→0.10,
   ≤ 2 layers; cost = concrete 2,500 ฿/m³ + steel 28 ฿/kg + formwork 350 ฿/m²), sorted by cost, k groups of ~equal count, type =
   cheapest passing the whole group, names B1… by size (b × h, then steel), unused types dropped, the count can also be typed (step 8 "จัด N type"); up to 5 re-analyses designing with the largest forces seen, then an in-place repair of the types of spans still failing, then a trim of every type to the spans really using it (RB6 first, widest spacing, fewer bars), best kept; all drawn
   beams reset to auto, frame.beamAutoK. Step 8 tab Type คาน: "เพิ่ม type คานอัตโนมัติ (+1)" / "จัดใหม่". Cantilever spans are not

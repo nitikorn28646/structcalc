@@ -315,25 +315,31 @@ export default function App() {
   const projectJson = () => JSON.stringify({ app: "StructCalc", version: 1, savedAt: new Date().toISOString(), beam: st, slab, column, stair: stairSt, footing, roof, frame }, null, 1);
   const baseName = () => `${(st.project.name || "project").replace(/[\\/:*?"<>|]/g, "_").trim()}.json`;
   const writeHandle = async (h) => { const w = await h.createWritable(); await w.write(projectJson()); await w.close(); fileRef.current = h; setFileName(h.name); setDirty(false); setNotice({ ok: true, text: `บันทึก ${h.name} แล้ว` }); };
-  const saveAs = async () => {
-    if (window.showSaveFilePicker) {
-      try { await writeHandle(await window.showSaveFilePicker({ suggestedName: fileName ?? baseName(), types: [{ description: "โครงการ StructCalc", accept: { "application/json": [".json"] } }] })); }
-      catch (e) { if (e.name !== "AbortError") setNotice({ ok: false, text: `บันทึกไม่ได้: ${e.message}` }); }
-      return;
-    }
+  // the native pickers are refused inside a cross-origin frame (the claude.ai web copy runs in one): fall back to the file input /
+  // a download there, and whenever a picker throws a SecurityError (user 2026-11-03: "เปิดไฟล์ไม่ได้: … Cross origin sub frames")
+  const framed = (() => { try { return window.self !== window.top; } catch { return true; } })();
+  const download = () => {
     const url = URL.createObjectURL(new Blob([projectJson()], { type: "application/json" }));
     Object.assign(document.createElement("a"), { href: url, download: fileName ?? baseName() }).click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setDirty(false); setNotice({ ok: true, text: "ดาวน์โหลดไฟล์โครงการแล้ว" });
+  };
+  const saveAs = async () => {
+    if (window.showSaveFilePicker && !framed) {
+      try { await writeHandle(await window.showSaveFilePicker({ suggestedName: fileName ?? baseName(), types: [{ description: "โครงการ StructCalc", accept: { "application/json": [".json"] } }] })); }
+      catch (e) { if (e.name === "SecurityError") download(); else if (e.name !== "AbortError") setNotice({ ok: false, text: `บันทึกไม่ได้: ${e.message}` }); }
+      return;
+    }
+    download();
   };
   const saveProject = async () => {
     if (fileRef.current) { try { await writeHandle(fileRef.current); return; } catch (e) { setNotice({ ok: false, text: `บันทึกทับไม่ได้ (${e.message}) — เลือกที่บันทึกใหม่` }); } }
     await saveAs();
   };
   const openFile = async () => {
-    if (!window.showOpenFilePicker) { openRef.current.click(); return; }
+    if (!window.showOpenFilePicker || framed) { openRef.current.click(); return; }
     try { const [h] = await window.showOpenFilePicker({ types: [{ description: "โครงการ StructCalc", accept: { "application/json": [".json"] } }] }); const f = await h.getFile(); fileRef.current = h; setFileName(h.name); await openProject(f); }
-    catch (e) { if (e.name !== "AbortError") setNotice({ ok: false, text: `เปิดไฟล์ไม่ได้: ${e.message}` }); }
+    catch (e) { if (e.name === "SecurityError") openRef.current.click(); else if (e.name !== "AbortError") setNotice({ ok: false, text: `เปิดไฟล์ไม่ได้: ${e.message}` }); }
   };
   // safety net: the work in the browser is kept (5 latest) before "ใหม่" / "เปิด" replace it; "กู้คืน" brings the latest back
   const SNAP = "structcalc.snapshots", readSnaps = () => { try { return JSON.parse(localStorage.getItem(SNAP)) ?? []; } catch { return []; } };
