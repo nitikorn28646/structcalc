@@ -266,7 +266,17 @@ export function frame3dModel(frame, res, opt = {}) {
   const r3 = (v) => (Math.round(v * 1000) / 1000 + 0).toFixed(3); // + 0: no "-0.000" (an arc end at −2e-16 must meet the column)
   const nodes = [], key = (x, y, z) => `${r3(x)},${r3(y)},${r3(z)}`, idx = new Map();
   const pin = (frame.baseFixity ?? "pinned") === "pinned";
-  const node = (x, y, z, base = false) => { const k = key(x, y, z); if (!idx.has(k)) { idx.set(k, nodes.length); nodes.push({ x, y, z }); } const i = idx.get(k); if (base) nodes[i][pin ? "pinned" : "fixed"] = true; return i; };
+  // joints within 3 cm in plan at the same level are one joint — the floor analysis accepts a beam end that close to another beam
+  // or a column (floor.js TOL); keyed by exact coordinates only, such an end stayed a loose joint → "unstable" (user 2026-11-03)
+  const SNAP = 0.035; // a little more than floor.js TOL (0.03, accepted inclusive)
+  const node = (x, y, z, base = false) => {
+    const k = key(x, y, z);
+    let i = idx.get(k);
+    if (i === undefined) { i = nodes.findIndex((n) => !n.master && Math.abs(n.z - z) < 1e-6 && Math.hypot(n.x - x, n.y - y) < SNAP); if (i >= 0) idx.set(k, i); }
+    if (i === undefined || i < 0) { i = nodes.length; idx.set(k, i); nodes.push({ x, y, z }); }
+    if (base) nodes[i][pin ? "pinned" : "fixed"] = true;
+    return i;
+  };
   let z = 0; const Z = frame.floors.map((f) => (z += f.h ?? 3)); // levels (m above the footing top)
   const members = [], nodeLoads = [], warnings = [];
   frame.floors.forEach((fl, k) => {
@@ -285,6 +295,7 @@ export function frame3dModel(frame, res, opt = {}) {
       const ag = ln.arc ? arcGeom(ln.A, ln.B, ln.arc.s) : null;
       const at = (t) => (!ag ? [ln.A[0] + ln.u[0] * t, ln.A[1] + ln.u[1] * t] : t < 1e-9 ? ln.A : t > ln.L - 1e-9 ? ln.B : arcPoint(ag, t));
       const ts = new Set([0, ln.L, ...ln.cols.map((c) => c.t), ...ln.parts.flatMap((p) => [p.t0, p.t1]), ...(ag ? Array.from({ length: 11 }, (_, i) => (ln.L * (i + 1)) / 12) : [])]);
+      for (const o of an.lines) for (const c of o.carriers ?? []) if (c.host === ln.id && c.at > 1e-3 && c.at < ln.L - 1e-3) ts.add(c.at); // where the floor analysis put a beam on this one
       for (const o of an.lines) if (o !== ln) for (const p of [o.A, o.B]) { const d = [p[0] - ln.A[0], p[1] - ln.A[1]], t = d[0] * ln.u[0] + d[1] * ln.u[1]; if (t > 1e-3 && t < ln.L - 1e-3 && Math.abs(d[0] * ln.u[1] - d[1] * ln.u[0]) < 0.03) ts.add(t); }
       for (const c of res.columns.filter((x) => x.floor === k + 1)) { const p = c.p, d = [p[0] - ln.A[0], p[1] - ln.A[1]], t = d[0] * ln.u[0] + d[1] * ln.u[1]; if (t > 1e-3 && t < ln.L - 1e-3 && Math.abs(d[0] * ln.u[1] - d[1] * ln.u[0]) < 0.03) ts.add(t); }
       const xs = [...ts].map((t) => +t.toFixed(4)).sort((a, b) => a - b).filter((t, i, a) => !i || t - a[i - 1] > 1e-3);

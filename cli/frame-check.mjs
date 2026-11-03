@@ -25,4 +25,11 @@ const ok = base >= slab + beams + colW - 1e-6 && Math.min(...r.columns.map((c) =
 console.log(`${ok ? "ok  " : "FAIL"} base ΣP ${base.toFixed(0)} ≥ slab ${slab.toFixed(0)} + beams ${beams.toFixed(0)} + columns ${colW.toFixed(0)}`);
 for (const st of r.stacks) console.log(`     ${st.key} ${frame.colTypes[st.typeIdx].name} ${st.list.map((c) => `${c.floor}:${(c.Pbot / 1000).toFixed(1)}t ${c.check.r?.mode ?? c.check.error} ${(c.check.util * 100).toFixed(0)}%${c.ok ? "" : " NG"}`).join(" | ")}`);
 if (r.warnings.length) console.log(`     warn ${r.warnings.join(" | ")}`);
-process.exit(ok ? 0 : 1);
+// a beam end drawn 2 cm off the beam it rests on (accepted by the floor analysis): the 3D frame must join it, not leave a loose
+// joint (user 2026-11-03: "ไม่มีเสถียรภาพ" at a short secondary beam)
+const g = (x, y) => [x, y], Bm = (a, b) => ({ a, b, type: null }), cs = [g(0, 0), g(4, 0), g(0, 4), g(4, 4)];
+const fl = (name, h, ex) => ({ name, h, t: 0.12, finish: 100, live: 200, columns: cs, beams: [Bm(g(0, 0), g(4, 0)), Bm(g(0, 4), g(4, 4)), Bm(g(0, 0), g(0, 4)), Bm(g(4, 0), g(4, 4)), ...ex], walls: [], panels: {}, cants: [], stairs: [], lineLoads: [], pointLoads: [] });
+const near = analyzeFrame({ ...frame, floors: [{ ...fl("GB", 1.5, []), t: 0 }, fl("F2", 3, [Bm(g(2, 0), g(2, 4)), Bm(g(2.02, 2), g(4, 2))])], colPick: {}, analysis: "envelope" });
+const ok2 = !!near.frame3d && Math.abs(near.frame3d.base.reduce((s, b) => s + b.R[2], 0) - near.frame3d.load) < 1e-6 * near.frame3d.load;
+console.log(`${ok2 ? "ok  " : "FAIL"} beam end 2 cm off its carrier: 3D frame stable and in equilibrium`);
+process.exit(ok && ok2 ? 0 : 1);
