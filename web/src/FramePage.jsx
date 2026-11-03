@@ -229,7 +229,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             <Field label="เหล็กยืน"><Select value={frame.mat.fy} onChange={(v) => setMat("fy", Number(v))} options={Object.entries(GRADES).map(([k, g]) => [k, g])} /></Field>
           </div>
           <div className="mt-3 text-xs font-medium text-gray-500">ระยะคอนกรีตหุ้มเหล็ก (ถึงผิวเหล็กปลอก / เหล็กนอกสุด)</div>
-          <div className="mt-1 grid grid-cols-4 gap-3">
+          <div className="mt-1 grid grid-cols-2 gap-3">
             {coverFields}
           </div>
         </Card>
