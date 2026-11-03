@@ -160,12 +160,13 @@ export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, s
   );
 }
 
-export function PlateTable({ plates, d, setD, setHover, warnings = [] }) {
+export function PlateTable({ plates, d, setD, setHover, warnings = [], looseN = 0, onCarriers = null }) {
   const th = "sticky top-0 bg-white px-2 py-1.5 text-left text-[11px] font-medium text-gray-400";
   const pct = (v) => <span className={v > 1 ? "font-semibold text-red-600" : ""}>{fmt(v * 100, 0)}%</span>;
   const setPick = (id, v) => { const p = { ...d.memberPick }; if (v) p[id] = v; else delete p[id]; setD("memberPick", p); };
   return (<>
     {warnings.map((w) => <p key={w} className="mb-1 rounded-lg bg-red-50 px-2 py-1 text-[12px] font-medium text-red-600">⚠ {w}</p>)}
+    {looseN > 0 && onCarriers && <button onClick={onCarriers} className="mb-2 rounded-md bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600">เพิ่มอะเสรับ ({looseN} จุดที่ไม่มีอะเสรับ) — ผ่านแต่ละจุดตามแนว X / Y ที่สั้นกว่า ระหว่างอะเส/ผนัง</button>}
     <table className="w-full text-[13px] tabular-nums">
       <thead className="border-b border-gray-200"><tr>
         {["", "ช่วง", "ยาว (ม.)", "หน้าตัด", "เดี่ยว/คู่", "M (กก.-ม.)", "หน่วยแรง", "ระยะแอ่น", ""].map((t, i) => <th key={i} className={th}>{t}</th>)}

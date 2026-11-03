@@ -45,6 +45,8 @@ body { @apply bg-gray-50 text-gray-800 antialiased; }
 }
 
 .report { display: none; }
+/* step 10 shows the report in the page (the print sources outside <main> stay hidden; printing goes through Paged.js) */
+.report-preview .report { display: block; }
 
 .drawing svg { width: 100%; height: 100%; max-height: inherit; font-family: "Sarabun", sans-serif; }
 

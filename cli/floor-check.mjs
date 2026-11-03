@@ -27,4 +27,19 @@ const r = run("secondary beam", f);
 check("secondary carried", r.lines.find((l) => l.carriers.length === 2) !== undefined, "");
 const g = grid([0, 6], [0, 2.5]);
 run("one-way panel", g);
+// main / secondary at a crossing without a column (2026-11-03): the result must not depend on how the beams were drawn
+const room = () => grid([0, 6], [0, 5]), Mof = (r) => r.spans.map((s) => `${s.len.toFixed(2)}:${Math.round(s.Mpos)}`).sort().join(" ");
+const x1 = room(); x1.beams.push({ a: [3, 0], b: [3, 5], type: null }, { a: [0, 2.5], b: [6, 2.5], type: null }); // X, one beam each
+const x2 = room(); x2.beams.push({ a: [3, 0], b: [3, 5], type: null }, { a: [0, 2.5], b: [3, 2.5], type: null }, { a: [3, 2.5], b: [6, 2.5], type: null }); // y-beam in two pieces
+const rx1 = run("X crossing", x1), rx2 = run("X crossing drawn in pieces", x2);
+check("crossing: same result however drawn", Mof(rx1) === Mof(rx2), Mof(rx1));
+check("crossing: shorter (5 m) run is the main beam", rx1.lines.some((l) => Math.abs(l.L - 5) < 1e-6 && l.carriers.length === 2) && rx1.lines.filter((l) => Math.abs(l.L - 3) < 1e-6 && l.carriers.length === 2).length === 2, "");
+check("crossing: guess is warned", rx1.warnings.some((w) => w.startsWith("คานตัดกัน")), "");
+const x3 = room(); x3.beams.push({ a: [3, 0], b: [3, 5], type: null }, { a: [0, 2.5], b: [6, 2.5], type: null, role: "main" });
+const rx3 = run("X crossing, role main on the long beam", x3);
+check("crossing: role main wins", rx3.lines.some((l) => Math.abs(l.L - 6) < 1e-6 && l.carriers.length === 2) && rx3.lines.filter((l) => Math.abs(l.L - 2.5) < 1e-6 && l.carriers.length === 2).length === 2 && !rx3.warnings.some((w) => w.startsWith("คานตัดกัน")), "");
+// carried point load = reaction of the secondary (statics): both secondaries 3 m with the same panels → equal reactions
+const main = rx1.lines.find((l) => Math.abs(l.L - 5) < 1e-6 && l.carriers.length === 2);
+check("crossing: main beam carries both secondary reactions", Math.abs(main.pts.reduce((s, p) => s + p.P, 0) - rx1.lines.filter((l) => Math.abs(l.L - 3) < 1e-6).reduce((s, l) => s + (dist2(l.A, [3, 2.5]) < 1e-6 ? l.res.R[0] : l.res.R[l.x.length - 1]), 0)) < 1e-6, "");
+function dist2(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
 process.exit(bad ? 1 : 0);

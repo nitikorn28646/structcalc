@@ -6,7 +6,7 @@ import { SVGRenderer } from "echarts/renderers";
 import { Download, GitCommitHorizontal, Home, Plus, Ruler, Trash2, Triangle, Wand2 } from "lucide-react";
 import { roofGeometry } from "../engine/roof.js";
 import { frameRoof } from "../engine/roofFrame.js";
-import { DEFAULT_DESIGN, ROOFINGS, autoInnerPlates, designRoof, BATTEN_RANGE } from "../engine/roofMembers.js";
+import { DEFAULT_DESIGN, ROOFINGS, autoInnerPlates, carrierPlates, designRoof, BATTEN_RANGE } from "../engine/roofMembers.js";
 import { SECTIONS, SECTION_TYPES, SYM } from "../engine/steelSections.js";
 import { Badge } from "./ui.jsx";
 import { Card, Field, NumberInput, Select, inputCls as SEL } from "./ui.jsx";
@@ -460,7 +460,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null }) {
           mode === "plate" ? (
             <div className="flex h-full min-h-0 flex-col gap-2">
               <div className="min-h-[300px] flex-[3] rounded-xl bg-gray-50 p-2"><PlatePlan g={g} plates={pl.plates} posts={fr?.posts} loose={dz?.loose}columns={roof.columns?.length ? roof.columns : null} hover={hover} setHover={setHover} dark={dark} /></div>
-              <div className="min-h-0 flex-[2] overflow-auto"><PlateTable plates={pl.plates} d={roof.design} setD={setD} setHover={setHover} warnings={dz?.warnings} /></div>
+              <div className="min-h-0 flex-[2] overflow-auto"><PlateTable plates={pl.plates} d={roof.design} setD={setD} setHover={setHover} warnings={dz?.warnings} looseN={dz?.loose?.length ?? 0} onCarriers={() => set("innerPlates", [...(roof.innerPlates ?? []), ...carrierPlates(roof, g, dz?.loose ?? [])])} /></div>
             </div>
           ) : mode === "design" ? <MemberTable dz={dz} d={roof.design} setD={setD} setHover={setHover} /> : <div className="h-full rounded-xl bg-gray-50 p-2"><PlanEditor roof={roof} set={set} g={g} fr={fr} mode={mode} sel={sel} setSel={setSel} dark={dark} /></div>
         )}

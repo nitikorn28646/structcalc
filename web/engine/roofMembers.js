@@ -68,6 +68,26 @@ const sameLine = (o, a, b) => [a, b].every((p) => Math.abs((o.b[0] - o.a[0]) * (
 // 1) at every inner (re-entrant) wall corner, the wall line continued across the house — the original wall line between
 //    wings (e.g. grid B), preferring the extension that lands on another corner, else the shorter one;
 // 2) through every ดั้ง, square to its ridge, stopping at the first wall or plate of (1) on each side.
+// interior plates to carry posts that stand on nothing (button "เพิ่มอะเสรับ"): through each point along X or Y, whichever is
+// shorter, between the nearest plate / wall lines on both sides; duplicates (same line) are dropped. pts: [[x, y]] → [{ a, b }]
+export function carrierPlates(roof, g, pts) {
+  const segs = [...(roof.plates?.length ? roof.plates.map((l) => [l.a, l.b]) : []), ...(g?.pts ?? []).map((p, i, P) => [p, P[(i + 1) % P.length]]), ...(roof.innerPlates ?? []).map((l) => [l.a, l.b])];
+  const hit = (p, d) => segs.reduce((best, [a, b]) => {
+    const e = [b[0] - a[0], b[1] - a[1]], den = d[0] * e[1] - d[1] * e[0];
+    if (Math.abs(den) < 1e-9) return best;
+    const w = [a[0] - p[0], a[1] - p[1]], t = (w[0] * e[1] - w[1] * e[0]) / den, u = (w[0] * d[1] - w[1] * d[0]) / den;
+    return t > 0.05 && u >= -1e-6 && u <= 1 + 1e-6 ? Math.min(best, t) : best;
+  }, Infinity);
+  const out = [], r3 = (v) => +v.toFixed(3);
+  for (const p of pts) {
+    const opts = [[[1, 0], [-1, 0]], [[0, 1], [0, -1]]].map(([d1, d2]) => { const t1 = hit(p, d1), t2 = hit(p, d2);
+      return { L: t1 + t2, a: [r3(p[0] + d2[0] * t2), r3(p[1] + d2[1] * t2)], b: [r3(p[0] + d1[0] * t1), r3(p[1] + d1[1] * t1)] }; }).filter((o) => Number.isFinite(o.L)).sort((x, y) => x.L - y.L);
+    const c = opts[0];
+    if (c && !out.some((o) => Math.hypot(o.a[0] - c.a[0], o.a[1] - c.a[1]) < 0.02 && Math.hypot(o.b[0] - c.b[0], o.b[1] - c.b[1]) < 0.02)) out.push({ a: c.a, b: c.b });
+  }
+  return out;
+}
+
 export function autoInnerPlates(g, fr) {
   const P = g.pts, n = P.length, walls = P.map((p, i) => [p, P[(i + 1) % n]]), out = [];
   for (let i = 0; i < n; i++) {
@@ -196,29 +216,23 @@ export function designRoof(g, fr, roof, d) {
   fr.supports.forEach((x, i) => spans("support", "support", "support", `support-${i + 1}`, `สะพาน S${i + 1}`, [...x.a, x.za], [...x.b, x.zb], roof.frame.postSp,
     (section, count, L) => simpleBeam({ ...base, section, selfW: section.w, transfer: (ra.w * span) / D, L, count })));
 
-  // wall plate (อะเส): rafter reaction at the wall, spans between columns along each wall edge
-  // (column count per edge from the column spacing, or set per edge in d.plateDiv)
-// options (d.plateSupport):
-  //   "span" (default): simple span between columns (the diff-tested simpleBeam, wL²/8, 5wL⁴/384EI)
-  //   "cont": continuous over the columns (welded / spliced through): max moment ≈ wL²/10, deflection ≈ 0.53 × simple span (3-span end span)
-  //   "beam": sitting on an RC ring beam (คานหลังคา) all along — it only spans between anchor bolts d.plateAnchor (m, default 1.0)
-  // d.plateDefl: deflection limit L/360 (default) or L/240 (roof without a hung ceiling); stress check unchanged (Fb = 0.6Fy)
-  const plateRun = (section, count, L) => {
-    const mode = d.plateSupport ?? "span", Ld = mode === "beam" ? Math.min(L, d.plateAnchor ?? 1.0) : L;
-    const r = simpleBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count });
-    const km = mode === "cont" ? 0.8 : 1, kd = mode === "cont" ? 0.53 : 1, lim = d.plateDefl === 240 ? 240 : 360;
-    const fb = r.fb * km, dd = r.d * kd, dAllow = (Ld * 100) / lim;
-    return { ...r, Mx: r.Mx * km, SxReq: r.SxReq * km, fb, d: dd, dAllow, Ld, mode, ok: fb <= r.Fb && dd <= dAllow };
+  // Plates bearing on plates (user 2026-11-03: "ทั้งคานทั้งอะเส"): every post (ดั้ง / ตุ๊กตา) and every end of an interior plate
+  // that lands inside another plate is a point load on that plate; the wall plates (A) are designed with those loads too.
+  // Each plate member carries `bear`: the loads it hands down to the structure [{ p: [x, y], P }] (roofLink sums them).
+  const warnings = [], near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
+  const postLoad = (pt) => members.reduce((t, x) => t
+    + ((x.group === "ridge" || x.group === "support") && (near(x.p, pt) || near(x.q, pt)) ? x.r.R : 0)
+    + ((x.group === "hip" || x.group === "valley") && near(x.q, pt) ? Math.max(0, x.r.Rmin) : 0), 0); // an uplifting hip end adds nothing
+  const alongSeg = (a, b, pt, tol = 0.15) => { // position (m from a) of a point lying inside segment a-b, else null
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), t = ((pt[0] - a[0]) * (b[0] - a[0]) + (pt[1] - a[1]) * (b[1] - a[1])) / (L * L);
+    const off = Math.abs((pt[0] - a[0]) * (b[1] - a[1]) - (pt[1] - a[1]) * (b[0] - a[0])) / L;
+    return t > 0.01 && t < 0.99 && off < tol ? t * L : null;
   };
-  const cantRun = (section, count, L) => {
-    const r = plateRun(section, count, L), fb = r.fb * 4, dd = r.d * 9.6, dAllow = r.dAllow * 2;
-    return { ...r, Mx: r.Mx * 4, SxReq: r.SxReq * 4, fb, d: dd, dAllow, R: r.w * (r.Ld ?? L), cant: true, ok: fb <= r.Fb && dd <= dAllow };
-  };
-  // no plates drawn but columns placed (e.g. imported from the structure): wall plates on every outline edge, cut at those columns
+  const cols = roof.columns ?? [];
+  // wall-plate spans (A): drawn plates split at the columns on them, or the outline edges
   const platesIn = roof.plates?.length ? roof.plates : (roof.columns?.length ? g.pts.map((a, i) => ({ a, b: g.pts[(i + 1) % g.pts.length] })) : []);
+  const aSpans = [];
   if (platesIn.length) {
-    // plates drawn by the user: each line is split into spans at the drawn columns lying on it
-    const cols = roof.columns ?? [];
     platesIn.forEach((ln, i) => {
       const L = Math.hypot(ln.b[0] - ln.a[0], ln.b[1] - ln.a[1]);
       if (L < 0.1) return;
@@ -232,65 +246,140 @@ export function designRoof(g, fr, roof, d) {
       const hasCol = (t) => cols.some((c) => Math.hypot(c[0] - (ln.a[0] + (ln.b[0] - ln.a[0]) * t), c[1] - (ln.a[1] + (ln.b[1] - ln.a[1]) * t)) < 0.05);
       const nCol = cuts.filter((t) => hasCol(t)).length;
       cuts.slice(1).forEach((t, j) => {
-        const t0 = cuts[j], free = nCol > 0 ? (t0 === 0 && !hasCol(0) ? "p" : t === 1 && !hasCol(1) ? "q" : null) : null, Ls = (t - t0) * L;
-        addMember("plate", "plate", "plate", `plate-${i + 1}-${j + 1}`,
-          `${free ? "อะเสยื่น" : "อะเส"} เส้น ${i + 1}${cuts.length > 2 ? ` ช่วง ${j + 1}/${cuts.length - 1}` : ""}`, P(t0), P(t), Ls,
-          (section, count) => (free ? cantRun : plateRun)(section, count, Ls), free ? { free } : {});
+        const t0 = cuts[j], free = nCol > 0 ? (t0 === 0 && !hasCol(0) ? "p" : t === 1 && !hasCol(1) ? "q" : null) : null;
+        aSpans.push({ id: `plate-${i + 1}-${j + 1}`, label: `${free ? "อะเสยื่น" : "อะเส"} เส้น ${i + 1}${cuts.length > 2 ? ` ช่วง ${j + 1}/${cuts.length - 1}` : ""}`, p: P(t0), q: P(t), L: (t - t0) * L, free, loads: [] });
       });
     });
   } else {
-    g.pts.forEach((p, i) => { const q = g.pts[(i + 1) % g.pts.length];
-      spans("plate", "plate", "plate", `plate-${i + 1}`, `อะเส ขอบ ${i + 1}`, [...p, g.H], [...q, g.H], d.plateSpan, plateRun, d.plateDiv?.[i + 1]); });
+    g.pts.forEach((p, i) => { const q = g.pts[(i + 1) % g.pts.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.max(1, Math.round(d.plateDiv?.[i + 1] ?? Math.ceil(L / d.plateSpan - 1e-9)));
+      for (let k = 0; k < n; k++) aSpans.push({ id: n > 1 ? `plate-${i + 1}-${k + 1}` : `plate-${i + 1}`, label: n > 1 ? `อะเส ขอบ ${i + 1} ช่วง ${k + 1}/${n}` : `อะเส ขอบ ${i + 1}`, p: [...lerp(p, q, k / n), g.H], q: [...lerp(p, q, (k + 1) / n), g.H], L: L / n, free: null, loads: [] }); });
   }
-  members.filter((x) => x.group === "plate").forEach((x, k) => { x.tag = `A${k + 1}`; x.edge = Number(x.id.split("-")[1]); });
-
-  // interior wall plates (อะเสช่วงใน) carrying the ดั้ง: point loads = beam reactions meeting at each post
-  const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
-  const postLoad = (pt) => members.reduce((t, x) => t
-    + ((x.group === "ridge" || x.group === "support") && (near(x.p, pt) || near(x.q, pt)) ? x.r.R : 0)
-    + ((x.group === "hip" || x.group === "valley") && near(x.q, pt) ? Math.max(0, x.r.Rmin) : 0), 0); // an uplifting hip end adds nothing
-  const lines = (roof.innerPlates ?? []).filter((ln) => Math.hypot(ln.b[0] - ln.a[0], ln.b[1] - ln.a[1]) >= 0.3);
-  const along = (ln, pt) => { // position (m from a) of a point lying inside the plate, else null
-    const L = Math.hypot(ln.b[0] - ln.a[0], ln.b[1] - ln.a[1]), t = ((pt[0] - ln.a[0]) * (ln.b[0] - ln.a[0]) + (pt[1] - ln.a[1]) * (ln.b[1] - ln.a[1])) / (L * L);
-    const off = Math.abs((pt[0] - ln.a[0]) * (ln.b[1] - ln.a[1]) - (pt[1] - ln.a[1]) * (ln.b[0] - ln.a[0])) / L;
-    return t > 0.01 && t < 0.99 && off < 0.15 ? t * L : null;
-  };
+  // interior plates (B): two crossing inside both are not two simple spans side by side — the shorter one (stiffer) is the main
+  // plate, the other is cut at the crossing and rests on it (same rule as the RC beams; ties: the one drawn first)
+  const raw = (roof.innerPlates ?? []).map((ln, k) => ({ a: ln.a, b: ln.b, k })).filter((ln) => Math.hypot(ln.b[0] - ln.a[0], ln.b[1] - ln.a[1]) >= 0.3);
+  const crossings = [];
+  for (let changed = true, guard = 0; changed && guard < 200; guard++) {
+    changed = false;
+    outer: for (let i = 0; i < raw.length; i++) for (let j = i + 1; j < raw.length; j++) {
+      const P = raw[i], Q = raw[j], dP = [P.b[0] - P.a[0], P.b[1] - P.a[1]], dQ = [Q.b[0] - Q.a[0], Q.b[1] - Q.a[1]], den = dP[0] * dQ[1] - dP[1] * dQ[0];
+      if (Math.abs(den) < 1e-9) continue;
+      const w = [Q.a[0] - P.a[0], Q.a[1] - P.a[1]], s1 = (w[0] * dQ[1] - w[1] * dQ[0]) / den, s2 = (w[0] * dP[1] - w[1] * dP[0]) / den, LP = Math.hypot(...dP), LQ = Math.hypot(...dQ);
+      if (s1 * LP < 0.05 || s1 * LP > LP - 0.05 || s2 * LQ < 0.05 || s2 * LQ > LQ - 0.05) continue;
+      const J = [P.a[0] + dP[0] * s1, P.a[1] + dP[1] * s1];
+      if (cols.some((c) => near(c, J))) continue;
+      const sec = LQ < LP - 1e-6 ? P : Q, si = sec === P ? i : j, main = sec === P ? Q : P;
+      crossings.push({ p: J, main: main.k, sec: sec.k });
+      raw.splice(si, 1, { a: sec.a, b: J, k: sec.k, piece: 1 }, { a: J, b: sec.b, k: sec.k, piece: 2 });
+      changed = true; break outer;
+    }
+  }
+  const nPieces = {}; raw.forEach((r) => { nPieces[r.k] = (nPieces[r.k] ?? 0) + 1; });
+  const lines = raw.map((r) => ({ ...r, id: nPieces[r.k] > 1 ? `inner-${r.k + 1}-${r.piece}` : `inner-${r.k + 1}`, tag: nPieces[r.k] > 1 ? `B${r.k + 1}${r.piece === 1 ? "a" : "b"}` : `B${r.k + 1}`, L: Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]) }));
+  for (const c of crossings) warnings.push(`อะเสช่วงใน B${c.main + 1} กับ B${c.sec + 1} ตัดกันที่ (${c.p[0].toFixed(2)}, ${c.p[1].toFixed(2)}) ไม่มีเสา — คิด B${c.sec + 1} (ช่วงยาวกว่า) วางบน B${c.main + 1}`);
+  // posts with their loads, each on the first plate found under it: interior plate → wall-plate span → column / wall line
+  const posts = fr.posts.filter((pt) => pt.kind === "ดั้ง" || pt.kind === "ตุ๊กตา").map((pt) => ({ ...pt, pp: [pt.x, pt.y], P: postLoad([pt.x, pt.y]) }));
+  for (const po of posts) {
+    const li = lines.findIndex((ln) => alongSeg(ln.a, ln.b, po.pp) !== null);
+    if (li >= 0) { po.on = { inner: li, a: alongSeg(lines[li].a, lines[li].b, po.pp) }; continue; }
+    const ai = aSpans.findIndex((sp) => alongSeg(sp.p, sp.q, po.pp, 0.05) !== null);
+    if (ai >= 0) { po.on = { wall: ai, a: alongSeg(aSpans[ai].p, aSpans[ai].q, po.pp, 0.05) }; continue; }
+    if (cols.some((c) => near(c, po.pp))) { po.on = { column: true }; continue; }
+    const onLine = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]), t = ((po.x - a[0]) * (b[0] - a[0]) + (po.y - a[1]) * (b[1] - a[1])) / (L * L);
+      return t > -0.01 && t < 1.01 && Math.abs((po.x - a[0]) * (b[1] - a[1]) - (po.y - a[1]) * (b[0] - a[0])) / L < 0.05; };
+    if (aSpans.some((sp) => onLine(sp.p, sp.q)) || g.pts.some((a, i) => onLine(a, g.pts[(i + 1) % g.pts.length]))) { po.on = { wallLine: true }; continue; }
+    po.on = null;
+  }
+  // interior plates, the ones resting on others first; ends inside another interior plate are point loads on it
   const done = new Map();
   for (let pass = 0; pass < lines.length + 1 && done.size < lines.length; pass++) {
     lines.forEach((ln, k) => {
       if (done.has(k)) return;
-      const resting = lines.map((o, j) => j !== k && [o.a, o.b].some((e) => along(ln, e) !== null) ? j : null).filter((j) => j !== null);
+      const resting = lines.map((o, j) => j !== k && [o.a, o.b].some((e) => alongSeg(ln.a, ln.b, e) !== null) ? j : null).filter((j) => j !== null);
       if (resting.some((j) => !done.has(j)) && pass < lines.length) return; // wait for the plates that bear on this one
-      const L = Math.hypot(ln.b[0] - ln.a[0], ln.b[1] - ln.a[1]);
       const loads = [
-        ...fr.posts.filter((pt) => pt.kind === "ดั้ง" || pt.kind === "ตุ๊กตา").map((pt) => { const a = along(ln, [pt.x, pt.y]); return a === null ? null : { P: postLoad([pt.x, pt.y]), a, from: pt.kind }; }),
+        ...posts.filter((po) => po.on?.inner === k && po.P > 0).map((po) => ({ P: po.P, a: po.on.a, from: po.kind })),
         ...resting.filter((j) => done.has(j)).flatMap((j) => { const o = lines[j], r = done.get(j).r;
-          return [[o.a, r.Rl], [o.b, r.Rr]].map(([e, R]) => { const a = along(ln, e); return a === null ? null : { P: Math.max(0, R), a, from: `B${j + 1}` }; }); }),
+          return [[o.a, r.Rl], [o.b, r.Rr]].map(([e, R]) => { const a = alongSeg(ln.a, ln.b, e); return a === null ? null : { P: Math.max(0, R), a, from: o.tag }; }); }),
       ].filter(Boolean);
-      addMember("plate", "plate", "plate", `inner-${k + 1}`, `อะเสช่วงใน B${k + 1}`, [...ln.a, g.H], [...ln.b, g.H], L,
-        (section, count) => pointBeam({ ...base, section, selfW: section.w, loads, L, count }));
-      const mem = members[members.length - 1];
-      Object.assign(mem, { tag: `B${k + 1}`, inner: true, loads });
+      addMember("plate", "plate", "plate", ln.id, `อะเสช่วงใน ${ln.tag}`, [...ln.a, g.H], [...ln.b, g.H], ln.L,
+        (section, count) => pointBeam({ ...base, section, selfW: section.w, loads, L: ln.L, count }));
+      const mem = members.pop();
+      Object.assign(mem, { tag: ln.tag, inner: true, loads, k: ln.k });
       done.set(k, mem);
     });
   }
-  // ดั้ง that no interior plate carries and that do not stand on a wall line: their load would be lost — report them
-  const warnings = [], loose = [];
-  const onLine = (pt, a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]), t = ((pt[0] - a[0]) * (b[0] - a[0]) + (pt[1] - a[1]) * (b[1] - a[1])) / (L * L);
-    return t > -0.01 && t < 1.01 && Math.abs((pt[0] - a[0]) * (b[1] - a[1]) - (pt[1] - a[1]) * (b[0] - a[0])) / L < 0.15; };
-  for (const pt of fr.posts.filter((p) => p.kind === "ดั้ง")) {
-    const P = [pt.x, pt.y];
-    if (lines.some((ln) => along(ln, P) !== null)) continue;
-    if (g.pts.some((a, i) => onLine(P, a, g.pts[(i + 1) % g.pts.length]))) continue;
-    if ((roof.columns ?? []).some((c) => near(c, P))) continue; // stands on a column: the column takes it
-    if ((roof.plates ?? []).some((pl) => onLine(P, pl.a, pl.b))) continue; // on a drawn wall plate
-    const ends = lines.map((ln, j) => (near(ln.a, P) || near(ln.b, P) ? `B${j + 1}` : null)).filter(Boolean);
-    loose.push(P);
-    warnings.push(`ดั้งที่ (${pt.x.toFixed(2)}, ${pt.y.toFixed(2)}) ไม่มีอะเสรับ${ends.length ? ` — อยู่ที่ปลาย ${ends.join(", ")} ซึ่งไม่มีอะไรรองรับรอยต่อ ให้วาดอะเสรับดั้งยาวต่อเนื่องผ่านดั้ง` : " — วาดอะเสรับดั้งผ่านตำแหน่งนี้"}`);
+  const inner = lines.map((_, k) => done.get(k)).filter(Boolean);
+  // where an interior-plate end goes: another interior plate (already a load on it), a wall-plate span (point load on it), else down
+  const endHost = (e, self) => {
+    if (lines.some((o, j) => done.get(j) !== self && alongSeg(o.a, o.b, e) !== null)) return { inner: true };
+    const ai = aSpans.findIndex((sp) => alongSeg(sp.p, sp.q, e, 0.05) !== null);
+    return ai >= 0 ? { wall: ai, a: alongSeg(aSpans[ai].p, aSpans[ai].q, e, 0.05) } : null;
+  };
+  for (const m of inner) {
+    m.bear = [];
+    for (const [e, R] of [[m.p, m.r.Rl], [m.q, m.r.Rr]]) {
+      const h = endHost(e, m);
+      if (h?.wall !== undefined) aSpans[h.wall].loads.push({ P: Math.max(0, R), a: h.a, from: m.tag });
+      else if (!h) m.bear.push({ p: [e[0], e[1]], P: Math.max(0, R) });
+    }
   }
-  // keep B1, B2, … in order in the member list
-  const innerSorted = members.filter((x) => x.inner).sort((x, y) => +x.tag.slice(1) - +y.tag.slice(1));
-  members.splice(members.length - innerSorted.length, innerSorted.length, ...innerSorted);
+  for (const po of posts) if (po.on?.wall !== undefined && po.P > 0) aSpans[po.on.wall].loads.push({ P: po.P, a: po.on.a, from: po.kind });
+
+  // wall plate (อะเส): rafter reaction at the wall (uniform) + point loads from posts / interior plates standing on the span.
+  // d.plateSupport: "span" (default) simple span between columns · "cont" continuous over the columns (M × 0.8, deflection × 0.53,
+  // applied to the whole span result — an approximation) · "beam" on an RC ring beam all along: the plate only spans between
+  // anchor bolts d.plateAnchor (m, default 1.0); its load and the point loads go straight down into the RC beam.
+  // d.plateDefl: deflection limit L/360 (default) or L/240 (roof without a hung ceiling); stress check unchanged (Fb = 0.6Fy)
+  const plateRun = (section, count, L, pl = []) => {
+    const mode = d.plateSupport ?? "span", Ld = mode === "beam" ? Math.min(L, d.plateAnchor ?? 1.0) : L, onBeam = mode === "beam";
+    const r = !onBeam && pl.length ? pointBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count, loads: pl })
+      : simpleBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count });
+    const km = mode === "cont" ? 0.8 : 1, kd = mode === "cont" ? 0.53 : 1, lim = d.plateDefl === 240 ? 240 : 360;
+    const fb = r.fb * km, dd = r.d * kd, dAllow = (Ld * 100) / lim;
+    return { ...r, Mx: r.Mx * km, SxReq: r.SxReq * km, fb, d: dd, dAllow, Ld, mode, Rl: r.Rl ?? r.R, Rr: r.Rr ?? r.R, ok: fb <= r.Fb && dd <= dAllow };
+  };
+  // cantilever plate (อะเสยื่น, fixed at its column): UDL M ×4 / δ ×9.6 of the simple span; point loads P at x from the column add
+  // P·x to the moment and P·x²(3L − x)/(6EI) to the tip deflection
+  const cantRun = (section, count, L, pl = [], fixedAt = "p") => {
+    const r = plateRun(section, count, L), EI = d.E * section.Ix * count, xs = pl.map((l) => ({ P: l.P, x: fixedAt === "p" ? l.a : L - l.a }));
+    const Mx = r.Mx * 4 + xs.reduce((t, l) => t + l.P * l.x, 0), fb = (r.fb * Mx) / (r.Mx || 1), dd = r.d * 9.6 + xs.reduce((t, l) => t + (l.P * (l.x * 100) ** 2 * (3 * L * 100 - l.x * 100)) / (6 * EI), 0), dAllow = r.dAllow * 2;
+    return { ...r, Mx, SxReq: (r.SxReq * Mx) / (r.Mx || 1), fb, d: dd, dAllow, R: r.w * (r.Ld ?? L) + xs.reduce((t, l) => t + l.P, 0), cant: true, ok: fb <= r.Fb && dd <= dAllow };
+  };
+  for (const sp of aSpans) {
+    const pl = sp.loads.filter((l) => l.P > 0);
+    addMember("plate", "plate", "plate", sp.id, sp.label, sp.p, sp.q, sp.L,
+      (section, count) => (sp.free ? cantRun(section, count, sp.L, pl, sp.free === "p" ? "q" : "p") : plateRun(section, count, sp.L, pl)), { ...(sp.free ? { free: sp.free } : {}), loads: pl });
+    const m = members[members.length - 1], mode = d.plateSupport ?? "span";
+    if (mode === "beam" && !sp.free) { // straight down along the RC beam: the plate load at the anchors + each point load where it stands
+      const n = Math.max(1, Math.round(sp.L / (d.plateAnchor ?? 1.0))), W = m.r.w * sp.L;
+      m.bear = Array.from({ length: n + 1 }, (_, i) => ({ p: lerp(sp.p, sp.q, i / n).slice(0, 2), P: (W / n) * (i === 0 || i === n ? 0.5 : 1) }))
+        .concat(pl.map((l) => ({ p: lerp(sp.p, sp.q, l.a / sp.L).slice(0, 2), P: l.P })));
+    } else if (sp.free) m.bear = [{ p: (sp.free === "p" ? sp.q : sp.p).slice(0, 2), P: m.r.R }];
+    else m.bear = [{ p: sp.p.slice(0, 2), P: m.r.Rl ?? m.r.R }, { p: sp.q.slice(0, 2), P: m.r.Rr ?? m.r.R }];
+  }
+  members.filter((x) => x.group === "plate" && !x.inner).forEach((x, k) => { x.tag = `A${k + 1}`; x.edge = Number(x.id.split("-")[1]); });
+  members.push(...inner); // interior plates listed after the wall plates (B1, B2, …)
+
+  // posts with nothing under them: their load goes straight down where they stand (roofLink → column / beam) — say so
+  const loose = [];
+  const bearLoose = [];
+  const lost = [];
+  for (const po of posts) {
+    if (po.on?.column || po.on?.wallLine) { if (po.P > 0) bearLoose.push({ p: po.pp, P: po.P, kind: po.kind, under: po.on.column ? "column" : "wall" }); continue; }
+    if (po.on) continue;
+    loose.push(po.pp);
+    if (po.P > 0) bearLoose.push({ p: po.pp, P: po.P, kind: po.kind, under: null });
+    lost.push(po);
+  }
+  // one line per post when there are few, else one summary line (the plan marks every post in red)
+  if (lost.length <= 3) for (const po of lost) {
+    const ends = lines.filter((ln) => near(ln.a, po.pp) || near(ln.b, po.pp)).map((ln) => ln.tag);
+    warnings.push(`${po.kind}ที่ (${po.x.toFixed(2)}, ${po.y.toFixed(2)}) ไม่มีอะเสรับ (${Math.round(po.P)} กก. ลงโครงสร้างตรงจุดนั้น)${ends.length ? ` — อยู่ที่ปลาย ${ends.join(", ")} ซึ่งไม่มีอะไรรองรับรอยต่อ ให้วาดอะเสรับยาวต่อเนื่องผ่านจุดนี้` : " — กด \"เพิ่มอะเสรับ\" หรือวาดอะเสรับผ่านจุดนี้"}`);
+  } else {
+    const by = (k) => lost.filter((po) => po.kind === k);
+    warnings.push(`${["ดั้ง", "ตุ๊กตา"].filter((k) => by(k).length).map((k) => `${k} ${by(k).length} ต้น`).join(" · ")} ไม่มีอะเสรับ (รวม ${Math.round(lost.reduce((t, po) => t + po.P, 0)).toLocaleString()} กก. ลงโครงสร้างตรงจุดที่ยืน — จุดสีแดงบนแปลน) — กด "เพิ่มอะเสรับ" หรือวาดอะเสรับผ่านจุดเหล่านั้น`);
+  }
+
 
   const ratio = (key, r) => ({
     stress: key === "post" ? r.fa / r.Fa : r.fb / r.Fb,
@@ -320,5 +409,5 @@ export function designRoof(g, fr, roof, d) {
     x.weight ??= x.r.section.w * x.count * (x.len ?? 0);
     x.ok ??= x.r.ok;
   }
-  return { rows, members, warnings, loose, weight: rows.reduce((a, x) => a + x.weight, 0), ok: rows.every((x) => x.ok) };
+  return { rows, members, warnings, loose, bearLoose, weight: rows.reduce((a, x) => a + x.weight, 0), ok: rows.every((x) => x.ok) };
 }

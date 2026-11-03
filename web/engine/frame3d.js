@@ -3,14 +3,14 @@
 // fixed or pinned (default: 1–2 pile caps take no moment) at the footing top; a beam end carried by another beam (no column) is pinned (bending released); joints elsewhere are
 // rigid. Cracked stiffness: beams 0.5·Ig, columns 0.7·Ig, torsion 0.2·J. Optional P-Delta (geometric stiffness, iterated).
 // Units: m, kg, kg-m. Global axes: X, Y plan, Z up (base Z = 0 = top of the footings).
-import { CONC } from "./floor.js";
+import { CONC, shearRange } from "./floor.js";
 import { arcGeom, arcPoint } from "./arc.js";
 
 const GP = [[-Math.sqrt(3 / 5), 5 / 9], [0, 8 / 9], [Math.sqrt(3 / 5), 5 / 9]];
 const shape = (x, L) => { const s = x / L; return [1 - 3 * s * s + 2 * s ** 3, L * (s - 2 * s * s + s ** 3), 3 * s * s - 2 * s ** 3, L * (s ** 3 - s * s)]; };
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const unit = (a) => { const L = Math.hypot(...a); return a.map((v) => v / L); };
-const EcOf = (mat) => 2.323 ** 1.5 * 4270 * Math.sqrt(mat.fcPrime) * 1e4; // kg/m², as the WSD engines
+const EcOf = (mat, fc) => 2.323 ** 1.5 * 4270 * Math.sqrt(fc ?? mat.fcPrime) * 1e4; // kg/m², as the WSD engines (fc: f'c of that member kind)
 // torsion constant of a b × h rectangle (b ≤ h)
 const Jrect = (b, h) => { const a = Math.min(b, h), c = Math.max(b, h); return a ** 3 * c * (1 / 3 - 0.21 * (a / c) * (1 - a ** 4 / (12 * c ** 4))); };
 
@@ -110,7 +110,7 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
     // rotation); with both ends pinned torsion stays held at end i so the member cannot spin
     const rel = [...(m.release?.[0] ? [4, 5] : []), ...(m.release?.[1] ? [9, 10, 11] : []), ...(m.release?.[0] && !m.release?.[1] ? [3] : [])].sort((a, b) => a - b);
     const dofs = [...[0, 1, 2, 3, 4, 5].map((dd) => m.i * 6 + dd), ...[0, 1, 2, 3, 4, 5].map((dd) => m.j * 6 + dd)];
-    return { m, L, T3, A: m.b * m.h, Iy: Iy * f, Iz: Iz * f, J: Jrect(m.b, m.h) * factors.J, fl: nodalLoads(m.loads, m.torque, L), rel, dofs };
+    return { m, L, T3, E: m.E ?? E, A: m.b * m.h, Iy: Iy * f, Iz: Iz * f, J: Jrect(m.b, m.h) * factors.J, fl: nodalLoads(m.loads, m.torque, L), rel, dofs };
   });
   const toG = (T3, v) => [0, 1, 2].map((c) => T3[0][c] * v[0] + T3[1][c] * v[1] + T3[2][c] * v[2]); // local → global (3-vector)
   const toL = (T3, v) => T3.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
@@ -139,7 +139,7 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
   const solveK = (N, cs) => {
     const K = Array.from({ length: nd }, () => new Float64Array(nd));
     prep.forEach((e, k) => {
-      const kl = localK(E, G, e.A, e.Iy, e.Iz, e.J, e.L, pDelta ? N[k] : 0), c = condense(kl, e.fl, e.rel);
+      const kl = localK(e.E, e.E / 2.4, e.A, e.Iy, e.Iz, e.J, e.L, pDelta ? N[k] : 0), c = condense(kl, e.fl, e.rel);
       e.kl = kl; e.cinv = c.inv;
       // transform: kg = Tᵀ k T with T = blockdiag(T3 ×4)
       const Tm = (r, c2) => (Math.floor(r / 3) === Math.floor(c2 / 3) ? e.T3[r % 3][c2 % 3] : 0);
@@ -196,7 +196,7 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
     const V = (x) => q0 - left(x)[0], M = (x) => -q1 + q0 * x - left(x)[1];
     const xs = Array.from({ length: 21 }, (_, i) => (L * i) / 20), Ms = xs.map(M);
     return { ...e.m, L, f, N: -f[0], T: Math.max(Math.abs(f[3]), Math.abs(f[9])), V, M, Mmax: Math.max(0, ...Ms), Mmin: Math.min(0, ...Ms), ML: M(0), MR: M(L),
-      Vmax: Math.max(...xs.map((x) => Math.abs(V(x)))), My: [f[4], f[10]], Mz: [f[5], f[11]], sec: { A: e.A, Iy: e.Iy, Iz: e.Iz, J: e.J, G }, rel: e.rel, T3: e.T3 };
+      Vmax: Math.max(...xs.map((x) => Math.abs(V(x)))), My: [f[4], f[10]], Mz: [f[5], f[11]], sec: { A: e.A, Iy: e.Iy, Iz: e.Iz, J: e.J, G: e.E / 2.4, E: e.E }, rel: e.rel, T3: e.T3 };
   });
   // main loads, P-Delta iterated on their own axial forces
   const main = { nodeLoads, lateral, fls: prep.map((e) => e.fl) };
@@ -232,7 +232,7 @@ export function frame3dModel(frame, res, opt = {}) {
     fl.columns.forEach((c, i) => {
       const col = res.columns.find((x) => x.floor === k && x.i === i), lv = col?.lv ?? { Bx: 20, By: 20 };
       const a = node(c[0], c[1], zb, k === 0), b = node(c[0], c[1], zk);
-      members.push({ i: a, j: b, kind: "column", floor: k, ci: i, b: lv.Bx / 100, h: lv.By / 100 });
+      members.push({ i: a, j: b, kind: "column", floor: k, ci: i, b: lv.Bx / 100, h: lv.By / 100, E: EcOf(frame.mat, frame.mat.fcCol) });
       const W = (CONC * lv.Bx * lv.By * (fl.h ?? 3)) / 1e4; nodeLoads.push({ n: a, P: W / 2 }, { n: b, P: W / 2 });
     });
     for (const pl of an.pointLoads ?? []) if (pl.on === "column") nodeLoads.push({ n: node(fl.columns[pl.ci][0], fl.columns[pl.ci][1], zk), P: pl.P });
@@ -262,7 +262,7 @@ export function frame3dModel(frame, res, opt = {}) {
         // arc piece: its real length differs from the chord-parameter length → stretch positions, keep each load's total
         const kL = ag ? Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / L : 1;
         if (kL !== 1) for (const l of loads) { if (l.P !== undefined) l.at = Math.min(l.at * kL, L * kL); else { l.a *= kL; l.b = Math.min(l.b * kL, L * kL); l.wa /= kL; l.wb /= kL; } }
-        members.push({ i: node(p0[0], p0[1], zk), j: node(p1[0], p1[1], zk), kind: "beam", floor: k, line: ln.id, x0, x1, b: ty.b, h: ty.h, loads, torque, torqueL,
+        members.push({ i: node(p0[0], p0[1], zk), j: node(p1[0], p1[1], zk), kind: "beam", floor: k, line: ln.id, x0, x1, b: ty.b, h: ty.h, E: EcOf(frame.mat, frame.mat.fcBeam), loads, torque, torqueL,
           release: [s === 0 && carried.has(+x0.toFixed(4)), s === xs.length - 2 && carried.has(+x1.toFixed(4))] });
       }
     }
@@ -287,8 +287,12 @@ export function frame3dModel(frame, res, opt = {}) {
   const spansOf = (ms0) => res.floors.flatMap((an, k) => an.spans.map((sp) => {
     const ms = ms0.filter((m) => m.kind === "beam" && m.floor === k && m.line === sp.line && m.x0 >= sp.x0 - 1e-6 && m.x1 <= sp.x1 + 1e-6);
     if (!ms.length) return null;
+    // shear at d from the supports (same rule as the continuous beams, floor.js shearRange) — Vd; V stays the largest
+    const rg = shearRange(sp, sp.type?.h ?? 0.4, frame.mat), V = Math.max(...ms.map((m) => m.Vmax));
+    const Vd = !rg ? V : Math.max(0, ...ms.flatMap((m) => Array.from({ length: 21 }, (_, i) => m.x0 - sp.x0 + ((m.x1 - m.x0) * i) / 20)
+      .map((xl, i) => (xl >= rg[0] - 1e-9 && xl <= rg[1] + 1e-9 ? Math.abs(m.V((m.L * i) / 20)) : 0))));
     return { floor: k, id: sp.id, Mpos: Math.max(0, ...ms.map((m) => m.Mmax)), Mneg: Math.max(0, -ms[0].ML, -ms[ms.length - 1].MR),
-      V: Math.max(...ms.map((m) => m.Vmax)), T: Math.max(...ms.map((m) => m.T)), cont: { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V } };
+      V, Vd, T: Math.max(...ms.map((m) => m.T)), cont: { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V } };
   }).filter(Boolean));
   const columnsOf = (ms) => ms.filter((m) => m.kind === "column").map((m) => ({ floor: m.floor, ci: m.ci, N: -m.N, Mx: Math.max(Math.abs(m.Mz[0]), Math.abs(m.Mz[1])), My: Math.max(Math.abs(m.My[0]), Math.abs(m.My[1])) }));
   const held = nodes.map((n, i) => (n.fixed || n.pinned ? i : -1)).filter((i) => i >= 0);

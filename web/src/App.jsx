@@ -481,11 +481,11 @@ export default function App() {
             </div>
           </header>
           {mod === "work" && <StepGuide key={step} step={step} index={WORKFLOW.findIndex((w) => w[0] === step)} />}
-          {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} />}
+          {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} onNew={frame === DEFAULT_FRAME ? () => { closeTour(); newProject(); } : null} />}
 
           <ErrorBoundary resetKey={mod}>
           {mod === "work" ? (step === "roof" ? <div className="flex min-h-0 flex-1 flex-col"><div className="px-4 pt-3"><RoofLinkCard frame={frame} roof={roof} onFromFrame={roofFromStructure} set={setFrame} /></div><RoofPage roof={roof} set={setRoof} dark={dark} onFromFrame={roofFromStructure} /></div> : step === "report" ? (
-            <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
+            <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="report-preview mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
               <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง (หลังคา → โครงสร้าง → ฐานราก) · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
               <RoofReport roof={roof} project={st.project} /><FrameReport frame={frame} project={st.project} />
             </div></main>

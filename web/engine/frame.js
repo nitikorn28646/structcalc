@@ -1,7 +1,7 @@
 // Multi-storey frame (WSD): floors analysed from the top down; column axial loads accumulate floor by floor (+ self weight);
 // a column with nothing under it becomes a point load on the beams of the floor below. Columns are checked with engine/column.js.
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
-import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, faceBars, parseBars, resolveWall } from "./floor.js";
+import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
 import { BARS } from "./tables.js";
 import { frame3dModel } from "./frame3d.js";
 import { tiedColumn } from "./column.js";
@@ -20,8 +20,11 @@ export function checkColumn(lv, P, L, mat, mom = {}) {
     frameCase: 2, beamTL: BM, beamTR: BM, beamBL: BM, beamBR: BM, colTop: ST, colThis: ST, colThisB: ST, colBot: ST };
   try {
     const r = tiedColumn(inp), sOk = lv.s * 100 <= r.sTie + 1e-6;
+    // the slenderness reduction R = 1.07 − 0.008·klu/r is valid up to klu/r = 100; beyond it R ≤ 0.27 and falls below zero
+    // (a negative R gave a negative utilisation that passed) — such a column needs a second-order analysis: NG here
+    const slenderOk = Number.isFinite(r.R) && r.R > 0 && !(r.klr > 100 + 1e-9);
     const util = r.mode === "I" ? r.axialRatio : r.ratio;
-    return { r, e, sOk, util: Number.isFinite(util) ? util : 9, ok: r.ok && r.pgOk && Number.isFinite(r.R) && sOk };
+    return { r, e, sOk, slenderOk, util: slenderOk && Number.isFinite(util) ? util : 9, ok: r.ok && r.pgOk && slenderOk && sOk };
   } catch (err) { return { error: err.message, ok: false, util: 9 }; }
 }
 
@@ -142,7 +145,23 @@ function gravity(frame, minTypes) {
     for (const c of above) {
       const t = colTypes[frame.colPick?.[c.stack] ?? 0] ?? colTypes[0], lv = t.levels[Math.min(k, t.levels.length - 1)];
       c.W = (CONC * lv.Bx * lv.By * c.L) / 1e4; c.Pbot = c.Ptop + c.W;
+      c.free = !an[k].spans.some((sp) => near(sp.a, c.p) || near(sp.b, c.p)); // no beam at its top: nothing holds the top sideways
     }
+  }
+  // a column whose top has no beam is a cantilever from the last level below that has one (user's Yasothon: posts above the last
+  // beam level; a porch column with no beam at two levels): effective length 2·Lc, Lc = from that level up to the free tip.
+  // tiedColumn (diff-tested) applies k = 1 in its axial mode whatever the frame case, so the effective length is passed as L
+  // frame.freeTop "braced": the engineer states that the roof framing holds those tops (k = 1 on the clear height, as before)
+  if (frame.freeTop !== "braced") for (const key of new Set(cols.map((c) => c.stack))) {
+    const st = cols.filter((c) => c.stack === key).sort((a, b) => a.floor - b.floor);
+    st.forEach((c, i) => {
+      if (!c.free) return;
+      let lo = i, hi = i;
+      while (lo > 0 && st[lo - 1].free && st[lo - 1].floor === st[lo].floor - 1) lo--;
+      while (hi + 1 < st.length && st[hi + 1].free && st[hi + 1].floor === st[hi].floor + 1) hi++;
+      c.Lc = st.slice(lo, hi + 1).reduce((s, x) => s + x.L, 0); c.Leff = 2 * c.Lc;
+      if (i === hi) warnings.push(`เสา ${key} ไม่มีคานยึดปลายบน${hi > lo ? ` ${hi - lo + 1} ชั้นติดกัน` : ""} — ตรวจเป็นเสายื่นยาว ${c.Lc.toFixed(2)} ม. (ความยาวประสิทธิผล 2·L = ${c.Leff.toFixed(2)} ม.) · ถ้ามีคาน/โครงหลังคายึดหัวเสา ให้วาดคานที่หัวเสา หรือเลือก "หัวเสายึดด้วยโครงหลังคา" ในเกณฑ์การออกแบบ (ขั้น 0)`);
+    });
   }
   return { an, cols, warnings };
 }
@@ -157,7 +176,7 @@ function designColumns(frame, cols) {
   const check = (lv, c) => {
     let worst = null;
     for (const q of [{ name: "D+L", P: c.Pd ?? c.Pbot, M: c.M3 ?? {} }, ...(c.combos ?? []).map((x) => ({ name: x.name, P: x.N, M: { Mx: x.Mx, My: x.My } }))]) {
-      const chk = { ...checkColumn(lv, q.P, c.Lu ?? c.L, mat, q.M), combo: q.name, tension: q.P < 0 };
+      const chk = { ...checkColumn(lv, q.P, c.Leff ?? c.Lu ?? c.L, mat, q.M), combo: q.name, tension: q.P < 0, ...(c.Leff ? { cantilever: true, Lc: c.Lc } : {}) };
       if (!worst || (worst.ok && !chk.ok) || (chk.ok === worst.ok && chk.util > worst.util)) worst = chk;
     }
     return worst;
@@ -234,13 +253,14 @@ export function analyzeFrame(frame) {
       for (const sp of an.spans) {
         const fr = f3.spans.find((x) => x.floor === k && x.id === sp.id);
         sp.f3 = fr ?? null;
-        sp.envF = { Mpos: Math.max(sp.Mpos, fr?.Mpos ?? 0), Mneg: Math.max(sp.Mneg, fr?.Mneg ?? 0), V: Math.max(sp.V, fr?.V ?? 0), Mt: Math.max(sp.Mt ?? 0, fr?.T ?? 0) };
+        // shear: at d from the supports where the rule allows it (vAtD / Vd), the largest of the methods
+        sp.envF = { Mpos: Math.max(sp.Mpos, fr?.Mpos ?? 0), Mneg: Math.max(sp.Mneg, fr?.Mneg ?? 0), V: Math.max(vAtD(sp, sp.type.h, mat), fr?.Vd ?? fr?.V ?? 0), Mt: Math.max(sp.Mt ?? 0, fr?.T ?? 0) };
         // load combinations with wind / earthquake: the largest of every combination, with the name of the one that governs
         sp.gov = {};
         for (const cb of f3.combos ?? []) {
           const c = cb.spans.find((x) => x.floor === k && x.id === sp.id);
           if (!c) continue;
-          for (const [key, v] of [["Mpos", c.Mpos], ["Mneg", c.Mneg], ["V", c.V], ["Mt", c.T]]) if (v > sp.envF[key] + 1e-6) { sp.envF[key] = v; sp.gov[key] = cb.name; }
+          for (const [key, v] of [["Mpos", c.Mpos], ["Mneg", c.Mneg], ["V", c.Vd ?? c.V], ["Mt", c.T]]) if (v > sp.envF[key] + 1e-6) { sp.envF[key] = v; sp.gov[key] = cb.name; }
         }
       }
       const order = beamTypes.map((t, i) => ({ t, i })).sort((a, b) => tWeight(a.t) - tWeight(b.t));
@@ -248,7 +268,7 @@ export function analyzeFrame(frame) {
         if (b.type != null) return;
         const sps = an.spans.filter((sp) => sp.member === m);
         if (!sps.length) return;
-        const cur = sps[0].typeIdx, ok = (t) => sps.every((sp) => checkEnv(t, { ...sp, ...sp.envF }, mat).ok);
+        const cur = sps[0].typeIdx, ok = (t) => sps.every((sp) => checkEnv(t, { ...sp, ...sp.envF, vDone: true }, mat).ok);
         if (ok(beamTypes[cur])) { if (minTypes?.[k]?.[m] != null) next[k][m] = minTypes[k][m]; return; }
         const pick = order.find((o) => tWeight(o.t) > tWeight(beamTypes[cur]) && ok(o.t));
         if (!pick) return; // nothing heavier passes: keep the type, the span shows NG with its reason
@@ -261,11 +281,12 @@ export function analyzeFrame(frame) {
   // final checks of every span with its design forces (envelope when the frame ran)
   for (const an of g.an) {
     for (const sp of an.spans) {
-      const F = sp.envF ?? { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V, Mt: sp.Mt ?? 0 };
+      const F = sp.envF ?? { Mpos: sp.Mpos, Mneg: sp.Mneg, V: vAtD(sp, sp.type.h, mat), Mt: sp.Mt ?? 0 };
       sp.cont = { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V, Mt: sp.Mt ?? 0 };
-      const src = (k) => (sp.gov?.[k] ? "LAT" : F[k] > sp[k] + 1e-6 ? "3D" : "ต่อเนื่อง"); // LAT = a combination with wind / earthquake governs
+      sp.Vmax = Math.max(sp.V, sp.f3?.V ?? 0); // largest shear (the design value F.V may be the one at d)
+      const vc = vAtD(sp, sp.type.h, mat), src = (k) => (sp.gov?.[k] ? "LAT" : F[k] > (k === "V" ? vc : sp[k]) + 1e-6 ? "3D" : "ต่อเนื่อง"); // LAT = a combination with wind / earthquake governs
       sp.src = { Mpos: src("Mpos"), Mneg: src("Mneg"), V: src("V") };
-      Object.assign(sp, F);
+      Object.assign(sp, F, { vDone: true, vAtD: F.V < sp.Vmax - 1e-6 });
       sp.check = checkEnv(sp.type, sp, mat); sp.ok = sp.check.ok;
     }
     an.ok = an.spans.every((x) => x.ok) && !an.lines.some((l) => l.error);
@@ -279,6 +300,7 @@ export function analyzeFrame(frame) {
     for (const c of g.cols) {
       const fc = f3.columns.find((x) => x.floor === c.floor && x.ci === c.i);
       c.f3 = fc ?? null; c.Pd = colFrame ? Math.max(c.Pbot, fc?.N ?? 0) : c.Pbot; c.M3 = colFrame ? { Mx: fc?.Mx ?? 0, My: fc?.My ?? 0 } : {};
+      if (fc && fc.N < -10) g.warnings.push(`เสา ${c.stack} (${frame.floors[c.floor].name}) รับแรงดึง ${Math.round(-fc.N).toLocaleString()} กก. ในโครง 3 มิติ (D+L) — ปลายคานยกหัวเสา: ต่อทาบเหล็กเสา/ยึดคานให้รับแรงดึง`);
       c.combos = (f3.combos ?? []).filter((cb) => cb.W || cb.E || cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, ...cb.columns.find((x) => x.floor === c.floor && x.ci === c.i) }));
     }
     stacks = designColumns(frame, g.cols);

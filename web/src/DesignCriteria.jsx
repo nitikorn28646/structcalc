@@ -7,7 +7,7 @@ import { GRADES } from "../engine/tables.js";
 
 const KEY = "structcalc.standard";
 // what a standard carries: criteria + the type lists the engineer reuses on every job
-const PART = ["mat", "soil", "footUtil", "colMethod", "analysis", "baseFixity", "wallTypes", "beamTypes", "colTypes", "footTypes", "pileLoads", "loadLib"];
+const PART = ["mat", "soil", "footUtil", "colMethod", "analysis", "baseFixity", "freeTop", "wallTypes", "beamTypes", "colTypes", "footTypes", "pileLoads", "loadLib"];
 export const loadStandard = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? null; } catch { return null; } };
 export const applyStandard = (frame, std = loadStandard()) => (std ? { ...frame, ...Object.fromEntries(PART.filter((k) => std[k] !== undefined).map((k) => [k, std[k]])), mat: { ...frame.mat, ...std.mat } } : frame);
 
@@ -47,6 +47,8 @@ export function DesignCriteria({ frame, set, setMat, defaults, onNotice }) {
         <Sub>วิธีวิเคราะห์</Sub>
         <Field label="แรงออกแบบคาน"><Select value={frame.analysis ?? "envelope"} onChange={(v) => set("analysis", v)} options={[["envelope", "มากสุดของคานต่อเนื่อง / โครง 3 มิติ"], ["continuous", "คานต่อเนื่อง"]]} /></Field>
         <Field label="แรงออกแบบเสา"><Select value={frame.colMethod ?? "axial"} onChange={(v) => set("colMethod", v)} options={[["axial", "แรงอัด + เยื้องศูนย์ขั้นต่ำ"], ["frame", "รวมโมเมนต์โครง 3 มิติ"]]} /></Field>
+        <Field label="แรงเฉือนออกแบบคาน"><Select value={m.shearAt ?? "d"} onChange={(v) => setMat("shearAt", v)} options={[["d", "ที่ระยะ d จากเสา (ACI / ว.ส.ท.)"], ["max", "ค่าสูงสุดของช่วง (เหมือน Excel)"]]} /></Field>
+        <Field label="หัวเสาที่ไม่มีคานยึด"><Select value={frame.freeTop ?? "cantilever"} onChange={(v) => set("freeTop", v)} options={[["cantilever", "เสายื่น k = 2 (ตามโมเดล)"], ["braced", "ยึดด้วยโครงหลังคา k = 1"]]} /></Field>
       </div>
       <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
         <button onClick={save} className={`${btn} bg-brand-500 text-[#fff] ring-brand-500`}><Save className="h-3.5 w-3.5" />บันทึกเป็นค่ามาตรฐานของฉัน</button>

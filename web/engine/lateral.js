@@ -13,6 +13,7 @@ export const DEFAULT_LATERAL = {
 };
 export const DEFAULT_COMBOS = [
   { name: "D+L", D: 1, L: 1 },
+  { name: "D+W", D: 1, W: 1 }, // ASD: full wind with dead load alone (review 2026-11-03: missing while D+0.7E was there)
   { name: "D+0.75L+0.75W", D: 1, L: 0.75, W: 0.75 },
   { name: "0.6D+W", D: 0.6, W: 1 },
   { name: "D+0.7E", D: 1, E: 0.7 },

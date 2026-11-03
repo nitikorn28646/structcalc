@@ -48,7 +48,7 @@ const WSD_STD = "วิธีหน่วยแรงใช้งาน (WSD) �
 export function Doc({ project, title, subtitle, memberLabel, member, summary, method = "WSD", standard = WSD_STD, children }) {
   const info = [["โครงการ", project.name], ["เจ้าของโครงการ", project.owner || "-"], ["สถานที่ก่อสร้าง", project.location || "-"],
     ["วิศวกรผู้คำนวณ", `${project.engineer || "-"} ${project.license ? `(${project.license})` : ""}`],
-    [memberLabel, `${member} · ชั้น ${project.floor}`], ["วันที่", project.date]];
+    [memberLabel, project.floor ? `${member} · ชั้น ${project.floor}` : member], ["วันที่", project.date]];
   return (
     <div className="rp text-[10pt] leading-[1.55] text-[#1d2939]">
       <span className="rp-str-project hidden">{project.name}</span>

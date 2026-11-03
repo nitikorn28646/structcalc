@@ -66,7 +66,7 @@ export function StepGuide({ step, index }) {
 }
 
 // overview of the whole workflow (shadcn Dialog); shown on the first visit and from the ? button
-export function Tour({ steps, onClose, onGo }) {
+export function Tour({ steps, onClose, onGo, onNew = null }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent wide>
@@ -82,7 +82,7 @@ export function Tour({ steps, onClose, onGo }) {
         </ol>
         <div className="mt-5 flex flex-wrap gap-2">
           <a href="?project=/projects/yasothon.json#work" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-[#fff] hover:bg-brand-600">เปิดตัวอย่างบ้านยโสธร (2 ชั้น)</a>
-          <button onClick={() => onGo("project")} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">เริ่มโครงการของฉัน</button>
+          <button onClick={() => (onNew ? onNew() : onGo("project"))} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">{onNew ? "เริ่มโครงการของฉัน (โครงการว่าง)" : "ไปขั้น 0 ข้อมูลโครงการ"}</button>
         </div>
         <p className="mt-3 text-[11px] text-gray-400">ตัวอย่างจะแทนข้อมูลที่เปิดอยู่ — บันทึกโครงการของคุณก่อน (ปุ่ม "บันทึกโครงการ")</p>
       </DialogContent>

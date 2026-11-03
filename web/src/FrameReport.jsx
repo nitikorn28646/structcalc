@@ -23,15 +23,16 @@ const pass = (ok) => (ok ? "ผ่าน" : "ไม่ผ่าน");
 const bars = (t) => [t.top, t.topX && `+ ${t.topX} (L/4)`].filter(Boolean).join(" ");
 
 // one beam section check (mid-span or support) in steps
-function BeamSection({ title, r, M, V, tensionTop }) {
+function BeamSection({ title, r, M, V, tensionTop, atD = false }) {
   return (<>
     <p className="mt-2 font-semibold text-gray-800">{title}</p>
     <Item th="โมเมนต์ออกแบบ" f="M" v={fmt(M, 0)} u="กก.-ม." />
     <Item th="ความลึกประสิทธิผล" f="d" v={fmt(r.d, 2)} u="ซม." />
     <Item th="โมเมนต์ต้านทานของคอนกรีต" f="Mc = R·b·d²" v={fmt(r.Mc, 0)} u="กก.-ม." note={r.mode === "singly" ? "M < Mc → เสริมเหล็กรับแรงดึงอย่างเดียว" : "M > Mc → ต้องมีเหล็กรับแรงอัดด้วย"} />
-    <Item th={`เหล็กรับแรงดึง (${tensionTop ? "บน" : "ล่าง"})`} f="As = M / (fs·j·d)" v={`${fmt(r.reqBot, 2)} ≤ ${fmt(r.provBot, 2)}`} u="ซม.²" ok={r.botOk} />
-    {r.reqTop > 0 && <Item th={`เหล็กรับแรงอัด (${tensionTop ? "ล่าง" : "บน"})`} f="As' = M₂ / (fs'·(d − d'))" v={`${fmt(r.reqTop, 2)} ≤ ${fmt(r.provTop, 2)}`} u="ซม.²" ok={r.topOk} />}
-    <Item th="แรงเฉือน / กำลังคอนกรีต" f="Vc = 0.29·√f'c·b·d" v={`${fmt(V, 0)} / ${fmt(r.Vc, 0)}`} u="กก." note={r.Vp > 0 ? `ส่วนเกิน V' = ${fmt(r.Vp, 0)} กก. ให้เหล็กปลอกรับ` : "คอนกรีตรับแรงเฉือนได้ ใช้เหล็กปลอกขั้นต่ำ"} ok={r.VpOk} />
+    {/* required steel per face = flexure + torsion longitudinal steel 2·Ast (beam.js reqBot / reqTop) — shown as such */}
+    <Item th={`เหล็กรับแรงดึง (${tensionTop ? "บน" : "ล่าง"})`} f={r.Ast > 0 ? "As + 2·Ast (บิด)" : "As = M / (fs·j·d)"} v={`${fmt(r.reqBot, 2)} ≤ ${fmt(r.provBot, 2)}`} u="ซม.²" ok={r.botOk} note={r.Ast > 0 ? `As = ${fmt(r.As, 2)} · เหล็กยืนรับแรงบิด 2·Ast = ${fmt(2 * r.Ast, 2)}` : undefined} />
+    {r.reqTop > 0 && <Item th={r.AsPrime > 0 ? `เหล็กรับแรงอัด (${tensionTop ? "ล่าง" : "บน"})` : `เหล็กด้าน${tensionTop ? "ล่าง" : "บน"} (รับแรงบิด)`} f={r.AsPrime > 0 ? (r.Ast > 0 ? "As' + 2·Ast (บิด)" : "As' = M₂ / (fs'·(d − d'))") : "2·Ast (บิด)"} v={`${fmt(r.reqTop, 2)} ≤ ${fmt(r.provTop, 2)}`} u="ซม.²" ok={r.topOk} note={r.AsPrime > 0 && r.Ast > 0 ? `As' = ${fmt(r.AsPrime, 2)} · 2·Ast = ${fmt(2 * r.Ast, 2)}` : undefined} />}
+    <Item th={atD ? "แรงเฉือนที่ระยะ d จากเสา / กำลังคอนกรีต" : "แรงเฉือน / กำลังคอนกรีต"} f="Vc = 0.29·√f'c·b·d" v={`${fmt(V, 0)} / ${fmt(r.Vc, 0)}`} u="กก." note={r.Vp > 0 ? `ส่วนเกิน V' = ${fmt(r.Vp, 0)} กก. ให้เหล็กปลอกรับ` : "คอนกรีตรับแรงเฉือนได้ ใช้เหล็กปลอกขั้นต่ำ"} ok={r.VpOk} />
     <Item th="เหล็กปลอก" f={r.AtotS === 0 ? "V ≤ Vc ใช้ระยะตามแบบ" : `s ≤ ${typeof r.sMax === "number" ? fmt(r.sMax, 2) : r.sMax} ม.`} v={r.stirrup === "CHECK_SPACING" ? "ระยะเกิน" : r.stirrup} ok={r.stirrup !== "CHECK_SPACING"} />
   </>);
 }
@@ -47,7 +48,7 @@ export function FrameReport({ frame, project }) {
         memberLabel="โครงสร้าง" member={frame.frameNo}
         summary={[
           ["จำนวนชั้น (ระดับคาน)", `${floors.length} ระดับ`],
-          ["คาน", `${spans.length} ช่วง · type ${[...new Set(spans.map((s) => types[s.typeIdx]?.name))].join(", ")}`],
+          ["คาน", `${spans.length} ช่วง · type ${[...new Set(spans.map((s) => s.typeIdx))].sort((a, b) => a - b).map((i) => types[i]?.name).join(", ")}`],
           ["เสา", `${res.stacks.length} ต้น · type ${[...new Set(res.stacks.map((s) => colTypes[s.typeIdx]?.name))].join(", ")}`],
           ["แรงอัดเสาที่ฐานรวม", `${fmt(res.columns.filter((c) => c.floor === 0).reduce((s, c) => s + c.Pbot, 0) / 1000, 2)} ตัน`],
           ["ผลการตรวจสอบรวม", res.ok ? "ผ่านทุกข้อ" : `คานไม่ผ่าน ${spans.filter((s) => !s.ok).length} ช่วง · เสาไม่ผ่าน ${res.columns.filter((c) => !c.ok).length} ต้น/ชั้น`, res.ok],
@@ -158,8 +159,8 @@ export function FrameReport({ frame, project }) {
             return (
               <div key={i} className="mb-3">
                 <p className="mt-2 font-semibold text-gray-800">{t.name} — {fmt(t.b * 100, 0)}×{fmt(t.h * 100, 0)} ซม. · ช่วงวิกฤต {floors[g.floor].name} {g.id} ยาว {fmt(g.len, 2)} ม. ({KIND_TH[g.kind]}) · ใช้ {list.length} ช่วง</p>
-                {g.check.mid && <BeamSection title="กลางคาน (เหล็กล่างรับแรงดึง)" r={g.check.mid} M={g.Mpos} V={g.V} />}
-                {g.check.sup && <BeamSection title="หัวเสา (เหล็กบนรับแรงดึง)" r={g.check.sup} M={g.Mneg} V={g.V} tensionTop />}
+                {g.check.mid && <BeamSection title="กลางคาน (เหล็กล่างรับแรงดึง)" r={g.check.mid} M={g.Mpos} V={g.V} atD={g.vAtD} />}
+                {g.check.sup && <BeamSection title="หัวเสา (เหล็กบนรับแรงดึง)" r={g.check.sup} M={g.Mneg} V={g.V} tensionTop atD={g.vAtD} />}
                 {g.check.error && <Note>{g.check.error}</Note>}
               </div>
             );

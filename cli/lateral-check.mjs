@@ -34,8 +34,8 @@ near("Ce open z = 20 m", Ce(20, "A"), 2 ** 0.2); near("Ce open z = 3 m (min 0.9)
   near("Cs minimum 0.01", t.Cs, 0.01);
 }
 // 3. combinations: W and E expand into ±X, ±Y; off → only gravity
-near("combos, wind only", expandCombos({ lateral: { wind: { on: true } } }).length, 1 + 2 * 4);
-near("combos, wind + earthquake", expandCombos({ lateral: { wind: { on: true }, seismic: { on: true } } }).length, 1 + 5 * 4);
+near("combos, wind only", expandCombos({ lateral: { wind: { on: true } } }).length, 1 + 3 * 4); // D+L, then D+W, D+0.75L+0.75W, 0.6D+W × ±X ±Y;
+near("combos, wind + earthquake", expandCombos({ lateral: { wind: { on: true }, seismic: { on: true } } }).length, 1 + 6 * 4);
 near("combos, none", expandCombos({ lateral: {} }).length, DEFAULT_COMBOS.filter((c) => !c.W && !c.E).length);
 // 4. rigid diaphragm: four cantilever columns (different sizes) at the corners of 6 × 4 m, load at the centroid with a torque.
 //    Hand solution: u_i = u − θ(y_i − cy), v_i = v + θ(x_i − cx); Σkx·u_i = Fx, Σky·v_i = Fy, Σ(−kx·u_i·dy + ky·v_i·dx) + Σkt·θ = Mz

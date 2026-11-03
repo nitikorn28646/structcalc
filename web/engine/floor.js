@@ -102,10 +102,14 @@ function along(ln, p, inside = false) {
   return Math.min(ln.L, Math.max(0, t));
 }
 
-// merge drawn beams that are collinear and share an end into one continuous line — over a column, or where no other beam
-// meets that point (a joint on a girder without a column keeps two secondary beams resting on the girder)
+// Beam lines and which beam carries which (user 2026-11-03: the result must not depend on how the beams were drawn).
+// 1. drawn beams that are collinear and share an end become one straight run (arc beams stay lines of their own);
+// 2. where two runs cross inside both with no column there, one is the main beam (คานหลัก) and the other (คานซอย) is cut at
+//    the crossing and rests on it. Main = the run whose drawn beam there has role "main" (the other "secondary"), else the run
+//    standing on more columns, else the shorter run (stiffer), else the one drawn first. The last two are a guess → listed in
+//    `guess` so the floor warns and the engineer can set the role (beam.role) on the plan.
 function buildLines(beams, cols = []) {
-  const lines = beams.map((b, i) => ({ A: b.a, B: b.b, members: [i] })).filter((l) => dist(l.A, l.B) > 0.05);
+  let lines = beams.map((b, i) => ({ A: b.a, B: b.b, members: [i] })).filter((l) => dist(l.A, l.B) > 0.05);
   for (let changed = true; changed;) {
     changed = false;
     outer: for (let i = 0; i < lines.length; i++) for (let j = i + 1; j < lines.length; j++) {
@@ -114,20 +118,52 @@ function buildLines(beams, cols = []) {
       const shared = [[p.A, q.A], [p.A, q.B], [p.B, q.A], [p.B, q.B]].find(([x, y]) => dist(x, y) < TOL);
       if (!shared) continue;
       if ([...p.members, ...q.members].some((k) => beams[k].arc?.s)) continue; // an arc beam is a line of its own
-      const J = shared[0], third = beams.some((b, k) => !p.members.includes(k) && !q.members.includes(k) && Math.abs(cross(sub(b.b, b.a), d)) > 1e-6 * Math.hypot(...d) * dist(b.a, b.b)
-        && (() => { const e = sub(b.b, b.a), L2 = e[0] ** 2 + e[1] ** 2, t = ((J[0] - b.a[0]) * e[0] + (J[1] - b.a[1]) * e[1]) / L2; return t > 0.01 && t < 0.99 && Math.abs(cross(e, sub(J, b.a))) / Math.sqrt(L2) < TOL; })()); // a girder passing through
-      if (third && !cols.some((c) => dist(c, J) < TOL)) continue;
       const pts = [p.A, p.B, q.A, q.B], u = d.map((v) => v / Math.hypot(...d)), key = (x) => (x[0] - p.A[0]) * u[0] + (x[1] - p.A[1]) * u[1];
       pts.sort((x, y) => key(x) - key(y));
       lines[i] = { A: pts[0], B: pts[3], members: [...p.members, ...q.members] };
       lines.splice(j, 1); changed = true; break outer;
     }
   }
-  return lines.map((l, k) => {
+  const unitOf = (l) => { const L = dist(l.A, l.B); return [(l.B[0] - l.A[0]) / L, (l.B[1] - l.A[1]) / L]; };
+  const tOf = (l, p) => { const u = unitOf(l); return (p[0] - l.A[0]) * u[0] + (p[1] - l.A[1]) * u[1]; };
+  // drawn beam of a run covering position t (for its role)
+  const memberAt = (l, t) => l.members.find((m) => { const a = tOf(l, beams[m].a), b = tOf(l, beams[m].b); return t >= Math.min(a, b) - TOL && t <= Math.max(a, b) + TOL; });
+  const nCols = (l) => cols.filter((c) => Math.abs(cross(unitOf(l), sub(c, l.A))) < TOL && tOf(l, c) > -TOL && tOf(l, c) < dist(l.A, l.B) + TOL).length;
+  const isArc = (l) => l.members.some((k) => beams[k].arc?.s);
+  const guess = [];
+  for (let changed = true, guard = 0; changed && guard < 500; guard++) {
+    changed = false;
+    outer2: for (let i = 0; i < lines.length; i++) for (let j = 0; j < lines.length; j++) {
+      if (i >= j) continue;
+      const p = lines[i], q = lines[j];
+      if (isArc(p) || isArc(q)) continue;
+      const d = sub(p.B, p.A), e = sub(q.B, q.A), den = cross(d, e);
+      if (Math.abs(den) < 1e-9 * Math.hypot(...d) * Math.hypot(...e)) continue;
+      const s = cross(sub(q.A, p.A), e) / den, r = cross(sub(q.A, p.A), d) / den, Lp = Math.hypot(...d), Lq = Math.hypot(...e);
+      if (s * Lp < TOL || s * Lp > Lp - TOL || r * Lq < TOL || r * Lq > Lq - TOL) continue; // not inside both
+      const J = [p.A[0] + d[0] * s, p.A[1] + d[1] * s];
+      if (cols.some((c) => dist(c, J) < TOL)) continue; // a column there: both runs are supported by it
+      const role = (l) => beams[memberAt(l, tOf(l, J))]?.role;
+      let main;
+      if (role(p) === "main" && role(q) !== "main" || role(q) === "secondary" && role(p) !== "secondary") main = p;
+      else if (role(q) === "main" && role(p) !== "main" || role(p) === "secondary" && role(q) !== "secondary") main = q;
+      else if (nCols(p) !== nCols(q)) main = nCols(p) > nCols(q) ? p : q;
+      else { main = Lp < Lq - 1e-6 ? p : Lq < Lp - 1e-6 ? q : p; guess.push({ p: J, main: main === p ? i : j, sec: main === p ? j : i }); }
+      const sec = main === p ? q : p, k = main === p ? j : i;
+      const t = tOf(sec, J), Ls = dist(sec.A, sec.B);
+      const keep = (a, b) => sec.members.filter((m) => { const x = tOf(sec, beams[m].a), y = tOf(sec, beams[m].b); return Math.min(Math.max(x, y), b) - Math.max(Math.min(x, y), a) > TOL; });
+      lines.splice(k, 1, { A: sec.A, B: J, members: keep(0, t) }, { A: J, B: sec.B, members: keep(t, Ls) });
+      changed = true; break outer2;
+    }
+  }
+  const out = lines.map((l, k) => {
     const L = dist(l.A, l.B), u = [(l.B[0] - l.A[0]) / L, (l.B[1] - l.A[1]) / L];
     const arc = l.members.length === 1 && beams[l.members[0]].arc?.s ? beams[l.members[0]].arc : null;
     return { id: k, A: l.A, B: l.B, L, u, members: l.members, ...(arc ? { arc } : {}) };
   });
+  // guesses by index → by the final line objects (indices moved while splitting): report the point only
+  out.guess = guess.map((g) => g.p);
+  return out;
 }
 
 // closed beam loops (bounded faces of the plan graph); dangling beams (cantilevers) are ignored
@@ -219,8 +255,28 @@ export function barLayers(b, mat, st, main, special) {
 const steel = (s) => { const x = parseBars(s); return x ? x.n * BARS[x.bar].A : 0; };
 const typeWeight = (t) => t.b * t.h * 1e4 + (steel(t.top) + steel(t.bot) + steel(t.topX) + steel(t.botX)) / 100;
 
+// Design shear (mat.shearAt, default "d"; "max" = the largest shear of the span, as the reference sheets): ACI 318 / ว.ส.ท. — a
+// section closer than d to a support may be designed for the shear at d when the support puts the beam end in compression (a
+// column), the load is on the top and no concentrated load acts within d. d ≈ h − cover − 1.5 cm, measured from the column centre
+// line (the face is c/2 further: conservative). A carried end (beam on a girder) or a point load within d keeps the shear at the
+// support; a span shorter than 2d (deep) keeps its largest shear. range(sp, h, mat) → [a0, a1] or null (use the largest shear)
+export function shearRange(sp, h, mat) {
+  if ((mat.shearAt ?? "d") !== "d" || !sp.endCol) return null;
+  const d = h - ((mat.cover ?? 3) + 1.5) / 100, P = sp.Pat ?? [];
+  const a0 = sp.endCol[0] && !P.some((x) => x > 1e-6 && x < d) ? d : 0, a1 = sp.endCol[1] && !P.some((x) => x < sp.len - 1e-6 && x > sp.len - d) ? d : 0;
+  if (!(a0 || a1) || a0 + a1 >= sp.len - 1e-6) return null;
+  return [a0, sp.len - a1];
+}
+export function vAtD(sp, h, mat) {
+  const r = shearRange(sp, h, mat);
+  if (!r || !sp.Vx?.length) return sp.V;
+  const vs = sp.Vx.filter(([x]) => x >= r[0] - 1e-9 && x <= r[1] + 1e-9).map(([, v]) => v);
+  return vs.length ? Math.min(sp.V, Math.max(...vs)) : sp.V;
+}
+
 // WSD checks of one span with one beam type (mid-span sagging + support hogging), like the beam module
 export function checkSpan(t, sp, mat) {
+  if (sp.Vx && !sp.vDone) sp = { ...sp, Vface: sp.V, V: vAtD(sp, t.h, mat) }; // the frame envelope passes vDone (already at d)
   const top = parseBars(t.top), bot = parseBars(t.bot), topX = parseBars(t.topX), botX = parseBars(t.botX);
   const base = { ...mat, fcPrime: mat.fcBeam ?? mat.fcPrime, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: sp.Mt ?? 0, stirrup: { bar: t.st, sets: 1 } };
   const out = {};
@@ -239,7 +295,31 @@ export function checkSpan(t, sp, mat) {
   return { ...out, deep: deep && !(out.mid ?? out.sup).deepOk, ok: (!out.mid || ok1(out.mid)) && supOk, util: Math.max(out.mid ? util(out.mid) : 0, sp.Mneg < 1 ? 0 : util(out.sup)) };
 }
 
-// floor: { columns: [[x,y]], beams: [{ a, b, type (index | null = auto), wall: { h, kind } }], t, finish, live, panels: { key: { t, finish, live, open } } }
+// why a span check fails, in plain Thai (inspector, tables): one line per failed criterion, mid-span first then support
+export function spanReasons(c) {
+  if (!c) return [];
+  if (c.error) return [c.error];
+  const out = [], at = { mid: "กลางช่วง", sup: "ที่รองรับ" };
+  for (const k of ["mid", "sup"]) {
+    const r = c[k];
+    if (!r) continue;
+    const w = at[k];
+    if (r.minDepthOk === false) out.push(`${w}: คานลึกน้อยกว่าขั้นต่ำ ${(r.minDepth * 100).toFixed(0)} ซม.`);
+    if (r.deepOk === false && !c.deep) out.push(`${w}: h/L ${r.deepRatio} > ${r.deepLimit} (คานลึก)`);
+    if (r.doublyCheck && r.doublyCheck !== "OK") out.push(`${w}: โมเมนต์เกินกำลังหน้าตัด (${r.doublyCheck === "STEEL_BEAM" ? "ต้องใช้เหล็กรับแรงทั้งหมด" : "เหล็กรับแรงอัดไม่พอ"})`);
+    if (r.botOk === false && typeof r.reqBot === "number") out.push(`${w}: เหล็กรับแรงดึงต้องการ ${r.reqBot.toFixed(2)} > ใส่ ${r.provBot.toFixed(2)} ซม.²`);
+    if (r.topOk === false && typeof r.reqTop === "number") out.push(`${w}: เหล็กด้านอัด (+ เหล็กรับบิด) ต้องการ ${r.reqTop.toFixed(2)} > ใส่ ${r.provTop.toFixed(2)} ซม.²`);
+    if (r.AsMinOk === false && k === "mid") out.push(`${w}: เหล็กน้อยกว่า As,min ${r.AsMin.toFixed(2)} ซม.²`);
+    if (r.VpOk === false) out.push(`${w}: แรงเฉือนเกินขีดจำกัดหน้าตัด (V − Vc > 1.32√f'c·b·d)`);
+    if (r.vtOk === false || r.vOk === false) out.push(`${w}: หน่วยแรงบิด/เฉือนรวมเกินกำหนด`);
+    if (r.stirrup === "CHECK_SPACING") out.push(`${w}: ระยะเหล็กปลอกเกิน s ≤ ${typeof r.sMax === "number" ? r.sMax.toFixed(2) : "–"} ม.`);
+    if (r.AminOk === false) out.push(`${w}: เหล็กปลอกน้อยกว่าขั้นต่ำ`);
+  }
+  if (c.defl && c.defl.ok === false) out.push(`ระยะแอ่น ${(c.defl.dT * 1000).toFixed(1)} มม. (ยอมให้ ${(c.defl.limT * 1000).toFixed(1)}) / จร ${(c.defl.dL * 1000).toFixed(1)} (ยอมให้ ${(c.defl.limL * 1000).toFixed(1)})`);
+  return [...new Set(out)];
+}
+
+// floor: { columns: [[x,y]], beams: [{ a, b, type (index | null = auto), role ("main" | "secondary" | undefined = auto, at crossings), wall: { h, kind } }], t, finish, live, panels: { key: { t, finish, live, open } } }
 // extra: point loads [{ p: [x,y], P, from }] from columns of the floor above that stand on a beam here
 // floor.panels[key] = { kind: S | PS | GS, dir: x | y (PS), t, finish, live, open }; floor.walls = [{ a, b, kind, h, open %, layers }];
 // floor.cants = [{ a, b (on a beam), L, side ±1, t, finish, live }] cantilever slabs
@@ -252,7 +332,9 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   const lines = buildLines(floor.beams ?? [], cols);
   // members along each line (t range) and supports
   for (const ln of lines) {
-    ln.parts = ln.members.map((i) => { const b = floor.beams[i], t0 = along(ln, b.a), t1 = along(ln, b.b); return { i, t0: Math.min(t0, t1), t1: Math.max(t0, t1) }; });
+    // a drawn beam may run past the end of this line (a secondary cut at a crossing): its part is clipped to the line
+    const pr = (p) => Math.min(ln.L, Math.max(0, (p[0] - ln.A[0]) * ln.u[0] + (p[1] - ln.A[1]) * ln.u[1]));
+    ln.parts = ln.members.map((i) => { const b = floor.beams[i], t0 = pr(b.a), t1 = pr(b.b); return { i, t0: Math.min(t0, t1), t1: Math.max(t0, t1) }; });
     ln.cols = cols.map((c, ci) => ({ ci, t: along(ln, c) })).filter((x) => x.t !== null);
   }
   for (const ln of lines) { // an end with no column resting on another line → carried by that line
@@ -262,6 +344,11 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       const host = lines.find((o) => o !== ln && along(o, p) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
       if (host) ln.carriers.push({ t, host: host.id, at: along(host, p) });
     }
+  }
+  // crossings decided by length only (no role, same number of columns): say which one was taken as the main beam
+  for (const J of lines.guess ?? []) {
+    const main = lines.find((o) => along(o, J, true) !== null), secs = lines.filter((o) => o !== main && (dist(o.A, J) < TOL || dist(o.B, J) < TOL));
+    if (main && secs.length) warnings.push(`คานตัดกันที่ (${J[0].toFixed(2)}, ${J[1].toFixed(2)}) ไม่มีเสา — คิดว่าแนว ${secs.map((o) => o.id + 1).join(", ")} (คานซอย) วางบนแนว ${main.id + 1} (คานหลัก: ช่วงสั้นกว่าหรือวาดก่อน) · เปลี่ยนได้ที่ "บทบาท" ของคาน`);
   }
   for (const ln of lines) for (const c of ln.carriers) { // two lines resting on each other (corner without a column): no real support there
     const h = lines.find((o) => o.id === c.host);
@@ -448,6 +535,18 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     sp.check = { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) * f };
   }
   for (const sp of result.spans) Object.assign(sp, { type: types[sp.typeIdx], ok: sp.check.ok });
+  // a support that the continuous beam pulls down (negative reaction: a short end span next to a long one lifts its far end):
+  // the column load is not reduced (envelope), but that end must be held down — beam bars anchored into the column, and the
+  // column / footing able to take the pull. Said once per support (review 2026-11-03: −9.5 t on Yasothon with no warning)
+  for (const ln of result.lines) {
+    if (!ln.res) continue;
+    ln.x.forEach((x, k) => {
+      if (!ln.sup[k] || !(ln.res.R[k] < -10)) return;
+      const p = [ln.A[0] + ln.u[0] * x, ln.A[1] + ln.u[1] * x], col = cols.some((c) => dist(c, p) < TOL);
+      (ln.uplift ??= []).push({ x, p, R: ln.res.R[k] });
+      warnings.push(`แนวคาน ${ln.id + 1} ที่ (${p[0].toFixed(2)}, ${p[1].toFixed(2)}): ปลายคานถูกยก ${Math.round(-ln.res.R[k]).toLocaleString()} กก. (คานต่อเนื่อง — ช่วงสั้นติดช่วงยาว) — ${col ? "ยึดเหล็กคานเข้าเสาให้รับแรงดึง และตรวจเสา/ฐานรากรับแรงถอน" : "จุดรองรับต้องรับแรงดึงได้"} หรือปรับช่วงคาน/ตำแหน่งเสา`);
+    });
+  }
   for (const pl of pointLoads) if (pl.on === "column") { result.columns[pl.ci].R += pl.P; result.columns[pl.ci].from.push({ point: pl.i, R: pl.P }); }
   const groups = { DL: 0, SDL: 0, WALL: 0, LL: 0, SP: pointLoads.reduce((s, pl) => s + (pl.on === "column" ? pl.P : 0), 0) };
   for (const ln of lines) {
@@ -535,8 +634,9 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
         const Ms = liveBy.map((r) => pts.map(r.el[e].M)), Vs = liveBy.map((r) => pts.flatMap((t) => [r.el[e].V(t), r.el[e].V(Math.min(el.L, t + 1e-6))]));
         const up = (base, list, f) => base.map((v, i) => v + list.reduce((t, l) => t + f(0, l[i]), 0));
         const Mmax = up(Md, Ms, Math.max), Mmin = up(Md, Ms, Math.min), Vmax = up(Vd, Vs, Math.max), Vmin = up(Vd, Vs, Math.min);
+        const Vabs = pts.flatMap((t, i) => [[x[e] + t, Math.max(Math.abs(Vmax[2 * i]), Math.abs(Vmin[2 * i]))], [x[e] + t, Math.max(Math.abs(Vmax[2 * i + 1]), Math.abs(Vmin[2 * i + 1]))]]);
         return { Mmax: Math.max(0, ...Mmax), Mmin: Math.min(0, ...Mmin), ML: Math.min(Mmin[0], 0), MR: Math.min(Mmin[40], 0), Vmax: Math.max(...Vmax.map(Math.abs), ...Vmin.map(Math.abs)),
-          curve: { x0: x[e], L: el.L, Mmax, Mmin } }; // 41 points along the element, for the report diagrams
+          curve: { x0: x[e], L: el.L, Mmax, Mmin }, Vabs }; // 41 points along the element, for the report diagrams; |V| envelope with x on the line
       });
       const Renv = x.map((_, k) => dead.R[k] + liveBy.reduce((t, r) => t + Math.max(0, r.R[k]), 0));
       // deflections: dead (sustained, ×3 for creep and shrinkage) and full live load
@@ -553,6 +653,10 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
           a: [ln.A[0] + ln.u[0] * x[i0], ln.A[1] + ln.u[1] * x[i0]], b: [ln.A[0] + ln.u[0] * x[i1], ln.A[1] + ln.u[1] * x[i1]],
           Mpos: Math.max(0, ...env.slice(i0, i1).map((e) => e.Mmax)), Mneg: Math.max(0, -env[i0].ML, -env[i1 - 1].MR, ...(cant ? env.slice(i0, i1).map((e) => -e.Mmin) : [])),
           V: Math.max(...env.slice(i0, i1).map((e) => e.Vmax)),
+          // shear at d (checkSpan): |V| envelope along the span, ends standing on a column, point loads on the span (local x, m)
+          Vx: env.slice(i0, i1).flatMap((e) => e.Vabs).map(([xg, v]) => [xg - x[i0], v]),
+          endCol: [i0, i1].map((i) => sup[i] && ln.cols.some((c) => Math.abs(c.t - x[i]) < 1e-3)),
+          Pat: loads.filter((l) => l.P !== undefined && l.at > x[i0] - 1e-6 && l.at < x[i1] + 1e-6).map((l) => l.at - x[i0]),
           defl: (() => { const Le = (cant ? 2 : 1) * (x[i1] - x[i0]), dl = Math.max(0, ...dL.slice(i0, i1)), dt = 3 * Math.max(0, ...dD.slice(i0, i1)) + dl;
             // limits from the design criteria (mat.deflLive / mat.deflTotal, default L/360 and L/240)
             const lL = Le / (mat.deflLive ?? 360), lT = Le / (mat.deflTotal ?? 240);
