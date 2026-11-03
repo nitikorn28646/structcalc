@@ -10,7 +10,7 @@ import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { footingModel, pileCapModel } from "./drawings.js";
 import { PILES } from "../engine/footing.js";
-import { PILE_SAFE } from "../engine/frame.js";
+import { DEFAULT_FOOTING, PILE_SAFE, designFooting } from "../engine/frame.js";
 import { SLAB_BARS } from "../engine/tables.js";
 
 const th = "px-1 py-1 text-left text-[11px] font-medium text-gray-500", td = "px-1 py-0.5 tabular-nums";
@@ -34,7 +34,23 @@ export function FootingTypes({ frame, set, res }) {
   const put = (i, k, v) => set("footTypes", types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const add = () => set("footTypes", [...types, (types.length ? { name: `F${types.length + 1}`, n: Math.min(9, types[types.length - 1].n + 1), pile: "I-18", t: 0.4, Df: 1.2, k: 3, w: 0, bar: "DB 12", s: 0.15, barS: "DB 12", sS: 0.15 }
     : { name: "F1", n: 1, pile: "I-18", t: 0.5, Df: 1.2, k: 3, w: 0.5, bar: "DB 12", nb: 5, s: 0.15, barS: "DB 12", nbS: 5, sS: 0.15 })]);
-  const addSpread = () => set("footTypes", [...types, { name: `F${types.length + 1}`, kind: "spread", Bx: 0, By: 0, t: 0.3, Df: 1.2, qa: 10000, gamma: 1800, bar: "DB 12", s: 0.15, barS: "DB 12", sS: 0.15 }]);
+  // spread types filled from the real column loads: each column's smallest passing square size (engine auto size), then at most
+  // 4 sizes (groups of the sorted sizes, each = its largest) with the bar counts of that size → editable like any type
+  const spreadBase = () => { const t0 = types.find((t) => t.kind === "spread"); return { kind: "spread", t: t0?.t ?? 0.3, Df: t0?.Df ?? 1.2, qa: t0?.qa ?? 10000, gamma: t0?.gamma ?? 1800, bar: t0?.bar ?? "DB 12", s: 0.15, barS: t0?.barS ?? t0?.bar ?? "DB 12", sS: 0.15 }; };
+  const sizeRun = (f, tt) => { const c = (res.columns ?? []).find((x) => x.floor === 0 && x.stack === f.stack); return c ? designFooting(f.P, c.lv, frame.mat, { ...(frame.footing ?? DEFAULT_FOOTING), fixed: tt }, f.Mx ?? 0, f.My ?? 0) : null; };
+  const needed = (base) => foots.map((f) => ({ f, d: sizeRun(f, { ...base, Bx: 0, By: 0 }) })).filter((x) => x.d?.ok).map((x) => ({ ...x, B: x.d.r.Bx })).sort((a, b) => a.B - b.B);
+  const typeAt = (base, x, name) => { const d = sizeRun(x.f, { ...base, Bx: x.B, By: x.B }); return { ...base, name, Bx: x.B, By: x.B, nb: d?.r?.nLong ?? 0, nbS: d?.r?.nShort ?? 0 }; };
+  const nextName = (k = 0) => { let i = types.length + 1 + k; while (types.some((t) => t.name === `F${i}`)) i++; return `F${i}`; };
+  const addSpread = () => { const base = spreadBase(), list = needed(base), big = list.at(-1);
+    set("footTypes", [...types, big ? typeAt(base, big, nextName()) : { ...base, name: nextName(), Bx: 0, By: 0 }]); };
+  const autoSpread = () => {
+    const base = spreadBase(), list = needed(base), sizes = [...new Set(list.map((x) => x.B))];
+    const k = Math.min(4, sizes.length), groups = Array.from({ length: k }, (_, g) => sizes.slice(Math.floor((g * sizes.length) / k), Math.floor(((g + 1) * sizes.length) / k)).at(-1));
+    const keep = types.map((t, i) => [t, i]).filter(([t]) => t.kind !== "spread"), map = Object.fromEntries(keep.map(([, i], j) => [i, j]));
+    const made = groups.map((B, g) => typeAt(base, list.filter((x) => x.B === B).at(-1), `F${keep.length + g + 1}`));
+    set("footTypes", [...keep.map(([t]) => t), ...made]);
+    set("footPick", Object.fromEntries(Object.entries(pick).filter(([, v]) => map[v] != null).map(([s, v]) => [s, map[v]])));
+  };
   const pileRows = types.map((t, i) => [t, i]).filter(([t]) => t.kind !== "spread"), spreadRows = types.map((t, i) => [t, i]).filter(([t]) => t.kind === "spread");
   const barCells = (t, i) => <>
     <td className={td}><select value={t.bar ?? "DB 12"} onChange={(e) => put(i, "bar", e.target.value)} className={box}>{BARS.map((b) => <option key={b}>{b}</option>)}</select></td>
@@ -80,8 +96,9 @@ export function FootingTypes({ frame, set, res }) {
             <td className={td}><Num v={t.gamma ?? 1800} on={(v) => put(i, "gamma", v)} step="100" w="w-16" /></td>
             {barCells(t, i)}
           </tr>)}</tbody></table>}
-        <button onClick={addSpread} className="mt-1 flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />เพิ่ม type ฐานแผ่</button>
-        <p className="mt-1 text-[11px] text-gray-400">Bx / By = 0 → โปรแกรมหาขนาดจาก qa (รวมน้ำหนักฐาน + ดินถม) แล้วขยายทีละ 0.10 ม. จนผ่านทุกข้อ · ตรวจ แรงดันดิน (รวมโมเมนต์ 2 ทาง), ความลึก, เฉือนทางเดียว, เฉือนทะลุ, เหล็ก, แรงยึดเหนี่ยว, ระยะฝัง, เหล็กเดือย, แรงแบกทาน · อัตโนมัติจะลองฐานแผ่ก่อนฐานเข็ม</p>
+        <div className="mt-1 flex gap-4"><button onClick={addSpread} className="flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />เพิ่ม type ฐานแผ่</button>
+          <button onClick={autoSpread} title="แทน type ฐานแผ่เดิมด้วยขนาดที่คำนวณจากแรงที่ฐานเสาจริง (ไม่เกิน 4 ขนาด) แก้ต่อได้ทุกช่อง" className="flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />สร้าง type ฐานแผ่อัตโนมัติจากแรงที่ฐาน</button></div>
+        <p className="mt-1 text-[11px] text-gray-400">เพิ่ม type = ขนาดที่ฐานหนักสุดต้องการ · สร้างอัตโนมัติ = ไม่เกิน 4 ขนาดจากแรงจริง พร้อมจำนวนเหล็ก (แก้ต่อได้) · Bx / By = 0 → โปรแกรมหาขนาดจาก qa (รวมน้ำหนักฐาน + ดินถม) แล้วขยายทีละ 0.10 ม. จนผ่านทุกข้อ · ตรวจ แรงดันดิน (รวมโมเมนต์ 2 ทาง), ความลึก, เฉือนทางเดียว, เฉือนทะลุ, เหล็ก, แรงยึดเหนี่ยว, ระยะฝัง, เหล็กเดือย, แรงแบกทาน · อัตโนมัติจะลองฐานแผ่ก่อนฐานเข็ม</p>
       </section>
       <section>
         <p className="mb-1 text-sm font-semibold text-gray-800">2 · ฐานรากแต่ละเสา <span className="font-normal text-gray-400">(คลิกแถวเพื่อดูรูป)</span></p>

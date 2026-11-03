@@ -258,11 +258,15 @@ export function analyzeFrame(frame) {
     }
     an.ok = an.spans.every((x) => x.ok) && !an.lines.some((l) => l.error);
   }
-  // columns: axial load = larger of the accumulated reactions and the frame; moments from the frame (both axes)
+  // columns, frame.colMethod:
+  //   "axial" (default, as the reference sheets / usual practice): accumulated axial load + minimum eccentricity only;
+  //           the 3D-frame forces are kept on c.f3 for information (lateral combinations, when on, are still checked)
+  //   "frame": axial load = larger of the accumulated reactions and the frame; moments from the frame (both axes)
+  const colFrame = frame.colMethod === "frame";
   if (f3) {
     for (const c of g.cols) {
       const fc = f3.columns.find((x) => x.floor === c.floor && x.ci === c.i);
-      c.f3 = fc ?? null; c.Pd = Math.max(c.Pbot, fc?.N ?? 0); c.M3 = { Mx: fc?.Mx ?? 0, My: fc?.My ?? 0 };
+      c.f3 = fc ?? null; c.Pd = colFrame ? Math.max(c.Pbot, fc?.N ?? 0) : c.Pbot; c.M3 = colFrame ? { Mx: fc?.Mx ?? 0, My: fc?.My ?? 0 } : {};
       c.combos = (f3.combos ?? []).filter((cb) => cb.W || cb.E || cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, ...cb.columns.find((x) => x.floor === c.floor && x.ci === c.i) }));
     }
     stacks = designColumns(frame, g.cols);

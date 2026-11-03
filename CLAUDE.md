@@ -225,3 +225,7 @@ Columns failing where the Excel passes: envelope mode adds 3D-frame / wind momen
 SPREAD FOOTINGS IN THE WORKFLOW (2026-11-03): footing type `kind: "spread"` {Bx, By (0 = sized from qa, +0.10 m steps until all checks pass), t, Df,
 qa, gamma, bar/nb/s, barS/nbS/sS} → frame.js designSpread (diff-tested spreadFooting, every check); auto tries spread types before pile caps.
 Results carry kind "spread", n 0; FootingTypes has a separate "Type ฐานแผ่" table; report / 3D / drawer handle both kinds.
+COLUMN METHOD (user 2026-11-03 "แยกตั้งค่าเสา"): `frame.colMethod` "axial" (default; accumulated P + minimum eccentricity like the Excel,
+3D forces kept on c.f3 for information; lateral combos still checked when lateral is on) | "frame" (P = max(accumulated, 3D N) + 3D moments).
+Selector in step 7 next to the beam method. Spread types: buttons "เพิ่ม type ฐานแผ่" (size of the heaviest column) and "สร้าง type ฐานแผ่อัตโนมัติ"
+(≤ 4 sizes from the real column loads with bar counts, replaces spread types, editable).

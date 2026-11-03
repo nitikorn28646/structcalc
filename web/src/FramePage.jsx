@@ -297,6 +297,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             <select value={frame.analysis ?? "envelope"} onChange={(e) => set("analysis", e.target.value)} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">
               <option value="envelope">ค่ามากสุดของคานต่อเนื่องและโครง 3 มิติ (แนะนำ)</option><option value="continuous">คานต่อเนื่องอย่างเดียว</option>
             </select>
+            <span className="ml-4">เสา</span>
+            <select value={frame.colMethod ?? "axial"} onChange={(e) => set("colMethod", e.target.value)} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">
+              <option value="axial">แรงอัดสะสม + เยื้องศูนย์ขั้นต่ำ (แบบ Excel / ทั่วไป)</option><option value="frame">รวมโมเมนต์จากโครง 3 มิติ (ละเอียด)</option>
+            </select>
             <span className="ml-4">ฐานเสา</span>
             <select value={frame.baseFixity ?? "pinned"} onChange={(e) => set("baseFixity", e.target.value)} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2">
               <option value="pinned">หมุด (ฐานเข็ม 1–2 ต้น รับโมเมนต์ไม่ได้)</option><option value="fixed">ยึดแน่น (ฐานรากแผ่ / เข็มกลุ่ม)</option>
