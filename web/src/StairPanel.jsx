@@ -45,21 +45,20 @@ export function StairInputs({ st, set, H, r0 }) {
 
 // dimensioned side section: steps, waist slab, landing, supports, main bar line
 function Section({ st, g }) {
-  const run = Math.max(g.runNeed, 0.5), land = g.land, W = 360, Hs = 170, H = g.Ra * g.perFlight, sx = (W - 70) / Math.max(run + land, 0.5), sy = (Hs - 40) / Math.max(H, 0.5), s = Math.min(sx, sy);
-  const X = (x) => 30 + x * s, Y = (y) => Hs - 20 - y * s, t = (st.t ?? 0.12), k = g.perFlight;
+  const run = Math.max(g.runNeed, 0.5), land = g.land, W = 360, Hs = 170, H = g.Ra * g.perFlight, sx = (W - 70) / Math.max(run + land, 0.5), sy = (Hs - 50) / Math.max(H, 0.5), s = Math.min(sx, sy);
+  const X = (x) => 30 + x * s, Y = (y) => Hs - 20 - y * s + 0, t = (st.t ?? 0.12), k = g.perFlight;
   const pts = []; for (let i = 0; i < k; i++) { pts.push([i * g.T, i * g.Ra], [i * g.T, (i + 1) * g.Ra]); if (i < k - 1) pts.push([(i + 1) * g.T, (i + 1) * g.Ra]); }
   const topEnd = [(k - 1) * g.T + land, k * g.Ra], cosT = g.T / Math.hypot(g.T, g.Ra), tv = t / cosT;
   const soffit = [[0, -tv], [(k - 1) * g.T, (k - 1) * g.Ra - tv + g.Ra], ...(land ? [[topEnd[0], topEnd[1] - t]] : [])];
   return (
-    <svg viewBox={`0 0 ${W} ${Hs}`} className="w-full">
+    <svg viewBox={`0 0 ${W} ${Hs}`} className="mx-auto max-h-[230px] w-full">
       <polygon points={[...pts, ...(land ? [[topEnd[0], topEnd[1]]] : []), ...soffit.slice().reverse()].map(([x, y]) => `${X(x)},${Y(y)}`).join(" ")} fill="#eef0f4" stroke="#344054" strokeWidth={1.2} />
       <polyline points={soffit.map(([x, y]) => `${X(x)},${Y(y + 0.03)}`).join(" ")} fill="none" stroke="#d92d20" strokeWidth={1.6} />
       <rect x={X(0) - 10} y={Y(0)} width={20} height={14} fill="#98a2b3" /><rect x={X(topEnd[0]) - 10} y={Y(topEnd[1])} width={20} height={14} fill="#98a2b3" />
       <line x1={X(topEnd[0]) + 18} x2={X(topEnd[0]) + 18} y1={Y(0)} y2={Y(topEnd[1])} stroke="#98a2b3" /><text x={X(topEnd[0]) + 22} y={(Y(0) + Y(topEnd[1])) / 2} fontSize={9} fill="#475467">{fmt(H, 2)} ม.</text>
       <line x1={X(0)} x2={X((k - 1) * g.T)} y1={Hs - 6} y2={Hs - 6} stroke="#98a2b3" /><text x={(X(0) + X((k - 1) * g.T)) / 2} y={Hs - 9} textAnchor="middle" fontSize={9} fill="#475467">{k - 1} × {fmt(g.T, 2)} = {fmt((k - 1) * g.T, 2)} ม.</text>
       {land > 0 && <text x={(X((k - 1) * g.T) + X(topEnd[0])) / 2} y={Y(topEnd[1]) - 4} textAnchor="middle" fontSize={9} fill="#475467">ชานพัก {fmt(land, 2)}</text>}
-      <text x={X(g.T * 0.5)} y={Y(g.Ra * 1.5) - 2} fontSize={8.5} fill="#667085">R {fmt(g.Ra * 100, 1)} / T {fmt(g.T * 100, 0)} ซม.</text>
-      <text x={X(0)} y={14} fontSize={9} fill="#d92d20">เหล็กล่าง (เส้นแดง) · ท้องบันไดหนา {fmt(t * 100, 0)} ซม.</text>
+      <text x={4} y={12} fontSize={9} fill="#344054">ลูกตั้ง {fmt(g.Ra * 100, 1)} · ลูกนอน {fmt(g.T * 100, 0)} · ท้องหนา {fmt(t * 100, 0)} ซม. · <tspan fill="#d92d20">เส้นแดง = เหล็กล่าง</tspan></text>
     </svg>
   );
 }
