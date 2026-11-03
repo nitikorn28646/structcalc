@@ -83,6 +83,9 @@ def test_projects(browser, expected, save):
             ctx, page = new_page(browser, w, h, dark)
             n0 = len(console_errors)
             page.goto(f"{BASE}/?project=/projects/{proj}.json&step=project#work")
+            # the app shows its default example until the fetched project replaces it, then drops ?project= from the URL
+            page.wait_for_function("!location.search.includes('project=')", timeout=20000)
+            page.wait_for_timeout(800)
             s = wait_status(page)
             check(f"{tag}: opens", s is not None, "no status bar")
             if w == 1920:

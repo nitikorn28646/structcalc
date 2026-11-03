@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColumnChart, LineDiagram, SlabStrip } from "./ReportDiagrams.jsx";
 import { StoreyTable } from "./StoreyTable.jsx";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { StairDetail, StairInputs } from "./StairPanel.jsx";
 import { DesignCriteria } from "./DesignCriteria.jsx";
 import { BeamLoadTable, PanelTable } from "./BulkTables.jsx";
@@ -76,6 +77,8 @@ function UtilBars({ items: raw, dark, height, onPick }) {
   }, [items, dark, h]); // eslint-disable-line react-hooks/exhaustive-deps
   return <div className="max-h-[520px] overflow-y-auto"><div ref={ref} style={{ width: "100%", height: h }} /></div>;
 }
+
+const Handle = () => <PanelResizeHandle className="group relative w-1.5 bg-transparent outline-none"><div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gray-200 transition-colors group-hover:w-[3px] group-hover:bg-brand-400 group-data-[resize-handle-state=drag]:w-[3px] group-data-[resize-handle-state=drag]:bg-brand-500" /></PanelResizeHandle>;
 
 // editable beam-type table (B1, B2, …)
 function TypeTable({ types, setTypes, an }) {
@@ -361,13 +364,13 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={fl.h} r0={an.stairs?.[sel.i]} />
               <button onClick={() => delList("stairs")} className="mt-2 text-left text-[12px] text-red-600">ลบบันไดนี้</button></>}
             {lineL && (<div className="grid grid-cols-2 gap-3">
-              <Field label="ชื่อ"><input value={lineL.name ?? ""} onChange={(e) => setList("lineLoads", { name: e.target.value })} className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm" /></Field>
+              <Field label="ชื่อ"><input value={lineL.name ?? ""} onChange={(e) => setList("lineLoads", { name: e.target.value })} className="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-[13px]" /></Field>
               <Field label="น้ำหนัก" unit="kg/m"><NumberInput value={lineL.q} step="10" onChange={(v) => setList("lineLoads", { q: v })} /></Field>
               <p className="col-span-2 text-[12px] text-gray-500">{({ cant: "อยู่ปลายพื้นยื่น → ลงคานริม + แรงบิด", beam: "อยู่บนคาน → ลงคาน", panel: "อยู่บนพื้น → กระจายลงแผ่นพื้น" })[an.lineLoads?.[sel.i]?.on] ?? "ไม่มีอะไรรับ"}</p>
               <button onClick={() => delList("lineLoads")} className="col-span-2 text-left text-[12px] text-red-600">ลบ</button>
             </div>)}
             {pointL && (<div className="grid grid-cols-2 gap-3">
-              <Field label="ชื่อ"><input value={pointL.name ?? ""} onChange={(e) => setList("pointLoads", { name: e.target.value })} className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm" /></Field>
+              <Field label="ชื่อ"><input value={pointL.name ?? ""} onChange={(e) => setList("pointLoads", { name: e.target.value })} className="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-[13px]" /></Field>
               <Field label="น้ำหนัก" unit="kg"><NumberInput value={pointL.P} step="50" onChange={(v) => setList("pointLoads", { P: v })} /></Field>
               <Field label="X" unit="m"><NumberInput value={pointL.p[0]} step="0.05" onChange={(v) => setList("pointLoads", { p: [v, pointL.p[1]] })} /></Field>
               <Field label="Y" unit="m"><NumberInput value={pointL.p[1]} step="0.05" onChange={(v) => setList("pointLoads", { p: [pointL.p[0], v] })} /></Field>
@@ -530,18 +533,21 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   return (
     <main className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1">
-        <section className="flex min-w-0 flex-1 flex-col">
+        <PanelGroup direction="horizontal" autoSaveId={`structcalc.panels.${dTab ? "3" : "2"}`} className="min-w-0 flex-1">
+        <Panel id="centre" order={1} minSize={30} className="flex min-w-0 flex-col">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-2">
             {subs && <span className="flex rounded-lg bg-gray-100 p-0.5">{subs.map(([k, t]) => <button key={k} onClick={() => { setSubState(k); setSel(null); }} className={tab(sub === k)}>{t}</button>)}</span>}
             {!page && step !== "footing" && <span className="ml-auto flex rounded-lg bg-gray-100 p-0.5">{[["2d", "แปลน 2D"], ["3d", "3D"], ["split", "2D + 3D"]].map(([k, t]) => <button key={k} onClick={() => setView(k)} className={tab(view === k)}>{t}</button>)}</span>}
           </div>
           <div className="flex min-h-0 flex-1 flex-col p-3">{center}</div>
         </section>
-        {dTab && <div className="flex w-[min(680px,46vw)] shrink-0 flex-col border-l border-gray-200 bg-white">
+        </Panel>
+        {dTab && <><Handle /><Panel id="side" order={2} defaultSize={34} minSize={20} className="flex min-w-0 flex-col border-l border-gray-200 bg-white">
           <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2 text-sm font-semibold text-gray-800">{tabsNow.find(([x]) => x === dTab)?.[1]}
             <button onClick={() => setDrawer(null)} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">ปิด ✕</button></div>
           <div className="min-h-0 flex-1 overflow-auto p-3">
-              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} resolveW={resolveW} /> : dTab === "spans" ?             <div className="max-h-[260px] min-h-0 flex-[2] overflow-auto text-[12px]">
+              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} dark={dark} /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} resolveW={resolveW} dark={dark} /> : dTab === "spans" ?             <div className="max-h-[260px] min-h-0 flex-[2] overflow-auto text-[12px]">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 bg-white"><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["ช่วง", "ยาว", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "ใช้", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
                 <tbody>{an.spans.map((s) => (
@@ -575,8 +581,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         </Card></div>
                 : res.warnings.length ? res.warnings.map((w) => <p key={w} className="py-0.5 text-[12px] text-red-600">{w}</p>) : <p className="text-[12px] text-gray-400">ไม่มีคำเตือน</p>}
           </div>
-        </div>}
-        <aside className="w-[330px] shrink-0 space-y-3 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3">{inspector}</aside>
+        </Panel></>}
+        <Handle />
+        <Panel id="inspector" order={3} defaultSize={20} minSize={14} maxSize={40}><aside className="h-full space-y-3 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3">{inspector}</aside></Panel>
+        </PanelGroup>
         <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-l border-gray-200 bg-white py-2">
           {tabsNow.map(([k, t]) => <button key={k} onClick={() => setDrawer(dTab === k ? null : k)} title={t}
             className={`flex w-[46px] flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-[10px] font-medium leading-tight ${dTab === k ? "bg-brand-500 text-[#fff]" : k === "warn" && res.warnings.length ? "text-red-600 hover:bg-red-50" : "text-gray-600 hover:bg-gray-50"}`}>

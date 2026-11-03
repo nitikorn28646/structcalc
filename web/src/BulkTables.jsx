@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { fmt } from "./beamModel.js";
 import { SLAB_KINDS, wallsOf } from "../engine/floor.js";
+import { Grid } from "./Grid.jsx";
 
 const th = "px-1 py-1 text-left text-[11px] font-medium text-gray-500", td = "px-1 py-0.5 tabular-nums";
 const box = "h-7 rounded border border-gray-300 bg-transparent px-1 text-[12px]";
@@ -20,7 +21,7 @@ function Bar({ children, n, onApply, onClear }) {
     </div>);
 }
 
-export function PanelTable({ an, fl, setFloor }) {
+export function PanelTable({ an, fl, setFloor, dark }) {
   const [pick, setPick] = useState({}), [bulk, setBulk] = useState({});
   const rows = an.panels ?? [], keys = rows.filter((p) => pick[p.key]).map((p) => p.key);
   const patch = (list, p) => setFloor({ panels: { ...(fl.panels ?? {}), ...Object.fromEntries(list.map((k) => [k, { ...fl.panels?.[k], ...p }])) } });
@@ -34,28 +35,21 @@ export function PanelTable({ an, fl, setFloor }) {
       <label className="flex items-center gap-1">จร<Num v={bulk.live} on={(v) => setBulk({ ...bulk, live: v })} step="50" ph="กก./ม.²" /></label>
       <label className="flex items-center gap-1">ฝ้า/ระบบ<Num v={bulk.extra} on={(v) => setBulk({ ...bulk, extra: v })} ph="กก./ม.²" /></label>
     </Bar>
-    <table className="w-full text-[12px]"><thead className="sticky top-0 bg-white"><tr>
-      <th className={th}><input type="checkbox" checked={all} onChange={() => setPick(all ? {} : Object.fromEntries(rows.map((p) => [p.key, true])))} /></th>
-      {["แผ่น", "ชนิด", "ทิศ", "พื้นที่ (ม.²)", "หนา (ม.)", "ปูผิว", "จร", "ฝ้า/ระบบ", "ช่องเปิด", "รวม (กก./ม.²)"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
-      <tbody>{rows.map((p, i) => { const own = fl.panels?.[p.key], set1 = (x) => patch([p.key], x);
-        return <tr key={p.key} className={`border-t border-gray-100 ${pick[p.key] ? "bg-brand-50/60" : ""}`}>
-          <td className={td}><input type="checkbox" checked={!!pick[p.key]} onChange={() => setPick({ ...pick, [p.key]: !pick[p.key] })} /></td>
-          <td className={`${td} ${own ? "font-semibold" : ""}`}>P{i + 1}</td>
-          <td className={td}><select value={p.st} onChange={(e) => set1({ kind: e.target.value })} className={box}>{Object.entries(SLAB_KINDS).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></td>
-          <td className={td}>{p.st === "PS" ? <select value={p.dir} onChange={(e) => set1({ dir: e.target.value })} className={box}><option value="x">X ↔</option><option value="y">Y ↕</option></select> : "-"}</td>
-          <td className={td}>{fmt(p.area, 2)}</td>
-          <td className={td}><Num v={p.t} on={(v) => set1({ t: v })} step="0.01" w="w-16" /></td>
-          <td className={td}><Num v={p.finish} on={(v) => set1({ finish: v })} w="w-16" /></td>
-          <td className={td}><Num v={p.live} on={(v) => set1({ live: v })} step="50" w="w-16" /></td>
-          <td className={td}><Num v={p.extraSDL} on={(v) => set1({ extra: v })} w="w-14" /></td>
-          <td className={td}><input type="checkbox" checked={!!p.open} onChange={() => set1({ open: !p.open })} /></td>
-          <td className={td}>{p.open ? "-" : fmt(p.t * 2400 + p.finish + (p.extraSDL ?? 0) + p.live, 0)}</td>
-        </tr>; })}</tbody></table>
-    <p className="mt-1 text-[11px] text-gray-400">ตัวหนา = แผ่นที่กำหนดเอง (ไม่ใช้ค่าของชั้น) · ติ๊กหลายแถวแล้วกรอกเฉพาะช่องที่จะเปลี่ยน (ช่องว่าง = ไม่เปลี่ยน)</p>
+    <div className="h-[calc(100vh-330px)] min-h-[280px]"><Grid dark={dark} rows={rows.map((p, i) => ({ id: p.key, name: `P${i + 1}${fl.panels?.[p.key] ? " *" : ""}`, st: p.st, dir: p.st === "PS" ? p.dir : "", area: p.area, t: p.t, finish: p.finish, live: p.live, extra: p.extraSDL ?? 0, open: !!p.open,
+      total: p.open ? null : p.t * 2400 + p.finish + (p.extraSDL ?? 0) + p.live }))}
+      columns={[{ field: "name", headerName: "แผ่น", width: 74 }, { field: "st", headerName: "ชนิด", width: 150, editable: true, type: "select", options: Object.entries(SLAB_KINDS) },
+        { field: "dir", headerName: "ทิศ (PS)", width: 84, editable: (r) => r.st === "PS", type: "select", options: [["x", "X ↔"], ["y", "Y ↕"]] },
+        { field: "area", headerName: "พื้นที่ ม.²", width: 90, type: "number", fmt: (v) => fmt(v, 2) }, { field: "t", headerName: "หนา ม.", width: 80, editable: true, type: "number" },
+        { field: "finish", headerName: "ปูผิว", width: 80, editable: true, type: "number" }, { field: "live", headerName: "จร", width: 80, editable: true, type: "number" },
+        { field: "extra", headerName: "ฝ้า/ระบบ", width: 90, editable: true, type: "number" }, { field: "open", headerName: "ช่องเปิด", width: 84, editable: true, type: "check" },
+        { field: "total", headerName: "รวม กก./ม.²", width: 100, type: "number", fmt: (v) => (v == null ? "-" : fmt(v, 0)) }]}
+      onSelect={(ids) => setPick(Object.fromEntries(ids.map((k) => [k, true])))}
+      onChange={(ch) => { const by = {}; for (const c of ch) (by[c.id] ??= {})[c.field === "st" ? "kind" : c.field] = c.value; setFloor({ panels: { ...(fl.panels ?? {}), ...Object.fromEntries(Object.entries(by).map(([k, p]) => [k, { ...fl.panels?.[k], ...p }])) } }); }} /></div>
+    <p className="mt-1 text-[11px] text-gray-400">* = แผ่นที่กำหนดเอง · คลิกช่องแล้วพิมพ์ (หรือดับเบิลคลิก) เพื่อแก้ · Ctrl+V วางค่าที่คัดลอกจาก Excel ลงตั้งแต่ช่องที่เลือก · ติ๊กหลายแถวแล้ว Ctrl+D = เติมค่าของแถวแรกลงแถวที่ติ๊ก · หรือกรอกแถบด้านบนแล้วกด "ใส่ค่า"</p>
   </div>);
 }
 
-export function BeamLoadTable({ fl, setFloor, wallTypes, resolveW = (w) => w }) {
+export function BeamLoadTable({ fl, setFloor, wallTypes, resolveW = (w) => w, dark }) {
   const [pick, setPick] = useState({}), [bulk, setBulk] = useState({ kind: wallTypes[0]?.id, h: undefined, open: 0, q: undefined });
   const beams = fl.beams ?? [], walls = wallsOf(fl), lines = fl.lineLoads ?? [], ids = beams.map((_, i) => i).filter((i) => pick[i]);
   const wName = (k) => wallTypes.find((t) => t.id === k)?.name ?? k;
@@ -72,18 +66,14 @@ export function BeamLoadTable({ fl, setFloor, wallTypes, resolveW = (w) => w }) 
       <label className="flex items-center gap-1">น้ำหนักแผ่<Num v={bulk.q} on={(v) => setBulk({ ...bulk, q: v })} w="w-16" ph="กก./ม." /></label>
       <button disabled={!ids.length || !(bulk.q > 0)} onClick={putLine} className="rounded-md px-2 py-1 font-medium text-brand-600 ring-1 ring-brand-300 disabled:opacity-40">ใส่น้ำหนักแผ่</button>
     </Bar>
-    <table className="w-full text-[12px]"><thead className="sticky top-0 bg-white"><tr>
-      <th className={th}><input type="checkbox" checked={all} onChange={() => setPick(all ? {} : Object.fromEntries(beams.map((_, i) => [i, true])))} /></th>
-      {["คาน", "จาก → ถึง", "ยาว (ม.)", "ผนังบนคาน", "น้ำหนักผนัง (กก./ม.)", "น้ำหนักแผ่อื่น (กก./ม.)"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
-      <tbody>{beams.map((b, i) => { const ws = walls.filter((w) => onBeam(w, b)), ls = lines.filter((l) => onBeam(l, b)), wt = (w0) => { const w = resolveW(w0); return (wallTypes.find((t) => t.id === w.kind)?.w ?? 0) * w.h * (1 - (w.open ?? 0) / 100) * (w.layers ?? 1); };
-        return <tr key={i} className={`border-t border-gray-100 ${pick[i] ? "bg-brand-50/60" : ""}`}>
-          <td className={td}><input type="checkbox" checked={!!pick[i]} onChange={() => setPick({ ...pick, [i]: !pick[i] })} /></td>
-          <td className={td}>{i + 1}</td><td className={td}>({fmt(b.a[0], 2)}, {fmt(b.a[1], 2)}) → ({fmt(b.b[0], 2)}, {fmt(b.b[1], 2)})</td>
-          <td className={td}>{fmt(Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]), 2)}</td>
-          <td className={td}>{ws.map((w) => `${wName(w.kind)} สูง ${fmt(resolveW(w).h, 2)}${w.hAuto ? " (อัตโนมัติ)" : ""}${w.openings?.length ? ` ประตู/หน้าต่าง ${w.openings.length}` : w.open ? ` เปิด ${w.open}%` : ""}`).join(", ") || "-"}</td>
-          <td className={td}>{ws.length ? fmt(ws.reduce((a, w) => a + wt(w), 0), 0) : "-"}</td>
-          <td className={td}>{ls.length ? fmt(ls.reduce((a, l) => a + l.q, 0), 0) : "-"}</td>
-        </tr>; })}</tbody></table>
+    <div className="h-[calc(100vh-330px)] min-h-[280px]"><Grid dark={dark} rows={beams.map((b, i) => { const ws = walls.filter((w) => onBeam(w, b)), ls = lines.filter((l) => onBeam(l, b)), wt = (w0) => { const w = resolveW(w0); return (wallTypes.find((t) => t.id === w.kind)?.w ?? 0) * w.h * (1 - (w.open ?? 0) / 100) * (w.layers ?? 1); };
+        return { id: String(i), n: i + 1, from: `(${fmt(b.a[0], 2)}, ${fmt(b.a[1], 2)}) → (${fmt(b.b[0], 2)}, ${fmt(b.b[1], 2)})`, L: Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]),
+          wall: ws.map((w) => `${wName(w.kind)} สูง ${fmt(resolveW(w).h, 2)}${w.hAuto ? " (อัตโนมัติ)" : ""}${w.openings?.length ? ` ประตู/หน้าต่าง ${w.openings.length}` : w.open ? ` เปิด ${w.open}%` : ""}`).join(", ") || "-",
+          qw: ws.length ? ws.reduce((a, w) => a + wt(w), 0) : null, ql: ls.length ? ls.reduce((a, l) => a + l.q, 0) : null }; })}
+      columns={[{ field: "n", headerName: "คาน", width: 70 }, { field: "from", headerName: "จาก → ถึง", width: 210 }, { field: "L", headerName: "ยาว ม.", width: 80, type: "number", fmt: (v) => fmt(v, 2) },
+        { field: "wall", headerName: "ผนังบนคาน" }, { field: "qw", headerName: "ผนัง กก./ม.", width: 100, type: "number", fmt: (v) => (v == null ? "-" : fmt(v, 0)) },
+        { field: "ql", headerName: "แผ่อื่น กก./ม.", width: 100, type: "number", fmt: (v) => (v == null ? "-" : fmt(v, 0)) }]}
+      onSelect={(ids) => setPick(Object.fromEntries(ids.map((k) => [k, true])))} onChange={() => {}} /></div>
     <p className="mt-1 text-[11px] text-gray-400">ติ๊กคานหลายเส้น → เลือกชนิดผนัง + ความสูง → "ใส่ค่า" (แทนผนังเดิมบนคานนั้น) · น้ำหนักแผ่ = ราวกันตก / งานระบบ ฯลฯ ทั้งเส้นคาน · ผนังที่วาดเองบางส่วนของคานยังอยู่ (แก้ในแปลน)</p>
   </div>);
 }

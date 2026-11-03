@@ -1,31 +1,27 @@
 ﻿import { Component } from "react";
-// Small UI primitives in the TailAdmin visual style.
+// Small UI primitives in the shadcn/ui visual language (neutral borders, 6–8 px radius, small type, focus rings), Tailwind only.
 export function Card({ title, icon: Icon, children, className = "", bodyClass = "" }) {
   return (
-    <section className={`rounded-2xl border border-gray-200 bg-white ${className}`}>
+    <section className={`rounded-xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`}>
       {title && (
-        <header className="flex items-center gap-3 px-5 pt-4 text-base font-semibold text-gray-800">
-          {Icon && (
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-gray-100">
-              <Icon className="h-[18px] w-[18px] text-gray-700" />
-            </span>
-          )}
+        <header className="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 text-[13px] font-semibold tracking-tight text-gray-800">
+          {Icon && <Icon className="h-4 w-4 shrink-0 text-gray-400" />}
           {title}
         </header>
       )}
-      <div className={`px-5 pt-3 pb-4 ${bodyClass}`}>{children}</div>
+      <div className={`px-4 pt-3 pb-4 ${bodyClass}`}>{children}</div>
     </section>
   );
 }
 
 export const inputCls =
-  "h-9 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 shadow-theme-xs outline-none " +
-  "placeholder:text-gray-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/10";
+  "h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-[13px] text-gray-800 shadow-[0_1px_2px_rgba(16,24,40,0.04)] outline-none transition-colors " +
+  "placeholder:text-gray-400 hover:border-gray-300 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 tabular-nums";
 
 export function Field({ label, unit, children }) {
   return (
     <label className="block">
-      <span className="mb-1 flex justify-between text-xs font-medium text-gray-600">
+      <span className="mb-1 flex justify-between text-[11px] font-medium text-gray-500">
         <span>{label}</span>
         {unit && <span className="font-normal text-gray-400">{unit}</span>}
       </span>
@@ -57,16 +53,16 @@ export function Select({ value, onChange, options, className = "" }) {
 }
 
 export function Badge({ ok, children }) {
-  const cls = ok ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600";
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cls}`}>{children ?? (ok ? "OK" : "NG")}</span>;
+  const cls = ok ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700";
+  return <span className={`inline-flex items-center rounded-md border px-1.5 py-px text-[11px] font-semibold ${cls}`}>{children ?? (ok ? "OK" : "NG")}</span>;
 }
 
 export function Button({ children, onClick, variant = "primary", icon: Icon, title }) {
   const cls = variant === "primary"
     ? "bg-brand-500 text-[#fff] shadow-theme-xs hover:bg-brand-600"
-    : "bg-white text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50";
+    : "bg-white text-gray-700 border border-gray-200 shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:bg-gray-50";
   return (
-    <button onClick={onClick} title={title} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium ${cls}`}>
+    <button onClick={onClick} title={title} className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors ${cls}`}>
       {Icon && <Icon className="h-4 w-4" />}
       {children}
     </button>
