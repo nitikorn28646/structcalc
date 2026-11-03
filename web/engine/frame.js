@@ -41,19 +41,28 @@ export const PILE_SAFE = { "I-18": 18000, "I-22": 25000, "I-26": 35000, "I-30": 
 // spread footing on soil (footing type kind "spread"): every check of the diff-tested engine; Bx/By 0 = sized from qa in 0.10 m steps
 const spreadOk = (r) => r.qOk && r.qminOk && r.dOk && r.vOk && r.vpOk && r.AsOkL && r.AsOkS && r.perimOkL && r.perimOkS && r.ancOkL && r.ancOkS && r.perimOkD && r.bearingOk;
 function designSpread(tt, P, pier, mat, fo, Mx, My) {
-  const t = tt.t ?? 0.4, qa = tt.qa ?? 10000, gamma = tt.gamma ?? 1800, Df = Math.max(tt.Df ?? 1.2, t), r10 = (x) => Math.ceil(x * 10 - 1e-9) / 10;
-  // first size: soil pressure of P + footing + soil above on a square, then grow both sides until every check passes (or +1.5 m)
-  const B0 = r10(Math.sqrt(P / Math.max(qa - (t * 2400 + (Df - t) * gamma), 1)));
-  const fixed = tt.Bx > 0 && tt.By > 0, sizes = fixed ? [[tt.Bx, tt.By]] : Array.from({ length: 16 }, (_, i) => Math.round((Math.max(B0, 0.6) + i / 10) * 10) / 10).map((b) => [b, b]);
+  // soil: one value for the site (frame.soil → fo.soil); a per-type qa / gamma of older files is used only when no site value is set
+  const t0 = tt.t ?? 0.4, qa = fo.soil?.qa ?? tt.qa ?? 10000, gamma = fo.soil?.gamma ?? tt.gamma ?? 1800, Df0 = Math.max(tt.Df ?? 1.2, t0), r10 = (x) => Math.ceil(x * 10 - 1e-9) / 10;
+  // first size: soil pressure of P + footing + soil above on a square, then grow both sides until every check passes (or +1.5 m);
+  // at each size the thickness may grow from the type's t in 0.05 m steps (+0.40 m) when depth / shear governs, and bars given by
+  // spacing may close up to @0.125 / @0.10 (minimum steel grows with d) — auto size only
+  const B0 = r10(Math.sqrt(P / Math.max(qa * (fo.utilMax ?? 1) - (t0 * 2400 + (Df0 - t0) * gamma), 1)));
+  const fixed = tt.Bx > 0 && tt.By > 0, ts = Array.from({ length: 9 }, (_, i) => Math.round((t0 + i * 0.05) * 100) / 100);
+  const sizes = fixed ? [[tt.Bx, tt.By, t0]] : Array.from({ length: 16 }, (_, i) => Math.round((Math.max(B0, 0.6) + i / 10) * 10) / 10).flatMap((b) => ts.flatMap((t) => [1, 0.125, 0.1].map((k) => [b, b, t, k])));
   let best = null;
-  for (const [Bx, By] of sizes) {
+  for (const [Bx, By, t, sk = 1] of sizes) {
+    const Df = Math.max(tt.Df ?? 1.2, t);
     const bar = tt.bar ?? "DB 12", barS = tt.barS ?? bar;
     // bar count ("6-DB 12"): the engine counts floor(B/s + 1) bars over the full width
-    const sL = tt.nb > 1 ? (By / (tt.nb - 1)) * (1 - 1e-9) : tt.s ?? 0.15, sS = tt.nbS > 1 ? (Bx / (tt.nbS - 1)) * (1 - 1e-9) : tt.sS ?? tt.s ?? 0.15;
+    const tight = (x) => (sk < 1 ? Math.min(x, sk) : x); // sk 1 = the type's own spacing
+    const sL = tt.nb > 1 ? (By / (tt.nb - 1)) * (1 - 1e-9) : tight(tt.s ?? 0.15), sS = tt.nbS > 1 ? (Bx / (tt.nbS - 1)) * (1 - 1e-9) : tight(tt.sS ?? tt.s ?? 0.15);
     const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: tt.fy ?? fo.fy, cover: mat.coverFoot ?? fo.cover, t, Bx, By, Df, P, Mx, My, qa, gamma,
       pier: "rect", bx: pier.Bx / 100, by: pier.By / 100, D: 0.3, longBar: bar, shortBar: barS, sLong: sL, sShort: sS, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4 };
     try {
-      const r = spreadFooting(inp), ok = spreadOk(r), util = Math.max(r.qmaxX, r.qmaxY) / qa;
+      // fo.utilMax: the engineer's limit on soil use (e.g. 0.9 = q ≤ 90 % of qa)
+      const r = spreadFooting(inp), util = Math.max(r.qmaxX, r.qmaxY) / qa;
+      r.limOk = util <= (fo.utilMax ?? 1) + 1e-9;
+      const ok = spreadOk(r) && r.limOk;
       r.Bx = Bx; r.By = By; r.piles = [];
       if (tt.nb > 1) r.longText = `${r.nLong}-${bar} @ ${sL.toFixed(3)}`;
       if (tt.nbS > 1) r.shortText = `${r.nShort}-${barS} @ ${sS.toFixed(3)}`;
@@ -93,7 +102,9 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
         if (tt.nb > 1) inp.sLong = sp(r0.By, tt.nb);
         if (tt.nbS > 1) inp.sShort = sp(r0.Bx, tt.nbS);
       }
-      const r = pileCap(inp), ok = capOk(r, n), u = r.Ptmax / r.Pallow;
+      const r = pileCap(inp), u = r.Ptmax / r.Pallow;
+      r.limOk = u <= (fo.utilMax ?? 1) + 1e-9; // pile load ≤ the engineer's limit of the safe load
+      const ok = capOk(r, n) && r.limOk;
       if (tt.nb > 1) r.longText = `${r.nLong}-${inp.longBar} @ ${inp.sLong.toFixed(3)}`;
       if (tt.nbS > 1) r.shortText = `${r.nShort}-${inp.shortBar} @ ${inp.sShort.toFixed(3)}`;
       if (ok) return { n, pile, r, ok, util: u, inp, type: tt.name ?? null };
@@ -274,7 +285,7 @@ export function analyzeFrame(frame) {
   const base = (c, list = f3?.base) => list?.find((b) => near(b.p, c.p));
   const footings = g.cols.filter((c) => c.floor === 0).map((c) => {
     const b = base(c), P = Math.max(c.Pbot, b?.R[2] ?? 0), Mx = Math.abs(b?.R[3] ?? 0), My = Math.abs(b?.R[4] ?? 0);
-    const ft = frame.footTypes?.[frame.footPick?.[c.stack]], fo = { ...(frame.footing ?? DEFAULT_FOOTING), ...(frame.pileLoads ? { pileLoads: frame.pileLoads } : {}), ...(ft ? { fixed: ft } : frame.footTypes?.length ? { types: frame.footTypes } : {}) }, grav = { p: c.p, stack: c.stack, P, Mx, My, combo: "D+L", ...designFooting(P, c.lv, mat, fo, Mx, My) };
+    const ft = frame.footTypes?.[frame.footPick?.[c.stack]], fo = { ...(frame.footing ?? DEFAULT_FOOTING), soil: frame.soil, utilMax: frame.footUtil, ...(frame.pileLoads ? { pileLoads: frame.pileLoads } : {}), ...(ft ? { fixed: ft } : frame.footTypes?.length ? { types: frame.footTypes } : {}) }, grav = { p: c.p, stack: c.stack, P, Mx, My, combo: "D+L", ...designFooting(P, c.lv, mat, fo, Mx, My) };
     const lc = (f3?.combos ?? []).filter((cb) => cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, R: base(c, cb.base)?.R })).filter((x) => x.R);
     if (!lc.length) return grav;
     // lateral combinations: the one with the largest axial load and the ones with the largest base moments are designed too

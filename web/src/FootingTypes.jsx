@@ -19,10 +19,10 @@ const KIND = (p) => (p.startsWith("I-") ? "ไอ (I)" : p.startsWith("SO-") ? "
 const BARS = Object.keys(SLAB_BARS).filter((b) => b.startsWith("DB"));
 // the pile-cap checks that failed, in words (engine/footing.js flags)
 const WHY = { pileOk: "แรงต่อเข็มเกินค่าปลอดภัย", dOk: "ฐานบางไป (ความลึกประสิทธิผล)", vOk: "แรงเฉือนทางเดียว", vpOk: "แรงเฉือนทะลุรอบเสา", vppOk: "แรงเฉือนทะลุรอบเข็ม",
-  AsOkL: "เหล็กแนวยาวไม่พอ", AsOkS: "เหล็กแนวสั้นไม่พอ", perimOk: "แรงยึดเหนี่ยวเหล็ก", ancOk: "ระยะฝังเหล็กไม่พอ (ขยายฐาน / ใช้เหล็กเล็กลง)", bearingOk: "แรงแบกทานใต้เสา" };
+  AsOkL: "เหล็กแนวยาวไม่พอ", AsOkS: "เหล็กแนวสั้นไม่พอ", perimOk: "แรงยึดเหนี่ยวเหล็ก", ancOk: "ระยะฝังเหล็กไม่พอ (ขยายฐาน / ใช้เหล็กเล็กลง)", bearingOk: "แรงแบกทานใต้เสา", limOk: "แรงต่อเข็มเกินขีดที่กำหนด" };
 const WHY_S = { qOk: "แรงดันดินเกิน qa (ขยายฐาน)", qminOk: "แรงดันดินติดลบ — ฐานยก (ขยายฐาน)", dOk: "ฐานบางไป (ความลึกประสิทธิผล)", vOk: "แรงเฉือนทางเดียว", vpOk: "แรงเฉือนทะลุรอบเสา",
   AsOkL: "เหล็กแนวยาวไม่พอ", AsOkS: "เหล็กแนวสั้นไม่พอ", perimOkL: "แรงยึดเหนี่ยวเหล็กแนวยาว", perimOkS: "แรงยึดเหนี่ยวเหล็กแนวสั้น", ancOkL: "ระยะฝังเหล็กแนวยาวไม่พอ",
-  ancOkS: "ระยะฝังเหล็กแนวสั้นไม่พอ", perimOkD: "เหล็กเดือยไม่พอ", bearingOk: "แรงแบกทานใต้เสา" };
+  ancOkS: "ระยะฝังเหล็กแนวสั้นไม่พอ", perimOkD: "เหล็กเดือยไม่พอ", bearingOk: "แรงแบกทานใต้เสา", limOk: "แรงดันดินเกินขีดที่กำหนด" };
 const why = (f) => f.kind === "spread" ? (f.error ?? Object.keys(WHY_S).filter((k) => f.r?.[k] === false).map((k) => WHY_S[k]).join(" · ")) : (f.error ? f.error : f.r ? Object.keys(WHY).filter((k) => f.r[k] === false && !(f.n === 1 && (k === "ancOk" || k === "perimOk"))).map((k) => WHY[k]).join(" · ") : "");
 const Num = ({ v, on, step = "0.05", w = "w-16" }) => <input type="number" step={step} value={v} onChange={(e) => on(Number(e.target.value))} className={`${box} ${w}`} />;
 
@@ -31,21 +31,26 @@ export function FootingTypes({ frame, set, res }) {
   const [selStack, setSelStack] = useState(null);
   const safe = (p) => (loads ? loads[p] ?? PILE_SAFE[p] : fo.Psafe ?? 18000);
   const setSafe = (p, t) => set("pileLoads", { ...Object.fromEntries(Object.keys(PILES).map((k) => [k, safe(k)])), [p]: Math.round(t * 1000) });
+  // site soil: one value for every spread footing (older files: taken from the first spread type that had its own)
+  const t0s = types.find((t) => t.kind === "spread" && t.qa), soil = { qa: frame.soil?.qa ?? t0s?.qa ?? 10000, gamma: frame.soil?.gamma ?? t0s?.gamma ?? 1800 };
+  const setSoil = (k, v) => set("soil", { ...soil, [k]: v });
   const put = (i, k, v) => set("footTypes", types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const add = () => set("footTypes", [...types, (types.length ? { name: `F${types.length + 1}`, n: Math.min(9, types[types.length - 1].n + 1), pile: "I-18", t: 0.4, Df: 1.2, k: 3, w: 0, bar: "DB 12", s: 0.15, barS: "DB 12", sS: 0.15 }
     : { name: "F1", n: 1, pile: "I-18", t: 0.5, Df: 1.2, k: 3, w: 0.5, bar: "DB 12", nb: 5, s: 0.15, barS: "DB 12", nbS: 5, sS: 0.15 })]);
-  // spread types filled from the real column loads: each column's smallest passing square size (engine auto size), then at most
-  // 4 sizes (groups of the sorted sizes, each = its largest) with the bar counts of that size → editable like any type
-  const spreadBase = () => { const t0 = types.find((t) => t.kind === "spread"); return { kind: "spread", t: t0?.t ?? 0.3, Df: t0?.Df ?? 1.2, qa: t0?.qa ?? 10000, gamma: t0?.gamma ?? 1800, bar: t0?.bar ?? "DB 12", s: 0.15, barS: t0?.barS ?? t0?.bar ?? "DB 12", sS: 0.15 }; };
-  const sizeRun = (f, tt) => { const c = (res.columns ?? []).find((x) => x.floor === 0 && x.stack === f.stack); return c ? designFooting(f.P, c.lv, frame.mat, { ...(frame.footing ?? DEFAULT_FOOTING), fixed: tt }, f.Mx ?? 0, f.My ?? 0) : null; };
+  // spread types filled from the real column loads: each column's smallest passing square size (engine auto size); every press of
+  // the auto button adds one type and re-spreads all of them: columns sorted by size split into k groups of about equal count,
+  // each type = the largest size of its group, with the bar counts of that size → editable like any type
+  const spreadBase = () => { const t0 = types.find((t) => t.kind === "spread"); return { kind: "spread", t: t0?.t ?? 0.3, Df: t0?.Df ?? 1.2, bar: t0?.bar ?? "DB 12", s: 0.15, barS: t0?.barS ?? t0?.bar ?? "DB 12", sS: 0.15 }; };
+  const sizeRun = (f, tt) => { const c = (res.columns ?? []).find((x) => x.floor === 0 && x.stack === f.stack); return c ? designFooting(f.P, c.lv, frame.mat, { ...(frame.footing ?? DEFAULT_FOOTING), soil: frame.soil, utilMax: frame.footUtil, fixed: tt }, f.Mx ?? 0, f.My ?? 0) : null; };
   const needed = (base) => foots.map((f) => ({ f, d: sizeRun(f, { ...base, Bx: 0, By: 0 }) })).filter((x) => x.d?.ok).map((x) => ({ ...x, B: x.d.r.Bx })).sort((a, b) => a.B - b.B);
-  const typeAt = (base, x, name) => { const d = sizeRun(x.f, { ...base, Bx: x.B, By: x.B }); return { ...base, name, Bx: x.B, By: x.B, nb: d?.r?.nLong ?? 0, nbS: d?.r?.nShort ?? 0 }; };
+  // the group's governing column already passed at this size: its thickness and bar counts become the type
+  const typeAt = (base, x, name) => ({ ...base, name, Bx: x.B, By: x.B, t: x.d.inp?.t ?? base.t, nb: x.d.r.nLong, nbS: x.d.r.nShort });
   const nextName = (k = 0) => { let i = types.length + 1 + k; while (types.some((t) => t.name === `F${i}`)) i++; return `F${i}`; };
   const addSpread = () => { const base = spreadBase(), list = needed(base), big = list.at(-1);
     set("footTypes", [...types, big ? typeAt(base, big, nextName()) : { ...base, name: nextName(), Bx: 0, By: 0 }]); };
   const autoSpread = () => {
-    const base = spreadBase(), list = needed(base), sizes = [...new Set(list.map((x) => x.B))];
-    const k = Math.min(4, sizes.length), groups = Array.from({ length: k }, (_, g) => sizes.slice(Math.floor((g * sizes.length) / k), Math.floor(((g + 1) * sizes.length) / k)).at(-1));
+    const base = spreadBase(), list = needed(base), nSizes = new Set(list.map((x) => x.B)).size;
+    const k = Math.max(1, Math.min(spreadRows.length + 1, nSizes)), groups = [...new Set(Array.from({ length: k }, (_, g) => list[Math.ceil(((g + 1) * list.length) / k) - 1].B))];
     const keep = types.map((t, i) => [t, i]).filter(([t]) => t.kind !== "spread"), map = Object.fromEntries(keep.map(([, i], j) => [i, j]));
     const made = groups.map((B, g) => typeAt(base, list.filter((x) => x.B === B).at(-1), `F${keep.length + g + 1}`));
     set("footTypes", [...keep.map(([t]) => t), ...made]);
@@ -68,6 +73,11 @@ export function FootingTypes({ frame, set, res }) {
   return (
     <div className="max-w-[1500px] space-y-5 text-[12px]">
       <section>
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]">
+          <span className="font-medium text-gray-600">ใช้กำลังรับไม่เกิน</span>
+          <Num v={Math.round((frame.footUtil ?? 1) * 100)} on={(v) => set("footUtil", Math.min(100, Math.max(50, v)) / 100)} step="5" w="w-16" /><span>%</span>
+          <span className="text-[11px] text-gray-400">ของแรงแบกทานดิน qa (ฐานแผ่) / น้ำหนักปลอดภัยของเข็ม (ฐานเข็ม) — เช่น 80–90 % เผื่อไว้ · ใช้ทั้งการเลือก type อัตโนมัติ การหาขนาด และการตรวจผ่าน</span>
+        </div>
         <p className="mb-1 text-sm font-semibold text-gray-800">1 · Type ฐานรากเสาเข็ม</p>
         <table className="w-full"><thead><tr>{["ชื่อ", "เข็ม (ต้น)", "ขนาดเข็ม", "หนาฐาน t (ม.)", "ลึก Df (ม.)", "ระยะเข็ม (× ขนาดเข็ม)", "กว้างฐาน (ม.) 1–2 ต้น", "เหล็กแนวยาว", "จำนวน (เส้น)", "@ (ม.)", "เหล็กแนวสั้น", "จำนวน (เส้น)", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
           <tbody>{pileRows.map(([t, i]) => <tr key={i} className="border-t border-gray-100">
@@ -85,20 +95,24 @@ export function FootingTypes({ frame, set, res }) {
       </section>
       <section>
         <p className="mb-1 text-sm font-semibold text-gray-800">1b · Type ฐานแผ่ (วางบนดิน)</p>
-        {spreadRows.length > 0 && <table className="w-full"><thead><tr>{["ชื่อ", "กว้าง Bx (ม.)", "ยาว By (ม.)", "หนา t (ม.)", "ลึก Df (ม.)", "qa ดิน (ตัน/ม.²)", "น้ำหนักดิน (กก./ม.³)", "เหล็กแนวยาว", "จำนวน (เส้น)", "@ (ม.)", "เหล็กแนวสั้น", "จำนวน (เส้น)", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
+        <div className="mb-2 flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]">
+          <span className="font-medium text-gray-600">ดินของโครงการ (ใช้กับฐานแผ่ทุก type)</span>
+          <label className="flex items-center gap-1">แรงแบกทานที่ยอมให้ qa <Num v={soil.qa / 1000} on={(v) => setSoil("qa", Math.round(v * 1000))} step="0.5" w="w-16" /> ตัน/ม.²</label>
+          <label className="flex items-center gap-1">หน่วยน้ำหนักดินถม <Num v={soil.gamma} on={(v) => setSoil("gamma", v)} step="100" w="w-20" /> กก./ม.³</label>
+          <span className="text-[11px] text-gray-400">ค่า qa จากผลเจาะสำรวจดิน / ทดสอบแผ่นรับน้ำหนัก</span>
+        </div>
+        {spreadRows.length > 0 && <table className="w-full"><thead><tr>{["ชื่อ", "กว้าง Bx (ม.)", "ยาว By (ม.)", "หนา t (ม.)", "ลึก Df (ม.)", "เหล็กแนวยาว", "จำนวน (เส้น)", "@ (ม.)", "เหล็กแนวสั้น", "จำนวน (เส้น)", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
           <tbody>{spreadRows.map(([t, i]) => <tr key={i} className="border-t border-gray-100">
             <td className={td}><input value={t.name} onChange={(e) => put(i, "name", e.target.value)} className={`${box} w-14`} /></td>
             <td className={td}><Num v={t.Bx ?? 0} on={(v) => put(i, "Bx", v)} step="0.1" /></td>
             <td className={td}><Num v={t.By ?? 0} on={(v) => put(i, "By", v)} step="0.1" /></td>
             <td className={td}><Num v={t.t ?? 0.3} on={(v) => put(i, "t", v)} /></td>
             <td className={td}><Num v={t.Df ?? 1.2} on={(v) => put(i, "Df", v)} step="0.1" /></td>
-            <td className={td}><Num v={(t.qa ?? 10000) / 1000} on={(v) => put(i, "qa", Math.round(v * 1000))} step="0.5" w="w-14" /></td>
-            <td className={td}><Num v={t.gamma ?? 1800} on={(v) => put(i, "gamma", v)} step="100" w="w-16" /></td>
             {barCells(t, i)}
           </tr>)}</tbody></table>}
         <div className="mt-1 flex gap-4"><button onClick={addSpread} className="flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />เพิ่ม type ฐานแผ่</button>
-          <button onClick={autoSpread} title="แทน type ฐานแผ่เดิมด้วยขนาดที่คำนวณจากแรงที่ฐานเสาจริง (ไม่เกิน 4 ขนาด) แก้ต่อได้ทุกช่อง" className="flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />สร้าง type ฐานแผ่อัตโนมัติจากแรงที่ฐาน</button></div>
-        <p className="mt-1 text-[11px] text-gray-400">เพิ่ม type = ขนาดที่ฐานหนักสุดต้องการ · สร้างอัตโนมัติ = ไม่เกิน 4 ขนาดจากแรงจริง พร้อมจำนวนเหล็ก (แก้ต่อได้) · Bx / By = 0 → โปรแกรมหาขนาดจาก qa (รวมน้ำหนักฐาน + ดินถม) แล้วขยายทีละ 0.10 ม. จนผ่านทุกข้อ · ตรวจ แรงดันดิน (รวมโมเมนต์ 2 ทาง), ความลึก, เฉือนทางเดียว, เฉือนทะลุ, เหล็ก, แรงยึดเหนี่ยว, ระยะฝัง, เหล็กเดือย, แรงแบกทาน · อัตโนมัติจะลองฐานแผ่ก่อนฐานเข็ม</p>
+          <button onClick={autoSpread} title="เพิ่ม 1 type แล้วจัดขนาดทุก type ใหม่ให้จำนวนฐานต่อ type ใกล้กัน (จากแรงที่ฐานเสาจริง) แก้ต่อได้ทุกช่อง" className="flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />เพิ่ม type อัตโนมัติ (จัดขนาดใหม่เป็น {spreadRows.length + 1} type)</button></div>
+        <p className="mt-1 text-[11px] text-gray-400">เพิ่ม type = ขนาดที่ฐานหนักสุดต้องการ · เพิ่มอัตโนมัติ = กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดขนาดทุก type ใหม่จากแรงจริงให้แต่ละ type มีจำนวนฐานใกล้กัน พร้อมจำนวนเหล็ก (แก้ต่อได้) · Bx / By = 0 → โปรแกรมหาขนาดจาก qa (รวมน้ำหนักฐาน + ดินถม) แล้วขยายทีละ 0.10 ม. จนผ่านทุกข้อ · ตรวจ แรงดันดิน (รวมโมเมนต์ 2 ทาง), ความลึก, เฉือนทางเดียว, เฉือนทะลุ, เหล็ก, แรงยึดเหนี่ยว, ระยะฝัง, เหล็กเดือย, แรงแบกทาน · อัตโนมัติจะลองฐานแผ่ก่อนฐานเข็ม</p>
       </section>
       <section>
         <p className="mb-1 text-sm font-semibold text-gray-800">2 · ฐานรากแต่ละเสา <span className="font-normal text-gray-400">(คลิกแถวเพื่อดูรูป)</span></p>
