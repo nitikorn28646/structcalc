@@ -66,6 +66,34 @@ function designBH(sps, b, h, bar, mat, g, start = null) {
   }
   return null;
 }
+// the cheapest version of type t that still passes `sps`: stirrups from RB6 up with the widest spacing that passes (support and
+// mid-span apart), then extra / through bars removed one at a time while everything passes
+function trimType(t, sps, mat, g) {
+  const ok = (x) => sps.every((sp) => checkEnv(x, sp, mat).ok);
+  const steps = []; for (let v = g.sMax; v >= g.sMin - 1e-9; v = +(v - g.ds).toFixed(3)) steps.push(v);
+  let best = { ...t };
+  for (const [st, n] of g.stirrups) {
+    const x = { ...best, st, stSets: n };
+    const sSup = steps.find((v) => ok({ ...x, sSup: v, sMid: g.sMin })), sMid = sSup !== undefined ? steps.find((v) => ok({ ...x, sSup, sMid: v })) : undefined;
+    if (sSup === undefined || sMid === undefined) continue;
+    const cand = { ...x, sSup, sMid };
+    if (beamCost(cand, g) < beamCost(best, g) - 1e-6 || !ok(best)) best = cand;
+    break; // the first (smallest) stirrup that works: RB6 before RB9 before two sets (user)
+  }
+  const cnt = (v) => parseBars(v)?.n ?? 0, bar = (v) => parseBars(v)?.bar;
+  for (const k of ["topX", "botX", "top", "bot"]) {
+    for (;;) {
+      const n = cnt(best[k]), min = k === "top" || k === "bot" ? 2 : 0;
+      if (n <= min) break;
+      const cand = { ...best, [k]: n - 1 > 0 ? `${n - 1}-${bar(best[k]).replace(" ", "")}` : "" };
+      if (!ok(cand)) break;
+      best = cand;
+    }
+  }
+  if (best.stSets === 1) delete best.stSets;
+  return best;
+}
+
 // cheapest of every b × h × bar size
 export function designGroup(sps, mat, g = BEAM_GEN) {
   let best = null;
@@ -134,6 +162,25 @@ export function generateBeamTypes(frame, k, g = BEAM_GEN) {
     f = { ...f, beamTypes: types }; r = analyzeFrame(f);
     const s = score(r);
     if (s.ok > best.s.ok || (s.ok === best.s.ok && s.cost < best.s.cost)) best = { ...best, types, s };
+  }
+  // trim (user 2026-11-03: "B3 got RB9 but RB6 passes"): a type was sized for its whole group and for the largest forces of all
+  // passes, but in the end only some spans use it — take each type down to what the spans really using it need (stirrups RB6
+  // first and the widest spacing, then fewer bars), confirm with a fresh analysis, undo a type whose spans no longer pass
+  if (best) {
+    let types = best.types.map((t) => ({ ...t }));
+    for (let pass = 0; pass < 2; pass++) {
+      f = { ...f, beamTypes: types }; r = analyzeFrame(f);
+      const sps = r.floors.flatMap((a) => a.spans).map((sp) => ({ ...sp, vDone: true }));
+      const trimmed = types.map((t, ti) => { const mine = sps.filter((sp) => sp.typeIdx === ti); return mine.length && mine.every((sp) => sp.ok) ? trimType(t, mine, f.mat, g) : t; });
+      f = { ...f, beamTypes: trimmed }; const r2 = analyzeFrame(f);
+      const bad = new Set(r2.floors.flatMap((a) => a.spans).filter((sp) => !sp.ok).map((sp) => sp.typeIdx));
+      const okNow = r.floors.flatMap((a) => a.spans).filter((sp) => sp.ok).length;
+      types = trimmed.map((t, ti) => (bad.has(ti) ? types[ti] : t));
+      if (!bad.size && okNow === best.s.ok) { r = r2; break; }
+    }
+    f = { ...f, beamTypes: types }; r = analyzeFrame(f);
+    const s = score(r);
+    if (s.ok >= best.s.ok) best = { ...best, types, s };
   }
   return best ? { beamTypes: best.types, floors: f.floors, ...best.s, unmatched: best.unmatched } : null;
 }
