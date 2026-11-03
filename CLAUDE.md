@@ -322,9 +322,6 @@ REVIEW FIXES (2026-11-03, cloud session, branch feature/review-fixes; findings i
 - Baselines re-saved (regress + E2E). PyNite / Excel diffs NOT re-run here (cloud): re-run frame3d/contBeam PyNite and the beam Excel
   diff on the Windows PC (only V input changed for beams; beam.js untouched).
 
-OPEN ITEMS for the next session: (1) publish the web copy — dist-web is built and U+FFFD-escaped, the Artifact
-https://claude.ai/artifact/Dkq17UyCSdhSax9xtbiDWU still has the old version (read it first, then republish index.html + assets) so the user
-can work from another PC (projects move via บันทึก/เปิด .json); (2) E2E "new" expected base_t changed with the roof workflow (97.7 vs 98.5) —
-re-run `cli/e2e/run.py --save` after checking; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
+OPEN ITEMS for the next session: (1) web copy published 2026-11-03 (Artifact version 3, without project files — open a .json with เปิด); (2) E2E expected re-saved; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
 torsion — likely the type list has no 20×40 with RB9 @0.10; check per-span reasons on the user's project); (4) Ole: 28 beams fail only on
 stirrup spacing d/2 (shallow GB 20×20, tiny shear) — ask whether to apply the ACI exemption (h ≤ 25 cm or v ≤ vc/2); columns RB6 @0.20 > 16db.
