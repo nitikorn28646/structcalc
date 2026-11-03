@@ -4,7 +4,7 @@ import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { beamSectionModel, columnSectionModel, framePlanModel } from "./drawings.js";
 import { SLAB_BARS } from "../engine/tables.js";
-import { CONC, DEFAULT_WALL_TYPES, GROUPS, STAIR_KINDS, barLayers, faceBars, parseBars, wallsOf } from "../engine/floor.js";
+import { CONC, DEFAULT_WALL_TYPES, GROUPS, STAIR_KINDS, barLayers, faceBars, parseBars, stLabel, wallsOf } from "../engine/floor.js";
 import { designSlabs } from "../engine/slabDesign.js";
 import { analyzeFrame } from "../engine/frame.js";
 import { arcGeom } from "../engine/arc.js";
@@ -205,7 +205,7 @@ export function FrameReport({ frame, project }) {
         <Sec n={++n} th="ตาราง type คานและเสา" en="Beam & column schedules" intro="ขนาดและเหล็กเสริมที่ใช้ ความยาวคานรวมวัดตามแนวศูนย์กลาง ยังไม่รวมระยะทาบและเศษเหล็ก">
           <Table head={["Type", "b × h (ซม.)", "เหล็กบน (+ เสริมหัวเสา L/4 · คานยื่น: ยาวตลอด)", "เหล็กล่าง (+ เสริมกลางคาน 3L/5)", "ปลอก หัวเสา / กลาง", "จำนวน", "ยาวรวม (ม.)"]}
             rows={types.map((t, i) => { const l = spans.filter((s) => s.typeIdx === i && s.kind !== "cantilever"); return [t.name, `${fmt(t.b * 100, 0)} × ${fmt(t.h * 100, 0)}`, bars(t), [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" "),
-              `${t.st} @${fmt(t.sSup, 2)} / @${fmt(t.sMid, 2)}`, `${l.length} ช่วง`, fmt(l.reduce((s, x) => s + x.len, 0), 2)]; }).flatMap((row, i) => {
+              `${stLabel(t)} @${fmt(t.sSup, 2)} / @${fmt(t.sMid, 2)}`, `${l.length} ช่วง`, fmt(l.reduce((s, x) => s + x.len, 0), 2)]; }).flatMap((row, i) => {
                 // cantilever variant: same section and support bars, the top bars run the whole cantilever (B1A …)
                 const c = spans.filter((s) => s.typeIdx === i && s.kind === "cantilever"), t = types[i];
                 return c.length ? [row, [`${t.name}A`, row[1], `${[t.top, t.topX].filter(Boolean).join(" + ")} ยาวตลอดคานยื่น + งอขอ`, t.bot, row[4], `${c.length} ช่วง (คานยื่น)`, fmt(c.reduce((s, x) => s + x.len, 0), 2)]] : [row]; })} />
@@ -228,7 +228,7 @@ export function FrameReport({ frame, project }) {
             {types.filter((_, i) => spans.some((sp) => sp.typeIdx === i)).flatMap((t) => {
               const L = (main, special) => barLayers(t.b, mat, t.st, parseBars(main), parseBars(special));
               return [["หัวเสา", L(t.top, t.topX), L(t.bot)], ["กลางคาน", L(t.top), L(t.bot, t.botX)]].map(([where, top, bottom]) => (
-                <Figure key={`${t.name}${where}`} caption={`${t.name} ${where} · ${t.st} @${fmt(where === "หัวเสา" ? t.sSup : t.sMid, 2)}`}>
+                <Figure key={`${t.name}${where}`} caption={`${t.name} ${where} · ${stLabel(t)} @${fmt(where === "หัวเสา" ? t.sSup : t.sMid, 2)}`}>
                   <Drawing model={beamSectionModel({ b: t.b, h: t.h, cover: mat.cover, stirrupBar: t.st, top, bottom })} className="mx-auto h-[38mm]" fontSize={8} width={150} />
                 </Figure>
               ));

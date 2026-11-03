@@ -230,6 +230,8 @@ function panelLoads(P, w, dir) {
 // bars of one face in layers (user: keep the clear spacing between bars; what does not fit goes to the next layer):
 // per layer n ≤ floor((b − 2·cover − 2·ds + s) / (db + s)) with clear spacing s = max(mat.barClear ?? DEFAULT_BAR_CLEAR (3.5) cm, db), at least the 2 corner
 // bars; main bars first, then the extra bars; the 3rd layer takes whatever is left. b in m, cover / bar sizes in cm.
+// stirrup text of a beam type: "RB 9" or "2×RB 9" (two sets)
+export const stLabel = (t) => `${(t.stSets ?? 1) > 1 ? `${t.stSets}×` : ""}${t.st}`;
 // clear spacing between bars of one layer (cm): user standard 3.5 (2026-11-03; was 2.5); per project mat.barClear
 export const DEFAULT_BAR_CLEAR = 3.5;
 export function barLayers(b, mat, st, main, special) {
@@ -280,7 +282,7 @@ export function vAtD(sp, h, mat) {
 export function checkSpan(t, sp, mat) {
   if (sp.Vx && !sp.vDone) sp = { ...sp, Vface: sp.V, V: vAtD(sp, t.h, mat) }; // the frame envelope passes vDone (already at d)
   const top = parseBars(t.top), bot = parseBars(t.bot), topX = parseBars(t.topX), botX = parseBars(t.botX);
-  const base = { ...mat, fcPrime: mat.fcBeam ?? mat.fcPrime, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: sp.Mt ?? 0, stirrup: { bar: t.st, sets: 1 } };
+  const base = { ...mat, fcPrime: mat.fcBeam ?? mat.fcPrime, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: sp.Mt ?? 0, stirrup: { bar: t.st, sets: t.stSets ?? 1 } }; // stSets 2 = double stirrups (2 sets, user: RB9 is the largest)
   const out = {};
   try {
     const lay = (m, x) => barLayers(t.b, mat, t.st, m, x);

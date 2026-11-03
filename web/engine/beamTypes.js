@@ -10,14 +10,16 @@ import { barLayers, parseBars } from "./floor.js";
 import { checkEnv } from "./frame.js";
 
 // sizes in whole 10 cm (user 2026-11-03: no 0.05 steps): b 0.20 / 0.30, h 0.30 … 0.80
-export const BEAM_GEN = { b: [0.2, 0.3], hMin: 0.3, hMax: 0.8, dh: 0.1, bars: ["DB 12", "DB 16", "DB 20"], stirrups: ["RB 9", "DB 10", "DB 12"],
+export const BEAM_GEN = { b: [0.2, 0.3], hMin: 0.3, hMax: 0.8, dh: 0.1, bars: ["DB 12", "DB 16", "DB 20"],
+  // stirrups (user 2026-11-03): RB9 at most; when RB9 @0.10 is not enough, two sets of RB9
+  stirrups: [["RB 6", 1], ["RB 9", 1], ["RB 9", 2]],
   sMax: 0.2, sMin: 0.1, ds: 0.025, maxLayers: 2, price: { conc: 2500, steel: 28, form: 350 } };
 
 const kgm = (s) => { const x = parseBars(s); return x ? (x.n * BARS[x.bar].A * 7850) / 1e4 : 0; }; // kg per metre of bars
 // rough steel per metre of beam: through bars full length, extra top bars ~ L/2 (two quarters), extra bottom bars 3/5,
 // stirrups (perimeter × area) at the mean spacing
 export function beamCost(t, g = BEAM_GEN) {
-  const stA = BARS[t.st]?.A ?? (t.st === "DB 10" ? 0.79 : 0.64), per = 2 * (t.b + t.h) - 0.16;
+  const stA = (BARS[t.st]?.A ?? (t.st === "RB 6" ? 0.28 : t.st === "DB 10" ? 0.79 : 0.64)) * (t.stSets ?? 1), per = 2 * (t.b + t.h) - 0.16;
   const st = ((stA * 7850) / 1e4) * per * (1 / t.sSup + 1 / t.sMid) / 2;
   const steel = kgm(t.top) + kgm(t.bot) + 0.5 * kgm(t.topX) + 0.6 * kgm(t.botX) + st;
   return t.b * t.h * g.price.conc + steel * g.price.steel + (t.b + 2 * t.h) * g.price.form;
@@ -29,11 +31,18 @@ const fitsLayers = (t, mat, g) => {
 };
 
 // cheapest type of one b × h × bar size that passes every span in `sps` (null if none): bars and stirrups grown from the minimum
-function designBH(sps, b, h, bar, mat, g) {
-  const t = { name: "", b, h, top: bars(2, bar), bot: bars(2, bar), topX: "", botX: "", st: g.stirrups[0], sSup: g.sMax, sMid: g.sMax };
+// start: grow an existing type instead of the minimum (repair after a re-analysis)
+function designBH(sps, b, h, bar, mat, g, start = null) {
+  const t = { name: "", b, h, top: bars(2, bar), bot: bars(2, bar), topX: "", botX: "", st: g.stirrups[0][0], stSets: g.stirrups[0][1], sSup: g.sMax, sMid: g.sMax };
+  const cnt = (x) => parseBars(x)?.n ?? 0;
   let nT = 2, nB = 2, xT = 0, xB = 0, si = 0;
+  if (start) {
+    nT = Math.max(2, cnt(start.top)); nB = Math.max(2, cnt(start.bot)); xT = cnt(start.topX); xB = cnt(start.botX);
+    si = Math.max(0, g.stirrups.findIndex(([st, n]) => st === start.st && n === (start.stSets ?? 1)));
+    Object.assign(t, { sSup: start.sSup, sMid: start.sMid });
+  }
   for (let it = 0; it < 40; it++) {
-    Object.assign(t, { top: bars(nT, bar), bot: bars(nB, bar), topX: bars(xT, bar), botX: bars(xB, bar), st: g.stirrups[si] });
+    Object.assign(t, { top: bars(nT, bar), bot: bars(nB, bar), topX: bars(xT, bar), botX: bars(xB, bar), st: g.stirrups[si][0], stSets: g.stirrups[si][1] });
     if (!fitsLayers(t, mat, g)) return null;
     const cs = sps.map((sp) => checkEnv(t, sp, mat));
     if (cs.every((c) => c.ok)) return { ...t };
@@ -68,8 +77,14 @@ export function designGroup(sps, mat, g = BEAM_GEN) {
 }
 
 // res = analyzeFrame result (span design forces in place); k = number of types wanted → { types, groups, unmatched }
-export function autoBeamTypes(res, mat, k, g = BEAM_GEN) {
-  const spans = res.floors.flatMap((an) => an.spans).map((sp) => ({ ...sp, vDone: true }));
+export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
+  // env: Map "floor|span" → largest design forces seen in earlier passes (the forces move with the types: keep the largest)
+  const spans = res.floors.flatMap((an, f) => an.spans.map((sp) => {
+    const e = env?.get(`${f}|${sp.id}`), x = { ...sp, vDone: true };
+    if (e) for (const k2 of ["Mpos", "Mneg", "V", "Mt"]) x[k2] = Math.max(x[k2] ?? 0, e[k2] ?? 0);
+    env?.set(`${f}|${sp.id}`, { Mpos: x.Mpos, Mneg: x.Mneg, V: x.V, Mt: x.Mt ?? 0 });
+    return x;
+  }));
   // the cheapest own section of each span (sort key); a span that nothing within the limits can carry stays unmatched
   const own = spans.map((sp) => ({ sp, d: designGroup([sp], mat, g) }));
   const unmatched = own.filter((o) => !o.d).map((o) => o.sp.id);
@@ -82,8 +97,8 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN) {
     types.push({ ...d.t, cost: d.cost, count: grp.length });
   }
   // identical types merged, cheapest first, named B1, B2, …
-  const uniq = [...new Map(types.map((t) => [`${t.b}|${t.h}|${t.top}|${t.bot}|${t.topX}|${t.botX}|${t.st}|${t.sSup}|${t.sMid}`, t])).values()].sort((a, b) => a.cost - b.cost);
-  return { types: uniq.map((t, i) => ({ name: `B${i + 1}`, b: t.b, h: t.h, top: t.top, bot: t.bot, topX: t.topX, botX: t.botX, st: t.st, sSup: t.sSup, sMid: t.sMid, auto: true })), unmatched };
+  const uniq = [...new Map(types.map((t) => [`${t.b}|${t.h}|${t.top}|${t.bot}|${t.topX}|${t.botX}|${t.st}|${t.stSets}|${t.sSup}|${t.sMid}`, t])).values()].sort((a, b) => a.cost - b.cost);
+  return { types: uniq.map((t, i) => ({ name: `B${i + 1}`, b: t.b, h: t.h, top: t.top, bot: t.bot, topX: t.topX, botX: t.botX, st: t.st, ...(t.stSets > 1 ? { stSets: t.stSets } : {}), sSup: t.sSup, sMid: t.sMid, auto: true })), unmatched };
 }
 
 // One press of the button: k types for the whole project. The design forces depend on the types (self weight, stiffness of the
@@ -93,14 +108,32 @@ import { analyzeFrame } from "./frame.js";
 export function generateBeamTypes(frame, k, g = BEAM_GEN) {
   let f = { ...frame, floors: frame.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map((b) => ({ ...b, type: null })) })) };
   let r = analyzeFrame(f), best = null;
+  const env = new Map();
   const score = (rr) => { const sp = rr.floors.flatMap((a) => a.spans); return { ok: sp.filter((s) => s.ok).length, n: sp.length, cost: sp.reduce((s, x) => s + beamCost(x.type, g) * x.len, 0) }; };
-  for (let pass = 0; pass < 4; pass++) {
-    const out = autoBeamTypes(r, f.mat, k, g);
+  for (let pass = 0; pass < 5; pass++) {
+    const out = autoBeamTypes(r, f.mat, k, g, env);
     if (!out.types.length) break;
     f = { ...f, beamTypes: out.types }; r = analyzeFrame(f);
     const s = score(r);
     if (!best || s.ok > best.s.ok || (s.ok === best.s.ok && s.cost < best.s.cost)) best = { types: out.types, s, unmatched: out.unmatched };
     if (s.ok === s.n) break;
+  }
+  // repair: the spans still failing get their own type grown in place (stirrups closer / RB6 → RB9 → 2 sets, more bars) — the
+  // types hardly change the stiffness then, so this settles in a pass or two
+  if (best && best.s.ok < best.s.n) {
+    let types = best.types.map((t) => ({ ...t }));
+    for (let pass = 0; pass < 3; pass++) {
+      f = { ...f, beamTypes: types }; r = analyzeFrame(f);
+      const fail = r.floors.flatMap((a) => a.spans).filter((sp) => !sp.ok);
+      if (!fail.length) break;
+      for (const [ti, sps] of [...new Set(fail.map((sp) => sp.typeIdx))].map((ti) => [ti, fail.filter((sp) => sp.typeIdx === ti)])) {
+        const t = types[ti], bar = parseBars(t.top)?.bar ?? "DB 12", grown = designBH(sps.map((sp) => ({ ...sp, vDone: true })), t.b, t.h, bar, f.mat, g, t);
+        if (grown) types[ti] = { ...t, ...grown, name: t.name };
+      }
+    }
+    f = { ...f, beamTypes: types }; r = analyzeFrame(f);
+    const s = score(r);
+    if (s.ok > best.s.ok || (s.ok === best.s.ok && s.cost < best.s.cost)) best = { ...best, types, s };
   }
   return best ? { beamTypes: best.types, floors: f.floors, ...best.s, unmatched: best.unmatched } : null;
 }

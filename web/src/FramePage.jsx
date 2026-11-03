@@ -120,7 +120,7 @@ function TypeTable({ types, setTypes, an }) {
     <div className="overflow-auto text-[12px]">
       <table className="w-full border-collapse">
         <thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">
-          {["Type", "b (ม.)", "h (ม.)", "บน ตลอด", "บน เสริม L/4", "ล่าง ตลอด", "ล่าง เสริม 3L/5", "ปลอก", "@หัวเสา", "@กลาง", "ใช้", ""].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}
+          {["Type", "b (ม.)", "h (ม.)", "บน ตลอด", "บน เสริม L/4", "ล่าง ตลอด", "ล่าง เสริม 3L/5", "ปลอก", "ชุด", "@หัวเสา", "@กลาง", "ใช้", ""].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}
         </tr></thead>
         <tbody>{types.map((t, i) => (
           <tr key={i} className="border-b border-gray-100">
@@ -129,6 +129,7 @@ function TypeTable({ types, setTypes, an }) {
             <td className="px-1 w-16">{num(i, "b", 0.05)}</td><td className="px-1 w-16">{num(i, "h", 0.05)}</td>
             <td className="px-1">{bars(i, "top")}</td><td className="px-1">{bars(i, "topX")}</td><td className="px-1">{bars(i, "bot")}</td><td className="px-1">{bars(i, "botX")}</td>
             <td className="px-1 w-20"><select value={t.st} onChange={(e) => set(i, "st", e.target.value)} className={cell}>{["RB 6", "RB 9", "DB 10", "DB 12"].map((s) => <option key={s}>{s}</option>)}</select></td>
+            <td className="px-1 w-14"><select value={t.stSets ?? 1} onChange={(e) => set(i, "stSets", Number(e.target.value))} className={cell} title="จำนวนชุดปลอก (2 = ปลอก 2 ชุดซ้อน)"><option value={1}>1</option><option value={2}>2</option></select></td>
             <td className="px-1 w-16">{num(i, "sSup", 0.025)}</td><td className="px-1 w-16">{num(i, "sMid", 0.025)}</td>
             <td className="px-1 text-gray-500">{used(i).length} ช่วง</td>
             <td><button onClick={() => setTypes(types.filter((_, j) => j !== i))} disabled={types.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></td>

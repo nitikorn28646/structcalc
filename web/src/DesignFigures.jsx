@@ -2,7 +2,7 @@
 // column types per level. They redraw as the tables are edited.
 import Drawing from "./Drawing.jsx";
 import { beamSectionModel, columnSectionModel } from "./drawings.js";
-import { barLayers, faceBars, parseBars } from "../engine/floor.js";
+import { barLayers, faceBars, parseBars, stLabel } from "../engine/floor.js";
 import { SLAB_BARS } from "../engine/tables.js";
 import { fmt } from "./beamModel.js";
 
@@ -17,7 +17,7 @@ export function BeamTypeFigures({ types, mat, count = () => null }) {
         <div key={i} className={card}>
           <div className="grid grid-cols-2 gap-1">{(({ L = Lay(t, mat) }) => [["หัวเสา", L(t.top, t.topX), L(t.bot), t.sSup], ["กลางคาน", L(t.top), L(t.bot, t.botX), t.sMid]])({}).map(([w, top, bottom, s]) => (
             <div key={w}><Drawing model={beamSectionModel({ b: t.b, h: t.h, cover: mat.cover, stirrupBar: t.st, top, bottom })} className="mx-auto h-[34mm]" fontSize={8} width={120} />
-              <p className={cap}>{w} · {t.st} @{fmt(s, 2)}</p></div>))}</div>
+              <p className={cap}>{w} · {stLabel(t)} @{fmt(s, 2)}</p></div>))}</div>
           <p className={`${cap} font-medium text-[#344054]`}>{t.name} {fmt(t.b * 100, 0)}×{fmt(t.h * 100, 0)} ซม.{count(i) !== null ? ` · ใช้ ${count(i)} ช่วง` : ""}</p>
         </div>))}</div>
     </div>
