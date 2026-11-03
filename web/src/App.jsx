@@ -204,12 +204,19 @@ export default function App() {
   const setStep = (k) => { setStepState(k); setMod("work"); try { const q = new URLSearchParams(location.search); q.set("step", k); history.replaceState(null, "", `${location.pathname}?${q}#work`); } catch { /* ignore */ } }; // a reload stays on this step
   const [toolsOpen, setToolsOpen] = useState(false);
   // roof plan from the structure: outline, columns, plates, grid, plate level; the roof loads then go to the top floor's columns
+  // an interior plate passing over columns rests on them: split it there (one simple span per column-to-column piece)
+  const splitAtColumns = (plates, cols) => plates.flatMap(({ a, b }) => {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+    const ts = cols.map((c) => { const d = [c[0] - a[0], c[1] - a[1]], t = d[0] * u[0] + d[1] * u[1]; return Math.abs(d[0] * u[1] - d[1] * u[0]) < 0.05 && t > 0.05 && t < L - 0.05 ? t : null; }).filter((t) => t !== null).sort((x, y) => x - y);
+    const pts = [a, ...ts.map((t) => [+(a[0] + u[0] * t).toFixed(3), +(a[1] + u[1] * t).toFixed(3)]), b];
+    return pts.slice(1).map((q, i) => ({ a: pts[i], b: q }));
+  });
   const roofFromStructure = async () => {
     const r = roofFromFrame(frame, fres);
     if (r.error) { setNotice({ ok: false, text: r.error }); return; }
     const { linkFloor, ...patch } = r;
     // plates under the ดั้ง (posts on the ridges) as on the drawings, so post loads reach columns through real members
-    try { const sk = await loadSkeleton(), rr = runRoof({ ...roof, ...patch }, sk); if (rr.g && rr.fr) patch.innerPlates = autoInnerPlates(rr.g, rr.fr); } catch { /* keep without */ }
+    try { const sk = await loadSkeleton(), rr = runRoof({ ...roof, ...patch }, sk); if (rr.g && rr.fr) patch.innerPlates = splitAtColumns(autoInnerPlates(rr.g, rr.fr), patch.columns); } catch { /* keep without */ }
     remember(); setRoofState((x) => { const next = { ...x, ...patch }; try { localStorage.setItem("structcalc.roof", JSON.stringify(next)); } catch { /* ignore */ } return next; });
     setFrame("roofLink", { on: true, floor: linkFloor });
     setNotice({ ok: true, text: `หลังคาจากแปลนโครงสร้าง: ขอบ ${patch.pts.length} มุม · เสา ${patch.columns.length} ต้น · อะเสรับดั้ง ${patch.innerPlates.length} เส้น · ส่งแรงลง ${frame.floors[linkFloor].name}` });
@@ -323,7 +330,25 @@ export default function App() {
     try { const [h] = await window.showOpenFilePicker({ types: [{ description: "โครงการ StructCalc", accept: { "application/json": [".json"] } }] }); const f = await h.getFile(); fileRef.current = h; setFileName(h.name); await openProject(f); }
     catch (e) { if (e.name !== "AbortError") setNotice({ ok: false, text: `เปิดไฟล์ไม่ได้: ${e.message}` }); }
   };
+  // safety net: the work in the browser is kept (5 latest) before "ใหม่" / "เปิด" replace it; "กู้คืน" brings the latest back
+  const SNAP = "structcalc.snapshots", readSnaps = () => { try { return JSON.parse(localStorage.getItem(SNAP)) ?? []; } catch { return []; } };
+  const [snaps, setSnaps] = useState(readSnaps);
+  const snapshot = () => {
+    if (!frame.floors.some((f) => f.columns.length || f.beams.length)) return; // nothing worth keeping
+    const list = [{ at: new Date().toISOString(), name: st.project.name, frame, roof, project: st.project }, ...readSnaps()].slice(0, 5);
+    try { localStorage.setItem(SNAP, JSON.stringify(list)); } catch { /* storage full: keep going */ }
+    setSnaps(list);
+  };
+  const restoreSnap = () => {
+    const [s0, ...rest] = readSnaps(); if (!s0) return;
+    snapshot(); // the current work becomes a snapshot too, so restoring is never a loss
+    const after = readSnaps().filter((x) => x.at !== s0.at);
+    setFrameState(mergeFrame(s0.frame)); setRoofState(mergeRoof(s0.roof)); replaceSt({ ...DEFAULT_STATE, project: { ...DEFAULT_STATE.project, ...s0.project } });
+    try { localStorage.setItem("structcalc.frame", JSON.stringify(s0.frame)); localStorage.setItem("structcalc.roof", JSON.stringify(s0.roof)); localStorage.setItem(SNAP, JSON.stringify(after)); } catch { /* ignore */ }
+    setSnaps(after); setNotice({ ok: true, text: `กู้คืนงานเมื่อ ${new Date(s0.at).toLocaleString("th-TH")} แล้ว` }); void rest;
+  };
   const newProject = () => {
+    snapshot();
     const empty = { ...DEFAULT_FRAME, cur: 0, colPick: {}, lateral: undefined, roofLink: undefined, roofPoints: [],
       floors: DEFAULT_FRAME.floors.map((f) => ({ ...f, columns: [], beams: [], walls: [], panels: {}, cants: [], stairs: [], lineLoads: [], pointLoads: [] })) };
     hist.current = { undo: [], redo: [], t: 0 };
@@ -334,6 +359,7 @@ export default function App() {
   };
   const openProject = async (file) => {
     try {
+      if (!window.__projectLoading) snapshot();
       const d = JSON.parse(await file.text());
       if (d.app !== "StructCalc") throw new Error("ไม่ใช่ไฟล์โครงการ StructCalc");
       if (d.beam) replaceSt({ ...DEFAULT_STATE, ...d.beam, project: { ...DEFAULT_STATE.project, ...d.beam.project } });
@@ -433,6 +459,7 @@ export default function App() {
                 {notice && <span className={`self-center text-xs ${notice.ok ? "text-green-600" : "text-red-600"}`}>{notice.text}</span>}
                 <span className="flex items-center gap-1 rounded-lg bg-gray-100 p-0.5">
                   <button onClick={() => (dirty ? setAskNew(true) : newProject())} title="โครงการใหม่ (เริ่มจากว่าง)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><FilePlus2 className="h-4 w-4" />ใหม่</button>
+                  {snaps.length > 0 && <button onClick={restoreSnap} title={`กู้คืนงานที่ถูกแทนที่ล่าสุด (${snaps[0].name || "ไม่มีชื่อ"} · ${new Date(snaps[0].at).toLocaleString("th-TH")}) — เก็บไว้ ${snaps.length} ชุด`} className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white">กู้คืน</button>}
                   <button onClick={openFile} title="เปิดไฟล์โครงการ (.json)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><FolderOpen className="h-4 w-4" />เปิด</button>
                   <button onClick={saveProject} title={fileName ? `บันทึกทับ ${fileName} (Ctrl+S)` : "บันทึกเป็นไฟล์ .json (Ctrl+S)"} className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><Save className="h-4 w-4" />บันทึก{dirty && <span className="text-[#b54708]" title="ยังไม่ได้บันทึกเป็นไฟล์ (งานถูกเก็บในเบราว์เซอร์นี้อัตโนมัติแล้ว)">●</span>}</button>
                   <button onClick={saveAs} title="บันทึกเป็นไฟล์ใหม่ (Ctrl+Shift+S)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white">บันทึกเป็น…</button>
