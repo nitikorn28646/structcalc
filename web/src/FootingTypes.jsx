@@ -28,7 +28,7 @@ export function FootingTypes({ frame, set, res }) {
   const safe = (p) => (loads ? loads[p] ?? PILE_SAFE[p] : fo.Psafe ?? 18000);
   const setSafe = (p, t) => set("pileLoads", { ...Object.fromEntries(Object.keys(PILES).map((k) => [k, safe(k)])), [p]: Math.round(t * 1000) });
   const put = (i, k, v) => set("footTypes", types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
-  const add = () => set("footTypes", [...types, { name: `F${types.length + 1}`, n: types.length ? Math.min(7, types[types.length - 1].n + 1) : 1, pile: "I-18", t: 0.4, Df: 1.2, k: 3, w: types.length ? 0 : 0.9, bar: "DB 12", s: 0.1, barS: "DB 12", sS: 0.1 }]);
+  const add = () => set("footTypes", [...types, { name: `F${types.length + 1}`, n: types.length ? Math.min(9, types[types.length - 1].n + 1) : 1, pile: "I-18", t: 0.4, Df: 1.2, k: 3, w: types.length ? 0 : 0.9, bar: "DB 12", s: 0.1, barS: "DB 12", sS: 0.1 }]);
   const del = (i) => { set("footTypes", types.filter((_, j) => j !== i)); set("footPick", Object.fromEntries(Object.entries(pick).filter(([, v]) => v !== i).map(([k, v]) => [k, v > i ? v - 1 : v]))); };
   const foots = res.footings ?? [], shown = foots.find((f) => f.stack === selStack);
   const governing = [...new Set(foots.map((f) => f.type ?? null))].map((ty) => foots.filter((f) => (f.type ?? null) === ty).reduce((a, f) => ((f.util ?? 0) > (a.util ?? 0) ? f : a)));
@@ -40,7 +40,7 @@ export function FootingTypes({ frame, set, res }) {
         <table className="w-full"><thead><tr>{["ชื่อ", "เข็ม (ต้น)", "ขนาดเข็ม", "หนาฐาน t (ม.)", "ลึก Df (ม.)", "ระยะเข็ม (× ขนาดเข็ม)", "กว้างฐาน (ม.) 1–2 ต้น", "เหล็กแนวยาว", "@ (ม.)", "เหล็กแนวสั้น", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
           <tbody>{types.map((t, i) => <tr key={i} className="border-t border-gray-100">
             <td className={td}><input value={t.name} onChange={(e) => put(i, "name", e.target.value)} className={`${box} w-14`} /></td>
-            <td className={td}><select value={t.n} onChange={(e) => put(i, "n", Number(e.target.value))} className={box}>{[1, 2, 3, 4, 5, 6, 7].map((n) => <option key={n} value={n}>{n}</option>)}</select></td>
+            <td className={td}><select value={t.n} onChange={(e) => put(i, "n", Number(e.target.value))} className={box}>{[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => <option key={n} value={n}>{n}</option>)}</select></td>
             <td className={td}><select value={t.pile} onChange={(e) => put(i, "pile", e.target.value)} className={box}>{Object.keys(PILES).map((p) => <option key={p} value={p}>{p} · {fmt(safe(p) / 1000, 0)} ตัน</option>)}</select></td>
             <td className={td}><Num v={t.t ?? 0.4} on={(v) => put(i, "t", v)} /></td>
             <td className={td}><Num v={t.Df ?? 1.2} on={(v) => put(i, "Df", v)} step="0.1" /></td>
