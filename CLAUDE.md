@@ -222,3 +222,6 @@ and on top of the step 8 tabs. Footing types take a bar count `nb` / `nbS` ("5-D
 is checked like the reference sheet (pile load + minimum steel 0.002·B·t; no bond/anchorage); Df < t is clamped to t (negative soil weight).
 User's F1 PDF (คุณกิ๊บ): 0.50×0.50×0.50, 5-DB 12, As 5.00 ≤ 5.65 → same result here now.
 Columns failing where the Excel passes: envelope mode adds 3D-frame / wind moments (edge and corner columns, short stubs); "continuous" = Excel-like.
+SPREAD FOOTINGS IN THE WORKFLOW (2026-11-03): footing type `kind: "spread"` {Bx, By (0 = sized from qa, +0.10 m steps until all checks pass), t, Df,
+qa, gamma, bar/nb/s, barS/nbS/sS} → frame.js designSpread (diff-tested spreadFooting, every check); auto tries spread types before pile caps.
+Results carry kind "spread", n 0; FootingTypes has a separate "Type ฐานแผ่" table; report / 3D / drawer handle both kinds.

@@ -108,8 +108,8 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
         <group position={[-cx, -top / 2, cy]}>
           {on.footing && res.footings.map((f, i) => f.r && (
             <group key={`f${i}`}>
-              <Box p={[f.p[0] - f.r.Bx / 2, f.p[1]]} q={[f.p[0] + f.r.Bx / 2, f.p[1]]} w={f.r.By} z0={-(fo.t ?? 0.4)} h={fo.t ?? 0.4} color="#9aa1b1" edges="#667085" />
-              {f.r.piles.map(([px, py], j) => <Box key={j} p={[f.p[0] + px - 0.09, f.p[1] + py]} q={[f.p[0] + px + 0.09, f.p[1] + py]} w={0.18} z0={-(fo.t ?? 0.4) - 1.5} h={1.5} color="#7c828f" />)}
+              <Box p={[f.p[0] - f.r.Bx / 2, f.p[1]]} q={[f.p[0] + f.r.Bx / 2, f.p[1]]} w={f.r.By} z0={-(f.inp?.t ?? fo.t ?? 0.4)} h={f.inp?.t ?? fo.t ?? 0.4} color="#9aa1b1" edges="#667085" />
+              {(f.r.piles ?? []).map(([px, py], j) => <Box key={j} p={[f.p[0] + px - 0.09, f.p[1] + py]} q={[f.p[0] + px + 0.09, f.p[1] + py]} w={0.18} z0={-(f.inp?.t ?? fo.t ?? 0.4) - 1.5} h={1.5} color="#7c828f" />)}
             </group>
           ))}
           {frame.floors.map((fl, k) => {

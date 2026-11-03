@@ -5,7 +5,7 @@ import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, faceBars, parseBars 
 import { BARS } from "./tables.js";
 import { frame3dModel } from "./frame3d.js";
 import { tiedColumn } from "./column.js";
-import { PILES, pileCap } from "./footing.js";
+import { PILES, pileCap, spreadFooting } from "./footing.js";
 import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
 
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
@@ -38,16 +38,50 @@ export const PILE_SAFE = { "I-18": 18000, "I-22": 25000, "I-26": 35000, "I-30": 
 // footing type (step 8, like the drawings' F1, F2…): { name, n piles, pile, t cap (m), Df (m), k pile spacing (× pile width), w cap width
 // (m, 1–2 piles; 0 = smallest), bar / s long bars, barS / sS short bars }. fo.fixed = the type picked for this column; fo.types = auto
 // among the types (lightest first: piles × pile area, then cap thickness); neither = the built-in options (as before 2026-11-03).
+// spread footing on soil (footing type kind "spread"): every check of the diff-tested engine; Bx/By 0 = sized from qa in 0.10 m steps
+const spreadOk = (r) => r.qOk && r.qminOk && r.dOk && r.vOk && r.vpOk && r.AsOkL && r.AsOkS && r.perimOkL && r.perimOkS && r.ancOkL && r.ancOkS && r.perimOkD && r.bearingOk;
+function designSpread(tt, P, pier, mat, fo, Mx, My) {
+  const t = tt.t ?? 0.4, qa = tt.qa ?? 10000, gamma = tt.gamma ?? 1800, Df = Math.max(tt.Df ?? 1.2, t), r10 = (x) => Math.ceil(x * 10 - 1e-9) / 10;
+  // first size: soil pressure of P + footing + soil above on a square, then grow both sides until every check passes (or +1.5 m)
+  const B0 = r10(Math.sqrt(P / Math.max(qa - (t * 2400 + (Df - t) * gamma), 1)));
+  const fixed = tt.Bx > 0 && tt.By > 0, sizes = fixed ? [[tt.Bx, tt.By]] : Array.from({ length: 16 }, (_, i) => Math.round((Math.max(B0, 0.6) + i / 10) * 10) / 10).map((b) => [b, b]);
+  let best = null;
+  for (const [Bx, By] of sizes) {
+    const bar = tt.bar ?? "DB 12", barS = tt.barS ?? bar;
+    // bar count ("6-DB 12"): the engine counts floor(B/s + 1) bars over the full width
+    const sL = tt.nb > 1 ? (By / (tt.nb - 1)) * (1 - 1e-9) : tt.s ?? 0.15, sS = tt.nbS > 1 ? (Bx / (tt.nbS - 1)) * (1 - 1e-9) : tt.sS ?? tt.s ?? 0.15;
+    const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: tt.fy ?? fo.fy, cover: mat.coverFoot ?? fo.cover, t, Bx, By, Df, P, Mx, My, qa, gamma,
+      pier: "rect", bx: pier.Bx / 100, by: pier.By / 100, D: 0.3, longBar: bar, shortBar: barS, sLong: sL, sShort: sS, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4 };
+    try {
+      const r = spreadFooting(inp), ok = spreadOk(r), util = Math.max(r.qmaxX, r.qmaxY) / qa;
+      r.Bx = Bx; r.By = By; r.piles = [];
+      if (tt.nb > 1) r.longText = `${r.nLong}-${bar} @ ${sL.toFixed(3)}`;
+      if (tt.nbS > 1) r.shortText = `${r.nShort}-${barS} @ ${sS.toFixed(3)}`;
+      const out = { n: 0, pile: "ฐานแผ่", kind: "spread", r, ok, util, inp, type: tt.name ?? null };
+      if (ok) return out;
+      best ??= out;
+    } catch (e) { best ??= { n: 0, pile: "ฐานแผ่", kind: "spread", error: e.message, ok: false, util: 9, type: tt.name ?? null }; }
+  }
+  return best;
+}
+
 export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0) {
   let best = null;
   const safe = (pile) => (fo.pileLoads ? fo.pileLoads[pile] ?? PILE_SAFE[pile] ?? fo.Psafe : fo.Psafe);
   const T = (n, pile, s, w, bar, extra = {}) => ({ n, pile, s, w, bar, ...extra });
-  const weight = (t) => t.n * (PILES[t.pile]?.A ?? 1e9) * 1e3 + (t.t ?? fo.t);
+  // auto order: spread footings first (no piles, by concrete volume), then pile caps by pile count × pile area, then thickness
+  const weight = (t) => (t.kind === "spread" ? (t.Bx > 0 ? t.Bx * t.By * (t.t ?? 0.4) : 50) : 1e4 + t.n * (PILES[t.pile]?.A ?? 1e9) * 1e3 + (t.t ?? fo.t));
   const tries = fo.fixed ? [T(fo.fixed.n, fo.fixed.pile, fo.fixed.s ?? 0.15, fo.fixed.w ?? 0, fo.fixed.bar ?? fo.bar, fo.fixed)]
     : fo.types?.length ? [...fo.types].sort((a, b) => weight(a) - weight(b)).map((t) => T(t.n, t.pile, t.s ?? 0.15, t.w ?? 0, t.bar ?? fo.bar, t))
       // per option: bars @0.15 then @0.10; 1–2 pile caps may be widened (bar anchorage, minimum steel)
       : fo.options.flatMap(([n, pile]) => [fo.bar, "DB 16"].flatMap((bar) => [0.15, 0.1].flatMap((bs) => (n <= 2 ? [0, 0.8, 0.9, 1.0] : [0]).map((w) => T(n, pile, bs, w, bar)))));
   for (const tt of tries) {
+    if (tt.kind === "spread") {
+      const f = designSpread(tt, P, pier, mat, fo, Mx, My);
+      if (f.ok) return f;
+      if (!best || f.util < best.util) best = f;
+      continue;
+    }
     const { n, pile, s: bs, w: capWidth, bar } = tt, b = PILES[pile]?.b ?? Number(String(pile).split("-")[1]) / 100, s = Math.max(0.6, (tt.k ?? fo.spacing) * b);
     const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: mat.coverFoot ?? fo.cover, t: tt.t ?? fo.t, Df: Math.max(tt.Df ?? fo.Df, tt.t ?? fo.t), P, Mx, My, gamma: 1800, pier: "rect",
       bx: pier.Bx / 100, by: pier.By / 100, longBar: bar, shortBar: tt.barS ?? fo.bar, sLong: bs, sShort: tt.sS ?? bs, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4, n, pile,

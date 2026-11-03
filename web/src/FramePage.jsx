@@ -464,7 +464,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         </section>
   ) : step === "footing" ? (
     <Card title="ฐานราก" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums">
-      {res.footings.map((f) => <p key={f.stack} className={f.ok ? "" : "text-red-600"}>{f.stack}: {fmt(f.P / 1000, 1)} ตัน → {f.n} × {f.pile}{f.r ? ` · ${fmt(f.r.Bx, 2)}×${fmt(f.r.By, 2)} ม.` : ""} {f.ok ? "" : "ไม่ผ่าน"}</p>)}
+      {res.footings.map((f) => <p key={f.stack} className={f.ok ? "" : "text-red-600"}>{f.stack}: {fmt(f.P / 1000, 1)} ตัน → {f.kind === "spread" ? "ฐานแผ่" : `${f.n} × ${f.pile}`}{f.r ? ` · ${fmt(f.r.Bx, 2)}×${fmt(f.r.By, 2)} ม.` : ""} {f.ok ? "" : "ไม่ผ่าน"}</p>)}
     </div></Card>
   ) : <Card title="ชั้นและน้ำหนัก" icon={Layers}>
           <div className="grid grid-cols-2 gap-3">
