@@ -3,13 +3,14 @@
 // split into k groups of about equal count; each group's type = the cheapest section passing every span of the group.
 // Names B1, B2, … from the cheapest. Cantilever spans are not a group of their own: they use the type whose support bars suffice,
 // shown as <name>A (B1A = B1 with its top bars run the whole cantilever — floor.js span.detail).
-// Limits (user): b ≥ 0.20 m, h ≤ 0.80 m, at most 2 bar layers. Cost per metre: concrete 2,500 ฿/m³, steel 28 ฿/kg,
+// Limits (user): b ≥ 0.20 m, h ≤ 0.80 m, sizes in whole 10 cm, at most 2 bar layers. Cost per metre: concrete 2,500 ฿/m³, steel 28 ฿/kg,
 // formwork 350 ฿/m² (b + 2h) — only the ranking matters.
 import { BARS } from "./tables.js";
 import { barLayers, parseBars } from "./floor.js";
 import { checkEnv } from "./frame.js";
 
-export const BEAM_GEN = { b: [0.2, 0.25, 0.3], hMin: 0.3, hMax: 0.8, dh: 0.05, bars: ["DB 12", "DB 16", "DB 20"], stirrups: ["RB 9", "DB 10", "DB 12"],
+// sizes in whole 10 cm (user 2026-11-03: no 0.05 steps): b 0.20 / 0.30, h 0.30 … 0.80
+export const BEAM_GEN = { b: [0.2, 0.3], hMin: 0.3, hMax: 0.8, dh: 0.1, bars: ["DB 12", "DB 16", "DB 20"], stirrups: ["RB 9", "DB 10", "DB 12"],
   sMax: 0.2, sMin: 0.1, ds: 0.025, maxLayers: 2, price: { conc: 2500, steel: 28, form: 350 } };
 
 const kgm = (s) => { const x = parseBars(s); return x ? (x.n * BARS[x.bar].A * 7850) / 1e4 : 0; }; // kg per metre of bars

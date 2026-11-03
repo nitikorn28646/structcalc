@@ -13,5 +13,6 @@ check("more types cost less", g3.cost <= g1.cost + 1e-6, `${Math.round(g1.cost)}
 check("names B1, B2, …", g3.beamTypes.every((t, i) => t.name === `B${i + 1}`), g3.beamTypes.map((t) => t.name).join(" "));
 const used = (t, m, x) => barLayers(t.b, pj.frame.mat, t.st, parseBars(m), parseBars(x)).filter((l) => l.main || l.special).length;
 check("limits b ≥ 0.20, h ≤ 0.80, ≤ 2 layers", g3.beamTypes.every((t) => t.b >= BEAM_GEN.b[0] - 1e-9 && t.h <= BEAM_GEN.hMax + 1e-9 && used(t, t.top, t.topX) <= 2 && used(t, t.bot, t.botX) <= 2));
+check("sizes in whole 10 cm", g3.beamTypes.every((t) => Math.abs(t.b * 10 - Math.round(t.b * 10)) < 1e-9 && Math.abs(t.h * 10 - Math.round(t.h * 10)) < 1e-9), g3.beamTypes.map((t) => `${t.b}x${t.h}`).join(" "));
 check("every drawn beam back to auto", g3.floors.every((f) => f.beams.every((b) => b.type === null)));
 process.exit(bad ? 1 : 0);
