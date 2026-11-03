@@ -295,3 +295,11 @@ roof load points (card says draw plates first). Point table closed by default; h
 Frame3D (src/highlight.js). Box select (drag on empty; L→R window, R→L crossing), Delete / right-click menu, Ctrl+A, roof "ลบทั้งหมด" (two clicks)
 in both boards; Shift / middle-drag pans. Plan text grows with zoom (kt = max(k, kFit)) × the user's text size (src/uiPrefs.jsx, A−/A+, per browser).
 Ridge level / rise:run folded as optional (slope sets hip / gable roofs).
+TRUE SIZES (2026-11-03): plan columns at their type size per floor (FloorBoard colSize from res.columns lv; roof board roof.colSize ?? 0.20),
+min 6 px; roof wall plates drawn at flange width × count from the designed section (DrawBoard plateMembers = dz plate members; 2C100x50 = 0.10 m).
+OPEN ITEMS for the next session: (1) publish the web copy — dist-web is built and U+FFFD-escaped, the Artifact
+https://claude.ai/artifact/Dkq17UyCSdhSax9xtbiDWU still has the old version (read it first, then republish index.html + assets) so the user
+can work from another PC (projects move via บันทึก/เปิด .json); (2) E2E "new" expected base_t changed with the roof workflow (97.7 vs 98.5) —
+re-run `cli/e2e/run.py --save` after checking; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
+torsion — likely the type list has no 20×40 with RB9 @0.10; check per-span reasons on the user's project); (4) Ole: 28 beams fail only on
+stirrup spacing d/2 (shallow GB 20×20, tiny shear) — ask whether to apply the ACI exemption (h ≤ 25 cm or v ≤ vc/2); columns RB6 @0.20 > 16db.

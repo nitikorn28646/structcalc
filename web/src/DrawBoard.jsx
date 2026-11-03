@@ -35,7 +35,7 @@ function autoGrid(pts) {
   return { x0: xs[0], y0: ys[0], dx: gaps(xs), dy: gaps(ys), sub: 1 };
 }
 
-export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark, onFromFrame = null }) {
+export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark, onFromFrame = null, plateMembers = [] }) {
   const svg = useRef(null), [tool, setTool] = useState("column"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true);
   const [start, setStart] = useState(null), [draft, setDraft] = useState([]), [cur, setCur] = useState(null), [drag, setDrag] = useState(null);
   // box selection like the structure board: drag on empty space with the select tool; Delete removes the selection
@@ -369,9 +369,12 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
               {(guide.beams ?? []).map((b, i) => <line key={`gb${i}`} x1={b.a[0]} y1={-b.a[1]} x2={b.b[0]} y2={-b.b[1]} stroke="#98a2b3" strokeWidth={2 * k} />)}
               {guide.outline?.length > 2 && <polygon points={ring(guide.outline)} fill="none" stroke="#667085" strokeWidth={1.5 * k} strokeDasharray={`${6 * k} ${4 * k}`} />}
             </g>}
-            {autoWallPlates && <g pointerEvents="none"><polygon points={ring(roof.pts)} fill="none" stroke={PLATE} strokeWidth={4 * k} strokeDasharray={`${10 * k} ${6 * k}`} opacity={0.75} />
+            {/* wall plates at their true width seen from above: flange width × count (2C back to back = twice), as designed */}
+            {plateMembers.map((m, i) => { const flange = Number(String(m.r?.section?.name ?? "").split("x")[1]) || 50, w = Math.max((flange / 1000) * (m.count ?? 1), 2 * k), L = Math.hypot(m.q[0] - m.p[0], m.q[1] - m.p[1]) || 1, n = [-(m.q[1] - m.p[1]) / L * w / 2, (m.q[0] - m.p[0]) / L * w / 2];
+              return <polygon key={`pm${i}`} points={[[m.p[0] + n[0], m.p[1] + n[1]], [m.q[0] + n[0], m.q[1] + n[1]], [m.q[0] - n[0], m.q[1] - n[1]], [m.p[0] - n[0], m.p[1] - n[1]]].map(S).join(" ")} fill={m.inner ? INNER : PLATE} fillOpacity={0.55} stroke={m.inner ? INNER : PLATE} strokeWidth={0.8 * k} pointerEvents="none"><title>{`${m.label}: ${m.count > 1 ? "2" : ""}C ${m.r?.section?.name ?? ""} กว้าง ${(w * 100).toFixed(0)} ซม.`}</title></polygon>; })}
+            {autoWallPlates && !plateMembers.length && <g pointerEvents="none"><polygon points={ring(roof.pts)} fill="none" stroke={PLATE} strokeWidth={4 * k} strokeDasharray={`${10 * k} ${6 * k}`} opacity={0.75} />
               {txt([roof.pts[0][0] + 8 * k, roof.pts[0][1] - 16 * k], "อะเสรอบนอก: อัตโนมัติ (ตัดช่วงที่เสา) — วาดเองเฉพาะถ้าต้องการกำหนดช่วงเอง", PLATE, 11, "start")}</g>}
-            {plates.map((l, i) => <line key={`p${i}`} x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={innerSet.has(l) ? INNER : PLATE} strokeWidth={(innerSet.has(l) ? 4 : 5) * k} strokeLinecap="round" />)}
+            {plates.map((l, i) => <line key={`p${i}`} x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={innerSet.has(l) ? INNER : PLATE} strokeWidth={(plateMembers.length ? 1.2 : innerSet.has(l) ? 4 : 5) * k} strokeLinecap="round" />)}
             {inner.map((l, i) => (
               <g key={`i${i}`}>
                 <line x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={INNER} strokeWidth={4 * k} strokeLinecap="round" />
