@@ -319,7 +319,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             );
           })}
           {(step === "frame" || result) && (an?.lines ?? []).flatMap((ln) => ln.carriers.map((c) => { // △ = end of a secondary beam resting on a main beam
-            const at = c.t < 1e-6 ? ln.A : ln.B, dir = c.t < 1e-6 ? 1 : -1, u = [ln.u[0] * dir, ln.u[1] * dir], s = 7 * k, tip = [at[0] + u[0] * 2 * k, at[1] + u[1] * 2 * k];
+            // at an end the triangle points into the beam; at an interior support (a beam resting on a cantilever tip) it sits across it
+            const end0 = c.t < 1e-6, end1 = c.t > ln.L - 1e-6, at = [ln.A[0] + ln.u[0] * c.t, ln.A[1] + ln.u[1] * c.t];
+            const u = end0 ? ln.u : end1 ? [-ln.u[0], -ln.u[1]] : [ln.u[1], -ln.u[0]], s = 7 * k, tip = [at[0] + u[0] * 2 * k, at[1] + u[1] * 2 * k];
             const P = [[tip[0], tip[1]], [tip[0] + u[0] * 1.7 * s - u[1] * s, tip[1] + u[1] * 1.7 * s + u[0] * s], [tip[0] + u[0] * 1.7 * s + u[1] * s, tip[1] + u[1] * 1.7 * s - u[0] * s]];
             return <polygon key={`cr${ln.id}-${c.t}`} points={P.map((p) => `${p[0]},${-p[1]}`).join(" ")} fill={dark ? "#1d2939" : "#fff"} stroke={dark ? "#e3e6f0" : "#344054"} strokeWidth={1.2 * k}><title>{`แนว ${ln.id + 1} วางบนแนว ${c.host + 1} (คานซอยบนคานหลัก)`}</title></polygon>;
           }))}

@@ -41,5 +41,13 @@ check("crossing: role main wins", rx3.lines.some((l) => Math.abs(l.L - 6) < 1e-6
 // carried point load = reaction of the secondary (statics): both secondaries 3 m with the same panels → equal reactions
 const main = rx1.lines.find((l) => Math.abs(l.L - 5) < 1e-6 && l.carriers.length === 2);
 check("crossing: main beam carries both secondary reactions", Math.abs(main.pts.reduce((s, p) => s + p.P, 0) - rx1.lines.filter((l) => Math.abs(l.L - 3) < 1e-6).reduce((s, l) => s + (dist2(l.A, [3, 2.5]) < 1e-6 ? l.res.R[0] : l.res.R[l.x.length - 1]), 0)) < 1e-6, "");
+// cantilevers carrying an edge beam (user 2026-11-03): the edge beam (no column) rests on the cantilever tips, not the reverse
+const cb = room(); cb.beams.push({ a: [0, 0], b: [0, -1.5], type: null }, { a: [6, 0], b: [6, -1.5], type: null }, { a: [3, 5], b: [3, -1.5], type: null }, { a: [0, -1.5], b: [6, -1.5], type: null });
+cb.columns.push([3, 0], [3, 5]); cb.beams = cb.beams.flatMap((b) => (b.a[1] === 0 && b.b[1] === 0 && b.a[0] === 0 && b.b[0] === 6 ? [{ a: [0, 0], b: [3, 0], type: null }, { a: [3, 0], b: [6, 0], type: null }] : [b]));
+const rcb = run("edge beam on cantilever tips", cb), edge = rcb.lines.find((l) => l.A[1] === -1.5 && l.B[1] === -1.5);
+check("edge beam rests on the 3 tips", edge.carriers.length === 3 && rcb.lines.filter((l) => l.cols.length && l.carriers.length).length === 0, JSON.stringify(edge.carriers.map((c) => c.t)));
+check("cantilever tips carry the edge beam", rcb.spans.filter((s) => s.kind === "cantilever").length === 3 && rcb.spans.filter((s) => s.kind === "cantilever").every((s) => s.Mneg > 0), "");
+const cb1 = JSON.parse(JSON.stringify(cb)); cb1.beams = cb1.beams.map((b) => (b.a[0] === 3 && b.a[1] === 5 ? { ...b, a: [3, 0] } : b)); cb1.columns = cb1.columns.filter((c) => !(c[0] === 3 && c[1] === 5));
+run("cantilever with one column only (no back span): nothing lost", cb1); // equilibrium checked in run()
 function dist2(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
 process.exit(bad ? 1 : 0);

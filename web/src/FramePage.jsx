@@ -442,23 +442,24 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   ) : step === "loads" && sub === "wall" ? (          <Card title="ชนิดผนัง (วัสดุ + ฉาบ)" icon={Ruler}>
             <div className="space-y-2 text-[12px]">
               {wallTypes.map((t, i) => { const put = (p) => set("wallTypes", wallTypes.map((x, j) => (j === i ? (() => { const n = { ...x, ...p }; return { ...n, w: Math.round(wallTypeW(n)) }; })() : x)));
-                const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums";
+                const cell = "h-7 w-full min-w-0 rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums text-[12px] text-gray-800 dark:text-gray-200";
                 return (
                 <div key={t.id} className="rounded-lg border border-gray-200 p-2">
-                  <div className="mb-1 flex items-center gap-1.5">
-                    <input defaultValue={t.name} key={t.name} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className="h-7 flex-1 rounded border border-gray-300 bg-transparent px-2 font-medium" />
-                    <b className="w-20 text-right tabular-nums text-[#b54708]">{fmt(t.w, 0)} กก./ม.²</b>
-                    <button disabled={wallTypes.length < 2} onClick={() => set("wallTypes", wallTypes.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>
+                  {/* narrow side panel: label above each input, two columns, nothing squeezed (user 2026-11-03: fields overlapped) */}
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <input defaultValue={t.name} key={t.name} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className="h-7 min-w-0 flex-1 rounded border border-gray-300 bg-transparent px-2 font-medium" />
+                    <b className="shrink-0 whitespace-nowrap tabular-nums text-[#b54708]">{fmt(t.w, 0)} กก./ม.²</b>
+                    <button disabled={wallTypes.length < 2} onClick={() => set("wallTypes", wallTypes.filter((_, j) => j !== i))} className="shrink-0 text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
-                  <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-1 text-[11px] text-gray-500">
-                    <span>เนื้อผนัง</span><span>หนา (ซม.)</span><span>ฉาบ (ซม.)</span><span>ฉาบกี่ด้าน</span>
-                    <select value={t.core ?? ""} onChange={(e) => put(e.target.value ? { core: e.target.value, t: t.t ?? 0.1, plaster: t.plaster ?? 1.5, sides: t.sides ?? 2 } : { core: undefined })} className="h-7 rounded border border-gray-300 bg-transparent px-1 text-[12px]">
-                      <option value="">กำหนดเอง (กก./ม.²)</option>{Object.entries(WALL_MATERIALS).map(([k, [n, d]]) => <option key={k} value={k}>{n}{d ? ` ${d}` : ""}</option>)}</select>
-                    {t.core ? (t.core === "gypsum" ? <><input type="number" step="5" value={t.dry ?? 30} onChange={(e) => put({ dry: Number(e.target.value) })} className={cell} title="กก./ม.² ทั้งผนัง" /><span /><span /></>
-                      : <><input type="number" step="0.5" value={+((t.t ?? 0.1) * 100).toFixed(1)} onChange={(e) => put({ t: Number(e.target.value) / 100 })} className={cell} />
-                        <input type="number" step="0.5" value={t.plaster ?? 1.5} onChange={(e) => put({ plaster: Number(e.target.value) })} className={cell} />
-                        <select value={t.sides ?? 2} onChange={(e) => put({ sides: Number(e.target.value) })} className="h-7 rounded border border-gray-300 bg-transparent px-1 text-[12px]"><option value={2}>2 ด้าน</option><option value={1}>1 ด้าน</option><option value={0}>ไม่ฉาบ</option></select></>)
-                      : <><input type="number" defaultValue={t.w} key={t.w} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, w: Number(e.target.value) || x.w } : x)))} className={cell} title="กก./ม.²" /><span /><span /></>}
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] text-gray-500">
+                    <label className="col-span-2 block min-w-0">เนื้อผนัง
+                      <select value={t.core ?? ""} onChange={(e) => put(e.target.value ? { core: e.target.value, t: t.t ?? 0.1, plaster: t.plaster ?? 1.5, sides: t.sides ?? 2 } : { core: undefined })} className="mt-0.5 h-7 w-full min-w-0 rounded border border-gray-300 bg-transparent px-1 text-[12px] text-gray-800 dark:text-gray-200">
+                        <option value="">กำหนดเอง (กก./ม.²)</option>{Object.entries(WALL_MATERIALS).map(([k, [n, d]]) => <option key={k} value={k}>{n}{d ? ` ${d}` : ""}</option>)}</select></label>
+                    {t.core ? (t.core === "gypsum" ? <label className="col-span-2 block min-w-0">น้ำหนักทั้งผนัง (กก./ม.²)<input type="number" step="5" value={t.dry ?? 30} onChange={(e) => put({ dry: Number(e.target.value) })} className={`${cell} mt-0.5`} /></label>
+                      : <><label className="block min-w-0">หนาเนื้อผนัง (ซม.)<input type="number" step="0.5" value={+((t.t ?? 0.1) * 100).toFixed(1)} onChange={(e) => put({ t: Number(e.target.value) / 100 })} className={`${cell} mt-0.5`} /></label>
+                        <label className="block min-w-0">ฉาบหนา (ซม.)<input type="number" step="0.5" value={t.plaster ?? 1.5} onChange={(e) => put({ plaster: Number(e.target.value) })} className={`${cell} mt-0.5`} /></label>
+                        <label className="col-span-2 block min-w-0">ฉาบกี่ด้าน<select value={t.sides ?? 2} onChange={(e) => put({ sides: Number(e.target.value) })} className="mt-0.5 h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] text-gray-800 dark:text-gray-200"><option value={2}>2 ด้าน</option><option value={1}>1 ด้าน</option><option value={0}>ไม่ฉาบ</option></select></label></>)
+                      : <label className="col-span-2 block min-w-0">น้ำหนักผนัง (กก./ม.²)<input type="number" defaultValue={t.w} key={t.w} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, w: Number(e.target.value) || x.w } : x)))} className={`${cell} mt-0.5`} /></label>}
                   </div>
                 </div>); })}
               <button onClick={() => set("wallTypes", [...wallTypes, { id: `w${Date.now()}`, name: "อิฐมอญครึ่งแผ่น ฉาบ 2 ด้าน", core: "brick", t: 0.1, plaster: 1.5, sides: 2, w: Math.round(wallTypeW({ core: "brick", t: 0.1, plaster: 1.5, sides: 2 })) }])} className="text-brand-500">+ เพิ่มชนิดผนัง</button>

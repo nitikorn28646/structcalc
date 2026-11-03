@@ -337,12 +337,19 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     ln.parts = ln.members.map((i) => { const b = floor.beams[i], t0 = pr(b.a), t1 = pr(b.b); return { i, t0: Math.min(t0, t1), t1: Math.max(t0, t1) }; });
     ln.cols = cols.map((c, ci) => ({ ci, t: along(ln, c) })).filter((x) => x.t !== null);
   }
-  for (const ln of lines) { // an end with no column resting on another line → carried by that line
-    ln.carriers = [];
+  // an end with no column resting on another line → carried by that line. Except (user 2026-11-03, cantilevers carrying an edge
+  // beam): when that line stands on no column at all and this one does, it is the other way round — the line without columns
+  // rests on this one there (e.g. an edge beam on the tips of cantilever beams; the cantilever tip stays free and takes its reaction).
+  // The cantilever needs a back span (≥ 2 columns on its line) — supports are pins in this model, one column alone holds no tip
+  for (const ln of lines) ln.carriers = [];
+  const addCarrier = (ln, c) => { if (!ln.carriers.some((x) => Math.abs(x.t - c.t) < TOL && x.host === c.host)) ln.carriers.push(c); };
+  for (const ln of lines) {
     for (const [t, p] of [[0, ln.A], [ln.L, ln.B]]) {
       if (ln.cols.some((c) => Math.abs(c.t - t) < TOL)) continue;
       const host = lines.find((o) => o !== ln && along(o, p) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
-      if (host) ln.carriers.push({ t, host: host.id, at: along(host, p) });
+      if (!host) continue;
+      if (!host.cols.length && ln.cols.length >= 2) addCarrier(host, { t: along(host, p), host: ln.id, at: t, rev: true });
+      else if (!host.carriers.some((x) => x.rev && x.host === ln.id && Math.abs(x.at - t) < TOL)) addCarrier(ln, { t, host: host.id, at: along(host, p) }); // not when that line already rests here on this one
     }
   }
   // crossings decided by length only (no role, same number of columns): say which one was taken as the main beam
