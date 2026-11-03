@@ -256,3 +256,10 @@ BIG PASS 2026-11-03 (user's 6 points, "do it all at once"):
 6. Step 4 stairs: StairInputs (inspector: type, direction, geometry from the storey height, loads with occupancy presets, main bar) +
    StairDetail beside the board (dimensioned side section, code checks riser ≤ 0.20, tread ≥ 0.22, width ≥ 0.80, 2R+T 0.60–0.65,
    opening long enough, load table, WSD design of the waist slab via slabDesign).
+WALLS / LOADS REALISTIC (2026-11-03, user approved plan): wall types from a build-up (floor.js WALL_MATERIALS, wallTypeW: core density ×
+thickness + plaster 2000 kg/m³ × cm × sides; gypsum = dry kg/m²; old types keep `w`), wallThick for drawing. Walls: `hAuto` (new walls; clear
+height = storey above − depth of the beam above, 0.40 when that beam is auto), `gable` (average h/2), `openings [{type,name,w,h,sill,at}]`
+→ resolveWall (frame.js gravity, Frame3D, plan, inspector, tables) turns them into the opening % (load uniform along the wall). Plan: walls at
+true thickness with door swings / window lines, line loads with arrows. Load library `frame.loadLib` (DEFAULT_LOAD_LIB; line / point / area,
+in the saved standard): pick an item then draw with ราว/น้ำหนักเส้น, น้ำหนักจุด or the new tool "เพิ่มบนพื้น" (panel extra + extraItems).
+`node cli/wall-check.mjs`. Bottom drawer removed: tables / warnings open on demand as a right side panel from the tab rail at the far right.

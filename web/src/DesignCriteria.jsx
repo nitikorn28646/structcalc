@@ -7,7 +7,7 @@ import { GRADES } from "../engine/tables.js";
 
 const KEY = "structcalc.standard";
 // what a standard carries: criteria + the type lists the engineer reuses on every job
-const PART = ["mat", "soil", "footUtil", "colMethod", "analysis", "baseFixity", "wallTypes", "beamTypes", "colTypes", "footTypes", "pileLoads"];
+const PART = ["mat", "soil", "footUtil", "colMethod", "analysis", "baseFixity", "wallTypes", "beamTypes", "colTypes", "footTypes", "pileLoads", "loadLib"];
 export const loadStandard = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? null; } catch { return null; } };
 export const applyStandard = (frame, std = loadStandard()) => (std ? { ...frame, ...Object.fromEntries(PART.filter((k) => std[k] !== undefined).map((k) => [k, std[k]])), mat: { ...frame.mat, ...std.mat } } : frame);
 

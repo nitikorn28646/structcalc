@@ -21,6 +21,39 @@ export const DEFAULT_WALL_TYPES = [
   { id: "brick", name: "อิฐมอญครึ่งแผ่น", w: 180 }, { id: "brick2", name: "อิฐมอญเต็มแผ่น", w: 360 }, { id: "block", name: "คอนกรีตบล็อก", w: 120 },
   { id: "light", name: "อิฐมวลเบา", w: 90 }, { id: "gypsum", name: "ผนังเบา ยิปซัม", w: 30 },
 ];
+// wall build-up (wall type editor): core material × thickness + plaster on 1–2 sides → kg/m²; a type keeps `w` (what the
+// analysis uses) and, when built from layers, { core, t (m), plaster (cm per side), sides }
+export const WALL_MATERIALS = { brick: ["อิฐมอญ", 1600], block: ["คอนกรีตบล็อก (กลวง)", 1200], aac: ["อิฐมวลเบา", 650], concrete: ["คอนกรีตหล่อ", 2400], gypsum: ["ผนังเบา ยิปซัม (กก./ม.² ทั้งผนัง)", 0] };
+export const PLASTER = 2000; // kg/m³ cement plaster
+export const wallTypeW = (t) => (t.core ? (t.core === "gypsum" ? t.dry ?? 30 : WALL_MATERIALS[t.core][1] * (t.t ?? 0.1)) + (t.core === "gypsum" ? 0 : PLASTER * ((t.plaster ?? 1.5) / 100) * (t.sides ?? 2)) : t.w);
+export const wallThick = (t) => (t?.core ? (t.t ?? 0.1) + (t.core === "gypsum" ? 0 : ((t.plaster ?? 1.5) / 100) * (t.sides ?? 2)) : t?.id === "brick2" ? 0.2 : 0.1);
+// openings of a wall: doors / windows by size (instead of a %); presets for the inspector
+export const OPENINGS = [["door", "ประตู 0.80×2.00", 0.8, 2.0, 0], ["door", "ประตู 0.90×2.00", 0.9, 2.0, 0], ["door", "ประตูคู่ 1.60×2.00", 1.6, 2.0, 0],
+  ["window", "หน้าต่าง 1.20×1.10", 1.2, 1.1, 1.0], ["window", "หน้าต่าง 0.60×1.10", 0.6, 1.1, 1.0], ["window", "ช่องแสง 0.60×0.40", 0.6, 0.4, 2.0]];
+// a wall as the analysis sees it: height = clear height under the beam above (wall.hAuto), gable walls average h/2,
+// doors / windows turned into the opening % of the wall face (the load stays uniform along the wall — stated in the report)
+export function resolveWall(w, frame, k) {
+  let h = w.h ?? 3;
+  if (w.hAuto && frame) {
+    const up = frame.floors[k + 1], same = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.05;
+    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), on = (b) => { // a beam of the floor above along this wall
+      const u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L], off = (p) => Math.abs((p[0] - w.a[0]) * u[1] - (p[1] - w.a[1]) * u[0]);
+      return off(b.a) < 0.05 && off(b.b) < 0.05 || same(b.a, w.a) && same(b.b, w.b); };
+    const bt = up?.beams?.find(on), depth = bt?.type != null ? frame.beamTypes?.[bt.type]?.h ?? 0.4 : 0.4;
+    if (up) h = Math.max(0.3, (up.h ?? 3) - depth);
+  }
+  const hEff = w.gable ? h / 2 : h, L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1;
+  const open = w.openings?.length ? Math.min(90, (100 * w.openings.reduce((s, o) => s + o.w * o.h, 0)) / (L * hEff)) : w.open ?? 0;
+  return { ...w, h: hEff, hFull: h, open };
+}
+// load library (step 6 "น้ำหนักอื่น"): kind line kg/m · point kg · area kg/m² (added to the slab panel clicked)
+export const DEFAULT_LOAD_LIB = [
+  { id: "rail-rc", name: "ราวกันตก คสล. สูง 1.0 ม.", kind: "line", v: 240 }, { id: "rail-steel", name: "ราวเหล็ก / สแตนเลส", kind: "line", v: 30 },
+  { id: "parapet", name: "ผนังกันตกอิฐ 1.0 ม.", kind: "line", v: 240 }, { id: "counter", name: "เคาน์เตอร์ครัว คสล.", kind: "line", v: 300 },
+  { id: "tank1", name: "ถังน้ำ 1,000 ลิตร (เต็ม)", kind: "point", v: 1100 }, { id: "tank2", name: "ถังน้ำ 2,000 ลิตร (เต็ม)", kind: "point", v: 2200 },
+  { id: "ac", name: "คอยล์ร้อนแอร์", kind: "point", v: 60 }, { id: "bath", name: "ห้องน้ำ (ปูผิว + กันซึม + ปรับระดับ)", kind: "area", v: 100 },
+  { id: "ceiling", name: "ฝ้า + งานระบบ", kind: "area", v: 30 }, { id: "store", name: "ห้องเก็บของ (จรเพิ่ม)", kind: "area", v: 300 },
+];
 // kg/m of one wall line: unit weight × height × (1 − openings) × layers (2 = double wall)
 export const wallLoad = (w, wt) => (wt.find((x) => x.id === w.kind) ?? wt[0]).w * w.h * (1 - (w.open ?? 0) / 100) * (w.layers ?? 1);
 // walls of a floor; files from before the wall layer kept the wall on the beam (beam.wall)

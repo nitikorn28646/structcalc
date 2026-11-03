@@ -1,7 +1,7 @@
 // Multi-storey frame (WSD): floors analysed from the top down; column axial loads accumulate floor by floor (+ self weight);
 // a column with nothing under it becomes a point load on the beams of the floor below. Columns are checked with engine/column.js.
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
-import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, faceBars, parseBars } from "./floor.js";
+import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, faceBars, parseBars, resolveWall } from "./floor.js";
 import { BARS } from "./tables.js";
 import { frame3dModel } from "./frame3d.js";
 import { tiedColumn } from "./column.js";
@@ -121,8 +121,9 @@ function gravity(frame, minTypes) {
   let downLines = []; // stair bottoms handed to the floor below
   for (let k = n - 1; k >= 0; k--) {
     // roof module reactions linked to this floor (frame.roofPoints, recomputed by the app whenever the roof changes)
-    const fl = frame.roofLink?.on && frame.roofLink.floor === k ? { ...floors[k], pointLoads: [...(floors[k].pointLoads ?? []), ...(frame.roofPoints ?? [])] } : floors[k];
-    if (fl !== floors[k]) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — แก้: ขั้น 5 / 6 การ์ด "หลังคา → เสา" → ตารางจุดถ่ายแรง กด "เพิ่มคานรับ" หรือ "เพิ่มเสา" (หรือวาดคาน / เสาผ่านจุดนั้นในขั้น 2)`);
+    const fl0 = floors[k].walls?.some((w) => w.hAuto || w.gable || w.openings?.length) ? { ...floors[k], walls: floors[k].walls.map((w) => resolveWall(w, frame, k)) } : floors[k]; // auto height / doors / windows
+    const fl = frame.roofLink?.on && frame.roofLink.floor === k ? { ...fl0, pointLoads: [...(fl0.pointLoads ?? []), ...(frame.roofPoints ?? [])] } : fl0;
+    if (frame.roofLink?.on && frame.roofLink.floor === k) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — แก้: ขั้น 5 / 6 การ์ด "หลังคา → เสา" → ตารางจุดถ่ายแรง กด "เพิ่มคานรับ" หรือ "เพิ่มเสา" (หรือวาดคาน / เสาผ่านจุดนั้นในขั้น 2)`);
     // columns of the floor above with no column right under them stand on this floor's beams
     const extra = above.filter((c) => !fl.columns.some((q) => near(q, c.p))).map((c) => ({ p: c.p, P: c.Pbot, from: `เสา ${c.stack} (${floors[k + 1].name})` }));
     an[k] = analyzeFloor(fl, beamTypes, mat, extra, frame.wallTypes ?? DEFAULT_WALL_TYPES, downLines, minTypes?.[k]);

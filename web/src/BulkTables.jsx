@@ -55,18 +55,18 @@ export function PanelTable({ an, fl, setFloor }) {
   </div>);
 }
 
-export function BeamLoadTable({ fl, setFloor, wallTypes }) {
-  const [pick, setPick] = useState({}), [bulk, setBulk] = useState({ kind: wallTypes[0]?.id, h: 3.0, open: 0, q: undefined });
+export function BeamLoadTable({ fl, setFloor, wallTypes, resolveW = (w) => w }) {
+  const [pick, setPick] = useState({}), [bulk, setBulk] = useState({ kind: wallTypes[0]?.id, h: undefined, open: 0, q: undefined });
   const beams = fl.beams ?? [], walls = wallsOf(fl), lines = fl.lineLoads ?? [], ids = beams.map((_, i) => i).filter((i) => pick[i]);
   const wName = (k) => wallTypes.find((t) => t.id === k)?.name ?? k;
-  const putWalls = () => setFloor({ walls: [...walls.filter((w) => !ids.some((i) => onBeam(w, beams[i]))), ...ids.map((i) => ({ a: [...beams[i].a], b: [...beams[i].b], kind: bulk.kind, h: bulk.h, open: bulk.open ?? 0, layers: 1 }))] });
+  const putWalls = () => setFloor({ walls: [...walls.filter((w) => !ids.some((i) => onBeam(w, beams[i]))), ...ids.map((i) => ({ a: [...beams[i].a], b: [...beams[i].b], kind: bulk.kind, h: bulk.h ?? 3, hAuto: !(bulk.h > 0), open: bulk.open ?? 0, layers: 1 }))] });
   const putLine = () => bulk.q > 0 && setFloor({ lineLoads: [...lines.filter((l) => !ids.some((i) => onBeam(l, beams[i]))), ...ids.map((i) => ({ a: [...beams[i].a], b: [...beams[i].b], q: bulk.q, name: "น้ำหนักแผ่บนคาน" }))] });
   const clear = () => setFloor({ walls: walls.filter((w) => !ids.some((i) => onBeam(w, beams[i]))), lineLoads: lines.filter((l) => !ids.some((i) => onBeam(l, beams[i]))) });
   const all = beams.length > 0 && ids.length === beams.length;
   return (<div>
     <Bar n={ids.length} onApply={() => { putWalls(); }} onClear={Object.assign(clear, { label: "ลบผนัง / น้ำหนักบนคานที่เลือก" })}>
       <select value={bulk.kind} onChange={(e) => setBulk({ ...bulk, kind: e.target.value })} className={box}>{wallTypes.map((t) => <option key={t.id} value={t.id}>{t.name} {t.w} กก./ม.²</option>)}</select>
-      <label className="flex items-center gap-1">สูง<Num v={bulk.h} on={(v) => setBulk({ ...bulk, h: v })} step="0.1" w="w-14" ph="ม." /></label>
+      <label className="flex items-center gap-1">สูง<Num v={bulk.h} on={(v) => setBulk({ ...bulk, h: v })} step="0.1" w="w-20" ph="อัตโนมัติ" /></label>
       <label className="flex items-center gap-1">ช่องเปิด<Num v={bulk.open} on={(v) => setBulk({ ...bulk, open: v })} step="5" w="w-14" ph="%" />%</label>
       <span className="mx-1 text-gray-300">|</span>
       <label className="flex items-center gap-1">น้ำหนักแผ่<Num v={bulk.q} on={(v) => setBulk({ ...bulk, q: v })} w="w-16" ph="กก./ม." /></label>
@@ -75,12 +75,12 @@ export function BeamLoadTable({ fl, setFloor, wallTypes }) {
     <table className="w-full text-[12px]"><thead className="sticky top-0 bg-white"><tr>
       <th className={th}><input type="checkbox" checked={all} onChange={() => setPick(all ? {} : Object.fromEntries(beams.map((_, i) => [i, true])))} /></th>
       {["คาน", "จาก → ถึง", "ยาว (ม.)", "ผนังบนคาน", "น้ำหนักผนัง (กก./ม.)", "น้ำหนักแผ่อื่น (กก./ม.)"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
-      <tbody>{beams.map((b, i) => { const ws = walls.filter((w) => onBeam(w, b)), ls = lines.filter((l) => onBeam(l, b)), wt = (w) => (wallTypes.find((t) => t.id === w.kind)?.w ?? 0) * w.h * (1 - (w.open ?? 0) / 100);
+      <tbody>{beams.map((b, i) => { const ws = walls.filter((w) => onBeam(w, b)), ls = lines.filter((l) => onBeam(l, b)), wt = (w0) => { const w = resolveW(w0); return (wallTypes.find((t) => t.id === w.kind)?.w ?? 0) * w.h * (1 - (w.open ?? 0) / 100) * (w.layers ?? 1); };
         return <tr key={i} className={`border-t border-gray-100 ${pick[i] ? "bg-brand-50/60" : ""}`}>
           <td className={td}><input type="checkbox" checked={!!pick[i]} onChange={() => setPick({ ...pick, [i]: !pick[i] })} /></td>
           <td className={td}>{i + 1}</td><td className={td}>({fmt(b.a[0], 2)}, {fmt(b.a[1], 2)}) → ({fmt(b.b[0], 2)}, {fmt(b.b[1], 2)})</td>
           <td className={td}>{fmt(Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]), 2)}</td>
-          <td className={td}>{ws.map((w) => `${wName(w.kind)} สูง ${fmt(w.h, 2)}${w.open ? ` เปิด ${w.open}%` : ""}`).join(", ") || "-"}</td>
+          <td className={td}>{ws.map((w) => `${wName(w.kind)} สูง ${fmt(resolveW(w).h, 2)}${w.hAuto ? " (อัตโนมัติ)" : ""}${w.openings?.length ? ` ประตู/หน้าต่าง ${w.openings.length}` : w.open ? ` เปิด ${w.open}%` : ""}`).join(", ") || "-"}</td>
           <td className={td}>{ws.length ? fmt(ws.reduce((a, w) => a + wt(w), 0), 0) : "-"}</td>
           <td className={td}>{ls.length ? fmt(ls.reduce((a, l) => a + l.q, 0), 0) : "-"}</td>
         </tr>; })}</tbody></table>

@@ -10,10 +10,10 @@ import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
-import { Building2, Columns3, Layers, Plus, Ruler, Trash2 } from "lucide-react";
+import { BrickWall, Building2, Columns3, Grid3x3, Layers, Plus, Ruler, Trash2, TriangleAlert } from "lucide-react";
 import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
-import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, GROUPS, SLAB_KINDS, STAIR_KINDS, parseBars, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
+import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { analyzeFrame, stackKey } from "../engine/frame.js";
 import { designSlabs } from "../engine/slabDesign.js";
@@ -168,7 +168,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const goFloor = (i) => { set("cur", i); setSel(null); };
   const colsHere = res.columns.filter((c) => c.floor === cur), colAt = (i) => colsHere.find((c) => c.i === i);
   const setMat = (k, v) => set("mat", { ...frame.mat, [k]: v });
-  const [critMsg, setCritMsg] = useState("");
+  const [critMsg, setCritMsg] = useState(""), [libSel, setLibSel] = useState(null);
+  const loadLib = frame.loadLib ?? DEFAULT_LOAD_LIB, libItem = loadLib.find((x) => x.id === libSel) ?? null;
+  const resolveW = (w) => resolveWall(w, frame, cur); // clear height / doors / windows as the analysis sees the wall
   const fv = (k, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={fl[k]} step={step} onChange={(v) => setFloor({ [k]: v })} /></Field>;
   const beam = sel?.kind === "beam" ? fl.beams[sel.i] : null, col = sel?.kind === "column" ? fl.columns[sel.i] : null, panel = sel?.kind === "panel" ? an.panels.find((p) => p.key === sel.key) : null;
   const line = beam ? an.lines.find((l) => l.members.includes(sel.i)) : null;
@@ -223,7 +225,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
-  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark}
+  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark} resolveW={resolveW} libItem={libItem}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
   const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
@@ -333,14 +335,28 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   // a selection that no longer exists (new / opened project, deleted item, other floor) shows the floor cards, not an empty card
   const selOk = !!(beam || col || panel || wall || cant || stair || lineL || pointL);
   const inspector = sel && selOk ? (          <Card title={beam ? `คาน (แนว ${line ? line.id + 1 : "-"})` : col ? `เสา #${sel.i + 1}` : panel ? `แผ่นพื้น P${an.panels.indexOf(panel) + 1}` : wall ? `ผนัง ${sel.i + 1}` : cant ? `พื้นยื่น ${sel.i + 1}` : stair ? `บันได ${sel.i + 1}` : lineL ? "น้ำหนักเส้น" : pointL ? "น้ำหนักจุด" : "เลือก"} icon={Ruler}>
-            {wall && (() => { const r = an.walls[sel.i]; return (<div className="grid grid-cols-2 gap-3">
+            {wall && (() => { const r = an.walls[sel.i], rw = resolveWall(wall, frame, cur), L = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]), ops = wall.openings ?? [];
+              const setOp = (k, p) => setWall({ openings: ops.map((o, j) => (j === k ? { ...o, ...p } : o)) }), oArea = ops.reduce((a, o) => a + o.w * o.h, 0);
+              const addOp = ([type, name, w, h, sill]) => { const at = Math.max(0, Math.min(L - w, ops.reduce((a, o) => Math.max(a, (o.at ?? 0) + o.w + 0.3), 0.3))); setWall({ openings: [...ops, { type, name, w, h, sill, at: +at.toFixed(2) }], open: 0 }); };
+              return (<div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Field label="ชนิดผนัง"><Select value={wall.kind} onChange={(v) => setWall({ kind: v })} options={wallOpts} /></Field></div>
-              <Field label="สูง" unit="m"><NumberInput value={wall.h} step="0.1" onChange={(v) => setWall({ h: v })} /></Field>
-              <Field label="ช่องเปิด" unit="%"><NumberInput value={wall.open ?? 0} step="5" onChange={(v) => setWall({ open: v })} /></Field>
+              <label className="col-span-2 flex items-center gap-2 text-[13px] text-gray-700"><input type="checkbox" checked={!!wall.hAuto} onChange={(e) => setWall({ hAuto: e.target.checked })} />
+                สูงอัตโนมัติ = ความสูงชั้นบน − ความลึกคานบน {wall.hAuto ? `(${fmt(rw.hFull, 2)} ม.)` : ""}</label>
+              {!wall.hAuto ? <Field label={wall.gable ? "สูงยอดจั่ว" : "สูง"} unit="m"><NumberInput value={wall.h} step="0.1" onChange={(v) => setWall({ h: v })} /></Field> : <div />}
               <Field label="ผนัง"><Select value={wall.layers ?? 1} onChange={(v) => setWall({ layers: Number(v) })} options={[[1, "ชั้นเดียว"], [2, "เบิ้ล (2 ชั้น)"]]} /></Field>
-              <Field label="ยาว" unit="m"><div className="flex h-11 items-center text-sm tabular-nums">{fmt(Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]), 2)}</div></Field>
-              <p className="col-span-2 rounded-lg bg-[#b54708]/10 px-2 py-1.5 text-[13px] font-semibold text-[#b54708]">{fmt(wallLoad(wall, wallTypes), 0)} กก./ม. · {r?.on.length ? `ลงคาน (แนว ${r.on.map((o) => o.line + 1).join(", ")})` : r?.panel ? `บนพื้น → กระจายลงแผ่นพื้น ${r.panel}` : r?.ground ? "บนพื้นวางบนดิน — ไม่ลงคาน" : "ไม่มีอะไรรับ"}</p>
-              <button onClick={() => { setFloor({ walls: wallsOf(fl).filter((_, i) => i !== sel.i) }); setSel(null); }} className="col-span-2 text-left text-[12px] text-red-600">ลบผนังนี้</button>
+              <label className="col-span-2 flex items-center gap-2 text-[13px] text-gray-700"><input type="checkbox" checked={!!wall.gable} onChange={(e) => setWall({ gable: e.target.checked })} />ผนังจั่ว (สามเหลี่ยม · เฉลี่ยครึ่งความสูง)</label>
+              <div className="col-span-2 rounded-lg border border-gray-200 p-2">
+                <div className="mb-1 flex items-center justify-between text-[12px] font-medium text-gray-700">ประตู / หน้าต่าง <span className="text-[11px] font-normal text-gray-400">ระยะจากปลาย A · กว้าง × สูง · ขอบล่าง (ม.)</span></div>
+                {ops.map((o, k) => <div key={k} className="mb-1 grid grid-cols-[1fr_52px_52px_52px_52px_16px] items-center gap-1 text-[12px]">
+                  <span className="truncate">{o.name ?? (o.type === "door" ? "ประตู" : "หน้าต่าง")}</span>
+                  {["at", "w", "h", "sill"].map((f) => <input key={f} type="number" step="0.05" value={o[f] ?? 0} onChange={(e) => setOp(k, { [f]: Number(e.target.value) })} className="h-7 rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums" title={{ at: "ห่างจากปลาย A", w: "กว้าง", h: "สูง", sill: "ขอบล่างจากพื้น" }[f]} />)}
+                  <button onClick={() => setWall({ openings: ops.filter((_, j) => j !== k) })} className="text-gray-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button></div>)}
+                <div className="mt-1 flex flex-wrap gap-1">{OPENINGS.map((o) => <button key={o[1]} onClick={() => addOp(o)} className="rounded-md px-1.5 py-0.5 text-[11px] text-brand-600 ring-1 ring-brand-200 hover:bg-brand-50">+ {o[1]}</button>)}</div>
+                {!ops.length && <div className="mt-2 flex items-center gap-2 text-[12px] text-gray-500">หรือช่องเปิดเป็น %<input type="number" step="5" value={wall.open ?? 0} onChange={(e) => setWall({ open: Number(e.target.value) })} className="h-7 w-16 rounded border border-gray-300 bg-transparent px-1 text-right" /></div>}
+              </div>
+              <p className="col-span-2 rounded-lg bg-[#b54708]/10 px-2 py-1.5 text-[12px] tabular-nums text-[#b54708]">ยาว {fmt(L, 2)} × สูง {fmt(rw.h, 2)} ม.{wall.gable ? " (เฉลี่ย)" : ""} = {fmt(L * rw.h, 2)} ม.² − ช่องเปิด {fmt(oArea || (L * rw.h * (rw.open ?? 0)) / 100, 2)} ม.²
+                <br /><b className="text-[13px]">{fmt(wallLoad(rw, wallTypes), 0)} กก./ม.</b> · {r?.on.length ? `ลงคาน ${r.on.join(", ")}` : r?.panel ? `กระจายลงแผ่นพื้น ${r.panel}` : "ยังไม่มีคาน/พื้นรับ"}</p>
+              <button onClick={() => { setFloor({ walls: wallsOf(fl).filter((_, i) => i !== sel.i) }); setSel(null); }} className="col-span-2 text-left text-[12px] text-red-600">ลบผนัง</button>
             </div>); })()}
             {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={fl.h} r0={an.stairs?.[sel.i]} />
               <button onClick={() => delList("stairs")} className="mt-2 text-left text-[12px] text-red-600">ลบบันไดนี้</button></>}
@@ -394,27 +410,54 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <button onClick={() => setFloor({ panels: Object.fromEntries(Object.entries(fl.panels ?? {}).filter(([k]) => k !== panel.key)) })} className="col-span-2 text-left text-[12px] text-brand-500">ใช้ค่าของชั้น</button>
             </div>)}
           </Card>
-  ) : step === "loads" && sub === "wall" ? (          <Card title="ชนิดผนัง (แก้ได้)" icon={Ruler}>
-            <div className="space-y-1.5 text-[12px]">
-              {wallTypes.map((t, i) => (
-                <div key={t.id} className="grid grid-cols-[1fr_70px_18px] items-center gap-1.5">
-                  <input defaultValue={t.name} key={t.name} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className="h-8 rounded-lg border border-gray-300 bg-transparent px-2" />
-                  <input type="number" defaultValue={t.w} key={t.w} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, w: Number(e.target.value) || x.w } : x)))} className="compact-num h-8 rounded-lg border border-gray-300 bg-transparent px-2 tabular-nums" />
-                  <button disabled={wallTypes.length < 2} onClick={() => set("wallTypes", wallTypes.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>
-                </div>
-              ))}
-              <button onClick={() => set("wallTypes", [...wallTypes, { id: `w${Date.now()}`, name: "ผนังใหม่", w: 100 }])} className="text-brand-500">+ เพิ่มชนิดผนัง</button>
-              <p className="text-gray-400">กก./ม.² ของผนัง · น้ำหนักต่อเมตร = กก./ม.² × สูง × (1 − ช่องเปิด) × ชั้นผนัง · วาดผนังซ้อนบนคานเดียวกันได้ (น้ำหนักรวมกัน)</p>
+  ) : step === "loads" && sub === "wall" ? (          <Card title="ชนิดผนัง (วัสดุ + ฉาบ)" icon={Ruler}>
+            <div className="space-y-2 text-[12px]">
+              {wallTypes.map((t, i) => { const put = (p) => set("wallTypes", wallTypes.map((x, j) => (j === i ? (() => { const n = { ...x, ...p }; return { ...n, w: Math.round(wallTypeW(n)) }; })() : x)));
+                const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums";
+                return (
+                <div key={t.id} className="rounded-lg border border-gray-200 p-2">
+                  <div className="mb-1 flex items-center gap-1.5">
+                    <input defaultValue={t.name} key={t.name} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className="h-7 flex-1 rounded border border-gray-300 bg-transparent px-2 font-medium" />
+                    <b className="w-20 text-right tabular-nums text-[#b54708]">{fmt(t.w, 0)} กก./ม.²</b>
+                    <button disabled={wallTypes.length < 2} onClick={() => set("wallTypes", wallTypes.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
+                  <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-1 text-[11px] text-gray-500">
+                    <span>เนื้อผนัง</span><span>หนา (ซม.)</span><span>ฉาบ (ซม.)</span><span>ฉาบกี่ด้าน</span>
+                    <select value={t.core ?? ""} onChange={(e) => put(e.target.value ? { core: e.target.value, t: t.t ?? 0.1, plaster: t.plaster ?? 1.5, sides: t.sides ?? 2 } : { core: undefined })} className="h-7 rounded border border-gray-300 bg-transparent px-1 text-[12px]">
+                      <option value="">กำหนดเอง (กก./ม.²)</option>{Object.entries(WALL_MATERIALS).map(([k, [n, d]]) => <option key={k} value={k}>{n}{d ? ` ${d}` : ""}</option>)}</select>
+                    {t.core ? (t.core === "gypsum" ? <><input type="number" step="5" value={t.dry ?? 30} onChange={(e) => put({ dry: Number(e.target.value) })} className={cell} title="กก./ม.² ทั้งผนัง" /><span /><span /></>
+                      : <><input type="number" step="0.5" value={+((t.t ?? 0.1) * 100).toFixed(1)} onChange={(e) => put({ t: Number(e.target.value) / 100 })} className={cell} />
+                        <input type="number" step="0.5" value={t.plaster ?? 1.5} onChange={(e) => put({ plaster: Number(e.target.value) })} className={cell} />
+                        <select value={t.sides ?? 2} onChange={(e) => put({ sides: Number(e.target.value) })} className="h-7 rounded border border-gray-300 bg-transparent px-1 text-[12px]"><option value={2}>2 ด้าน</option><option value={1}>1 ด้าน</option><option value={0}>ไม่ฉาบ</option></select></>)
+                      : <><input type="number" defaultValue={t.w} key={t.w} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, w: Number(e.target.value) || x.w } : x)))} className={cell} title="กก./ม.²" /><span /><span /></>}
+                  </div>
+                </div>); })}
+              <button onClick={() => set("wallTypes", [...wallTypes, { id: `w${Date.now()}`, name: "อิฐมอญครึ่งแผ่น ฉาบ 2 ด้าน", core: "brick", t: 0.1, plaster: 1.5, sides: 2, w: Math.round(wallTypeW({ core: "brick", t: 0.1, plaster: 1.5, sides: 2 })) }])} className="text-brand-500">+ เพิ่มชนิดผนัง</button>
+              <p className="text-gray-400">กก./ม.² = ความหนาแน่นเนื้อผนัง × หนา + ฉาบ 2,000 กก./ม.³ × หนา × ด้าน · น้ำหนักต่อเมตร = กก./ม.² × สูง (สุทธิใต้คาน) − ประตู/หน้าต่าง · ติ๊กหลายคานในตาราง "ผนัง / น้ำหนักบนคาน" ด้านล่างเพื่อใส่ทีเดียว</p>
             </div>
           </Card>
-  ) : step === "loads" && sub === "other" ? (          <Card title="น้ำหนักอื่น" icon={Ruler}>
+  ) : step === "loads" && sub === "other" ? (<>
+          <Card title="คลังน้ำหนัก (เลือกแล้ววาดบนแปลน)" icon={Ruler}>
+            <div className="space-y-1 text-[12px]">
+              {[["line", "แผ่ตามแนว (กก./ม.) · เครื่องมือ ราว/น้ำหนักเส้น"], ["point", "แรงจุด (กก.) · เครื่องมือ น้ำหนักจุด"], ["area", "ต่อพื้นที่ (กก./ม.²) · เครื่องมือ เพิ่มบนพื้น"]].map(([kind, title]) => (
+                <div key={kind}><p className="mt-1 text-[11px] font-semibold text-gray-500">{title}</p>
+                  {loadLib.map((it, i) => it.kind === kind && <label key={it.id} className={`flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-0.5 ${libSel === it.id ? "bg-brand-50 text-brand-600" : "hover:bg-gray-50"}`}>
+                    <input type="radio" checked={libSel === it.id} onChange={() => setLibSel(it.id)} />
+                    <input defaultValue={it.name} key={it.name} onBlur={(e) => set("loadLib", loadLib.map((x, j) => (j === i ? { ...x, name: e.target.value || x.name } : x)))} className="h-6 flex-1 rounded border border-transparent bg-transparent px-1 hover:border-gray-300" />
+                    <input type="number" value={it.v} onChange={(e) => set("loadLib", loadLib.map((x, j) => (j === i ? { ...x, v: Number(e.target.value) } : x)))} className="h-6 w-16 rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums" />
+                    <button onClick={() => set("loadLib", loadLib.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3 w-3" /></button></label>)}
+                  <button onClick={() => set("loadLib", [...loadLib, { id: `u${Date.now()}`, name: "รายการใหม่", kind, v: kind === "point" ? 500 : 100 }])} className="ml-1 text-[11px] text-brand-500">+ เพิ่ม</button></div>))}
+              <p className="pt-1 text-[11px] text-gray-400">เลือกรายการ → เลือกเครื่องมือทางซ้าย → คลิกบนแปลน · แก้ชื่อ/ค่าได้ · บันทึกเป็นค่ามาตรฐานของคุณได้ในขั้น 0</p>
+            </div>
+          </Card>
+          <Card title="น้ำหนักอื่น" icon={Ruler}>
             <div className="space-y-2 text-[12px] text-gray-500">
               {onRoofFromFrame && <RoofLinkCard frame={frame} roof={roof} onFromFrame={onRoofFromFrame} set={set} />}
               <p>ราวกันตก/น้ำหนักเส้น: วาดที่ปลายพื้นยื่น (ลงคานริม + แรงบิด) บนคาน หรือบนพื้น · น้ำหนักจุด: คลิกวาง · ฝ้า/งานระบบ: แก้ที่แผ่นพื้น (ขั้น 2)</p>
               <button onClick={roofLoads} disabled={!roof?.pts} className="w-full rounded-lg px-3 py-2 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50 disabled:opacity-40">{frame.roofLink?.on ? `เชื่อมกับ ${frame.floors[frame.roofLink.floor]?.name ?? "-"} อยู่ · ย้ายมาชั้นนี้` : "เชื่อมแรงจากหลังคาลงชั้นนี้ (อัตโนมัติ)"}</button>
               {roofMsg && <p className="text-[#d6409f]">{roofMsg}</p>}
             </div>
-          </Card>
+          </Card></>
   ) : step === "stair" ? (          <Card title="บันได" icon={Ruler}><p className="text-[12px] text-gray-500">วางบันไดที่ชั้นที่ปลายบนไปถึง · วาดกรอบช่องบันได แล้วเลือกแบบ: {Object.values(STAIR_KINDS).join(" · ")} · ปลายล่างของแบบพาดตามยาว/มีชานพักลงคานชั้นล่างที่แนวเดียวกัน</p></Card>
   ) : step === "slab" ? (<>          <Card title="พื้น" icon={Ruler}><p className="text-[12px] text-gray-500">คลิกแผ่นพื้นเพื่อเลือกชนิด S หล่อในที่ / PS พื้นสำเร็จ (เลือกทิศวางแผ่น) / GS วางบนดิน หรือช่องเปิด · เครื่องมือ "พื้นยื่น" คลิกบนคานด้านที่จะยื่น · ค่าเริ่มต้นความหนา ปูผิว จร อยู่ในการ์ดชั้น</p></Card>
     <Card title={`ค่าเริ่มต้นแผ่นพื้น — ${fl.name}`} icon={Layers}>
@@ -457,7 +500,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <p className="mt-1 text-[11px] text-gray-400">ค่าเริ่มต้นของแผ่นพื้นในชั้นนี้ · ระดับ / ความสูงชั้นแก้ในขั้น 1</p>
         </Card>;
   const [drawer, setDrawer] = useState(null), resultStep = ["analysis", "design", "footing"].includes(step);
-  const dTab = (drawer && (drawer === "warn" || drawer === "" || (resultStep ? drawer !== "panels" && drawer !== "bwalls" : drawer === bulkTab?.[0])) ? drawer : null) ?? (bulkTab ? bulkTab[0] : resultStep && !(step === "analysis" && sub === "cont") ? (step === "footing" || sub === "cols" ? "cols" : "spans") : null);
+  // side panels (tables / warnings) on the right, opened on demand from the tab rail
+  const tabsNow = resultStep ? drawerTabs : [...(bulkTab ? [bulkTab] : []), ...drawerTabs.filter(([k]) => k === "warn")];
+  const dTab = tabsNow.some(([k]) => k === drawer) ? drawer : null;
   const lineDiagram = showLine && (
     <div className="min-h-0 overflow-auto rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200">
       <div className="mb-1 flex flex-wrap items-center gap-2 text-[12px] text-[#344054]">
@@ -491,13 +536,12 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             {!page && step !== "footing" && <span className="ml-auto flex rounded-lg bg-gray-100 p-0.5">{[["2d", "แปลน 2D"], ["3d", "3D"], ["split", "2D + 3D"]].map(([k, t]) => <button key={k} onClick={() => setView(k)} className={tab(view === k)}>{t}</button>)}</span>}
           </div>
           <div className="flex min-h-0 flex-1 flex-col p-3">{center}</div>
-          <div className="border-t border-gray-200 bg-white">
-            <div className="flex items-center gap-1 px-3 py-1">
-              {(resultStep ? drawerTabs : [...(bulkTab ? [bulkTab] : []), ...drawerTabs.filter(([k]) => k === "warn")]).map(([k, t]) => <button key={k} onClick={() => setDrawer(dTab === k ? "" : k)} className={`rounded-md px-2.5 py-1 text-xs font-medium ${dTab === k ? "bg-brand-50 text-brand-500" : k === "warn" && res.warnings.length ? "text-red-600" : "text-gray-500 hover:bg-gray-50"}`}>{t}</button>)}
-              <span className="ml-auto text-[11px] text-gray-400">{dTab ? "คลิกแท็บอีกครั้งเพื่อพับ" : "ตาราง · คำเตือน"}</span>
-            </div>
-            {dTab && <div className={`${bulkTab && dTab === bulkTab[0] ? "h-[300px]" : "h-[230px]"} overflow-auto px-3 pb-2`}>
-              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} /> : dTab === "spans" ?             <div className="max-h-[260px] min-h-0 flex-[2] overflow-auto text-[12px]">
+        </section>
+        {dTab && <div className="flex w-[min(680px,46vw)] shrink-0 flex-col border-l border-gray-200 bg-white">
+          <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2 text-sm font-semibold text-gray-800">{tabsNow.find(([x]) => x === dTab)?.[1]}
+            <button onClick={() => setDrawer(null)} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">ปิด ✕</button></div>
+          <div className="min-h-0 flex-1 overflow-auto p-3">
+              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} resolveW={resolveW} /> : dTab === "spans" ?             <div className="max-h-[260px] min-h-0 flex-[2] overflow-auto text-[12px]">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 bg-white"><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["ช่วง", "ยาว", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "ใช้", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
                 <tbody>{an.spans.map((s) => (
@@ -530,10 +574,15 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           </div>
         </Card></div>
                 : res.warnings.length ? res.warnings.map((w) => <p key={w} className="py-0.5 text-[12px] text-red-600">{w}</p>) : <p className="text-[12px] text-gray-400">ไม่มีคำเตือน</p>}
-            </div>}
           </div>
-        </section>
+        </div>}
         <aside className="w-[330px] shrink-0 space-y-3 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3">{inspector}</aside>
+        <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-l border-gray-200 bg-white py-2">
+          {tabsNow.map(([k, t]) => <button key={k} onClick={() => setDrawer(dTab === k ? null : k)} title={t}
+            className={`flex w-[46px] flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-[10px] font-medium leading-tight ${dTab === k ? "bg-brand-500 text-[#fff]" : k === "warn" && res.warnings.length ? "text-red-600 hover:bg-red-50" : "text-gray-600 hover:bg-gray-50"}`}>
+            {({ spans: <Ruler className="h-4 w-4" />, cols: <Columns3 className="h-4 w-4" />, groups: <Layers className="h-4 w-4" />, warn: <TriangleAlert className="h-4 w-4" />, panels: <Grid3x3 className="h-4 w-4" />, bwalls: <BrickWall className="h-4 w-4" /> })[k]}
+            <span className="text-center">{t.replace(/\s*\(.*\)/, "")}</span>{/\((\d+)\)/.test(t) && <span className="opacity-70">{t.match(/\((\d+)\)/)[1]}</span>}</button>)}
+        </nav>
       </div>
       <div className="flex items-center gap-4 border-t border-gray-200 bg-white px-4 py-1.5 text-[12px] tabular-nums text-gray-600">
         <span className={nBeamNG ? "font-semibold text-red-600" : "text-green-600"}>คาน {nBeam - nBeamNG}/{nBeam} ผ่าน</span>

@@ -7,7 +7,7 @@ import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Han
 import { guessRole, parseDxf, toPlan } from "./dxfImport.js";
 import { fmt } from "./beamModel.js";
 import { dist, gridAxes, round3, segCross, segDist } from "./planKit.js";
-import { GROUPS, STAIR_KINDS, wallLoad, wallsOf } from "../engine/floor.js";
+import { GROUPS, STAIR_KINDS, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
 
 export const TYPE_COLORS = ["#3e63dd", "#30a46c", "#f76b15", "#8e4ec6", "#0e9384", "#b54708", "#d6409f", "#465fff"];
 const SEL = ["select", "เลือก/ย้าย", MousePointer2, "คลิกเพื่อเลือกและแก้ค่า · ลากเสาเพื่อย้าย (ปลายคานตามไป) · ลากที่ว่างเพื่อเลื่อน · ล้อเมาส์ซูม"];
@@ -18,13 +18,13 @@ const TOOLS = {
   slab: [SEL, ["cant", "พื้นยื่น", PanelTop, "คลิกบนคานด้านที่จะยื่น → สร้างพื้นยื่นตลอดคานเส้นนั้น (แก้ความยาวยื่นได้ทางซ้าย)"], ["erase", "ลบ", Eraser, "คลิกพื้นยื่นที่จะลบ"]],
   wall: [SEL, ["wall", "ผนัง", Ruler, "คลิกต้น → ปลาย ต่อเนื่องได้ · วางบนคาน = ลงคาน · วางกลางพื้น = กระจายลงแผ่นพื้น · วาดซ้อนได้"], ["erase", "ลบ", Eraser, "คลิกผนังที่จะลบ"]],
   stair: [SEL, ["stair", "บันได", Footprints, "คลิกมุมหนึ่ง → มุมตรงข้ามของช่องบันได (ดูดเข้าเสา/คาน) · เลือกแบบ ทิศขึ้น ที่แผงซ้าย"], ["erase", "ลบ", Eraser, "คลิกบันไดที่จะลบ"]],
-  other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
+  other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["area", "เพิ่มบนพื้น", PanelTop, "คลิกแผ่นพื้นเพื่อเพิ่มน้ำหนักต่อพื้นที่จากคลัง เช่น ห้องน้ำ / ฝ้า"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
   result: [SEL], cols: [SEL], grid: [SEL],
 };
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -92,7 +92,10 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const lineTool = tool === "beam" || tool === "wall" || tool === "line" || tool === "stair";
   const place = (p) => {
     if (tool === "column") { if (!cols.some((c) => dist(c, p) < 0.05)) commit({ columns: [...cols, p] }); return; }
-    if (tool === "point") { commit({ pointLoads: [...pointLoads, { p, P: 500, name: "" }] }); setSel({ kind: "point", i: pointLoads.length }); return; }
+    if (tool === "point") { const it = libItem?.kind === "point" ? libItem : null; commit({ pointLoads: [...pointLoads, { p, P: it?.v ?? 500, name: it?.name ?? "" }] }); setSel({ kind: "point", i: pointLoads.length }); return; }
+    if (tool === "area") { const pn = an?.panels.find((q) => inside(q.P, p)); const it = libItem?.kind === "area" ? libItem : null;
+      if (pn && it) { const o = floor.panels?.[pn.key] ?? {}; commit({ panels: { ...floor.panels, [pn.key]: { ...o, extra: (o.extra ?? 0) + it.v, extraItems: [...(o.extraItems ?? []), { name: it.name, v: it.v }] } } }); }
+      return; }
     if (!lineTool) return;
     if (!start) { setStart(p); return; }
     if (dist(start, p) < 0.1) return;
@@ -102,9 +105,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       commit({ stairs: [...stairs, { a: start, b: p, up, kind: "long", t: 0.12, riser: 0.17, tread: 0.25, finish: 100, live: 300, landingL: 1.2, landingTo: "below", side: 1 }] });
       setSel({ kind: "stair", i: stairs.length }); setStart(null); return;
     }
-    if (tool === "line") { commit({ lineLoads: [...lineLoads, { a: start, b: p, q: 100, name: "ราวกันตก" }] }); setStart(p); return; }
+    if (tool === "line") { const it = libItem?.kind === "line" ? libItem : null; commit({ lineLoads: [...lineLoads, { a: start, b: p, q: it?.v ?? 100, name: it?.name ?? "ราวกันตก" }] }); setStart(p); return; }
     if (tool === "beam") commit({ beams: [...beams, { a: start, b: p, type: null }] });
-    else commit({ walls: [...walls, { a: start, b: p, kind: wallTypes[0]?.id ?? "brick", h: 3, open: 0, layers: 1 }] });
+    else commit({ walls: [...walls, { a: start, b: p, kind: wallTypes[0]?.id ?? "brick", h: 3, hAuto: true, open: 0, layers: 1 }] }); // clear height under the beam above
     setStart(p);
   };
   const onDown = (e) => {
@@ -278,15 +281,23 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               </g>
             );
           })}
-          {show.WALL && walls.map((w, i) => { // walls: brown band(s) beside the line; double walls drawn twice; label with the load
-            const L = dist(w.a, w.b) || 1, n = [-(w.b[1] - w.a[1]) / L, (w.b[0] - w.a[0]) / L], q = wallLoad(w, wallTypes), t = wallTypes.find((x) => x.id === w.kind) ?? wallTypes[0];
-            const offs = (w.layers ?? 1) > 1 ? [5, 11] : [7], m = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2], same = walls.slice(0, i).filter((o) => dist(o.a, w.a) + dist(o.b, w.b) < 0.1 || dist(o.a, w.b) + dist(o.b, w.a) < 0.1).length;
+          {show.WALL && walls.map((w0, i) => { // walls: true thickness of the type centred on the line, openings cut out, label = load per metre
+            const w = resolveW(w0), L = dist(w.a, w.b) || 1, u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L], n = [-u[1], u[0]], q = wallLoad(w, wallTypes), t = wallTypes.find((x) => x.id === w.kind) ?? wallTypes[0];
+            const th = Math.max(0.06, (t?.core ? wallThick(t) : t?.id === "brick2" ? 0.2 : 0.1) * (w.layers ?? 1)), m = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2], P = (x, o) => [w.a[0] + u[0] * x + n[0] * o, w.a[1] + u[1] * x + n[1] * o];
+            const ops = [...(w0.openings ?? [])].sort((a, b) => (a.at ?? 0) - (b.at ?? 0)), solid = []; let x = 0;
+            for (const o of ops) { if ((o.at ?? 0) > x) solid.push([x, o.at ?? 0]); x = Math.min(L, (o.at ?? 0) + o.w); }
+            if (x < L) solid.push([x, L]);
+            const rect = ([a, b]) => [P(a, -th / 2), P(b, -th / 2), P(b, th / 2), P(a, th / 2)].map((p) => `${p[0]},${-p[1]}`).join(" ");
             return (
               <g key={`w${i}`} opacity={step === "wall" || step === "result" ? 1 : 0.7}>
-                {isSel("wall", i) && <line x1={w.a[0]} y1={-w.a[1]} x2={w.b[0]} y2={-w.b[1]} stroke="#f79009" strokeOpacity={0.45} strokeWidth={16 * k} strokeLinecap="round" />}
-                {offs.map((o) => { const d = (o + same * 14) * k; return <line key={o} x1={w.a[0] + n[0] * d} y1={-(w.a[1] + n[1] * d)} x2={w.b[0] + n[0] * d} y2={-(w.b[1] + n[1] * d)} stroke={WALL_C} strokeWidth={3 * k} />; })}
-                <title>{`ผนัง ${i + 1}: ${t.name}${(w.layers ?? 1) > 1 ? " เบิ้ล" : ""} สูง ${fmt(w.h, 2)} ม.${w.open ? ` ช่องเปิด ${w.open}%` : ""} = ${fmt(q, 0)} กก./ม.`}</title>
-                {step === "wall" && labels && txt([m[0] + n[0] * (20 + same * 14) * k, m[1] + n[1] * (20 + same * 14) * k], `W${i + 1}${(w.layers ?? 1) > 1 ? "×2" : ""} · ${fmt(q, 0)}`, WALL_C, 10, "middle", 600)}
+                {isSel("wall", i) && <line x1={w.a[0]} y1={-w.a[1]} x2={w.b[0]} y2={-w.b[1]} stroke="#f79009" strokeOpacity={0.45} strokeWidth={Math.max(th + 0.12, 16 * k)} strokeLinecap="round" />}
+                {solid.map((sg, j) => <polygon key={j} points={rect(sg)} fill={WALL_C} fillOpacity={0.35} stroke={WALL_C} strokeWidth={1.2 * k} />)}
+                {ops.map((o, j) => { const a = o.at ?? 0, b = a + o.w;
+                  return o.type === "door" ? <g key={`o${j}`} stroke={WALL_C} strokeWidth={1 * k} fill="none"><line x1={P(a, th / 2)[0]} y1={-P(a, th / 2)[1]} x2={P(a, th / 2 + o.w)[0]} y2={-P(a, th / 2 + o.w)[1]} />
+                    <path d={`M ${P(a, th / 2 + o.w)[0]} ${-P(a, th / 2 + o.w)[1]} A ${o.w} ${o.w} 0 0 ${u[0] * n[1] - u[1] * n[0] > 0 ? 0 : 1} ${P(b, th / 2)[0]} ${-P(b, th / 2)[1]}`} strokeDasharray={`${3 * k} ${2 * k}`} /></g>
+                    : <g key={`o${j}`} stroke={WALL_C} strokeWidth={0.8 * k}>{[-th / 2, 0, th / 2].map((d) => <line key={d} x1={P(a, d)[0]} y1={-P(a, d)[1]} x2={P(b, d)[0]} y2={-P(b, d)[1]} />)}</g>; })}
+                <title>{`ผนัง ${i + 1}: ${t?.name}${(w.layers ?? 1) > 1 ? " เบิ้ล" : ""} สูง ${fmt(w.h, 2)} ม.${w0.hAuto ? " (อัตโนมัติ)" : ""}${ops.length ? ` · ช่องเปิด ${ops.length}` : w.open ? ` ช่องเปิด ${w.open}%` : ""} = ${fmt(q, 0)} กก./ม.`}</title>
+                {step === "wall" && labels && txt([m[0] + n[0] * (th / 2 + 14 * k), m[1] + n[1] * (th / 2 + 14 * k)], `W${i + 1}${(w.layers ?? 1) > 1 ? "×2" : ""} · ${fmt(q, 0)}`, WALL_C, 10, "middle", 600)}
               </g>
             );
           })}
@@ -307,8 +318,11 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             return (
               <g key={`ll${i}`}>
                 {isSel("lineLoad", i) && <line x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke="#f79009" strokeOpacity={0.45} strokeWidth={14 * k} strokeLinecap="round" />}
-                <line x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={SP_C} strokeWidth={3 * k} strokeDasharray={`${8 * k} ${3 * k} ${2 * k} ${3 * k}`} />
-                {txt([m[0] - n[0] * 14 * k, m[1] - n[1] * 14 * k], `${l.name || "น้ำหนักเส้น"} ${fmt(l.q, 0)} กก./ม.`, SP_C, 10, "middle", 600)}
+                <line x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={SP_C} strokeWidth={2.5 * k} />
+                {Array.from({ length: Math.max(2, Math.round(L / (28 * k))) + 1 }, (_, j, N = Math.max(2, Math.round(L / (28 * k)))) => { const t = j / N, p = [l.a[0] + (l.b[0] - l.a[0]) * t, l.a[1] + (l.b[1] - l.a[1]) * t], d = 12 * k;
+                  return <line key={j} x1={p[0] - n[0] * d} y1={-(p[1] - n[1] * d)} x2={p[0] - n[0] * 2 * k} y2={-(p[1] - n[1] * 2 * k)} stroke={SP_C} strokeWidth={1.2 * k} markerEnd="url(#arrL)" />; })}
+                <line x1={l.a[0] - n[0] * 12 * k} y1={-(l.a[1] - n[1] * 12 * k)} x2={l.b[0] - n[0] * 12 * k} y2={-(l.b[1] - n[1] * 12 * k)} stroke={SP_C} strokeWidth={1 * k} />
+                {txt([m[0] - n[0] * 20 * k, m[1] - n[1] * 20 * k], `${l.name || "น้ำหนักเส้น"} ${fmt(l.q, 0)} กก./ม.`, SP_C, 10, "middle", 600)}
               </g>
             );
           })}
@@ -339,7 +353,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
                 `${cur.kind ?? ""}${from && cur.p ? ` · ${fmt(dist(from, cur.p), 2)} ม.` : ""}${typed ? ` · พิมพ์ ${typed} ม. ↵` : ""}`, "#f04438", 12, "start")}
             </g>
           )}
-          <defs><marker id="arrS" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={ST_C} /></marker><marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#30a46c" /></marker></defs>
+          <defs><marker id="arrL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={SP_C} /></marker><marker id="arrS" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={ST_C} /></marker><marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#30a46c" /></marker></defs>
         </svg>
         <div className="pointer-events-none absolute left-3 top-2 z-[1] rounded-lg bg-white/90 px-2 py-1 text-[12px] text-gray-600 shadow-theme-xs">{info[3]}</div>
         {cur?.p && <div className="pointer-events-none absolute right-3 top-2 rounded-lg bg-white/90 px-2 py-1 text-[12px] tabular-nums text-gray-600 shadow-theme-xs">X {fmt(cur.p[0], 2)} · Y {fmt(cur.p[1], 2)}</div>}

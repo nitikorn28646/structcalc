@@ -8,7 +8,7 @@ import { Bounds, Edges, Grid, OrbitControls } from "@react-three/drei";
 import { Maximize2, Minimize2 } from "lucide-react";
 import * as THREE from "three";
 import { TYPE_COLORS } from "./FloorBoard.jsx";
-import { DEFAULT_WALL_TYPES, wallsOf } from "../engine/floor.js";
+import { DEFAULT_WALL_TYPES, resolveWall, wallThick, wallsOf } from "../engine/floor.js";
 
 const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"]];
 const WALL_T = { brick: 0.1, brick2: 0.2, block: 0.1, light: 0.1, gypsum: 0.1 }; // wall thickness (m) incl. plaster
@@ -130,9 +130,19 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                   <Prism key={p.key} P={p.P} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />
                 ))}
                 {on.cant && an?.cants.map((c, i) => <Prism key={`ct${i}`} P={c.P} z0={Zk - c.t} t={c.t} color="#c3b5e0" edges="#8e4ec6" />)}
-                {on.wall && wallsOf(fl).map((w, i) => {
-                  const th = (WALL_T[w.kind] ?? 0.1) * (w.layers ?? 1) + ((w.layers ?? 1) > 1 ? 0.03 : 0), tp = wt.find((x) => x.id === w.kind);
-                  return <Box key={`w${i}`} p={w.a} q={w.b} w={th} z0={Zk} h={w.h} color={tp?.w >= 150 ? "#d9a38a" : "#e8d8c3"} opacity={0.55} />;
+                {on.wall && wallsOf(fl).map((w0, i) => {
+                  // true thickness of the type, clear height, doors / windows cut out (pieces between, under and over each opening)
+                  const w = resolveWall(w0, frame, k), tp = wt.find((x) => x.id === w.kind), th = (tp?.core ? wallThick(tp) : WALL_T[w.kind] ?? 0.1) * (w.layers ?? 1) + ((w.layers ?? 1) > 1 ? 0.03 : 0);
+                  const H = w.hFull ?? w.h, L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, P = (t) => [w.a[0] + ((w.b[0] - w.a[0]) * t) / L, w.a[1] + ((w.b[1] - w.a[1]) * t) / L];
+                  const col = tp?.w >= 150 ? "#d9a38a" : "#e8d8c3", ops = [...(w0.openings ?? [])].sort((x, y) => x.at - y.at), parts = [];
+                  let x = 0;
+                  for (const o of ops) { const a = Math.max(x, o.at ?? 0), b = Math.min(L, a + o.w), sill = o.sill ?? 0;
+                    if (a > x + 0.01) parts.push([x, a, 0, H]);
+                    if (sill > 0.01) parts.push([a, b, 0, sill]);
+                    if (sill + o.h < H - 0.01) parts.push([a, b, sill + o.h, H - sill - o.h]);
+                    x = b; }
+                  if (x < L - 0.01) parts.push([x, L, 0, H]);
+                  return <group key={`w${i}`}>{(w0.gable ? [[0, L, 0, w.h]] : parts).map(([a, b, z, h], j) => <Box key={j} p={P(a)} q={P(b)} w={th} z0={Zk + z} h={h} color={col} opacity={0.6} />)}</group>;
                 })}
                 {on.stair && an?.stairs.map((st, i) => <Stair key={`s${i}`} st={st} zb={zb} zt={Zk} color="#7fc8c0" />)}
               </group>
