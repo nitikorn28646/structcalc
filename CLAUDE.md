@@ -271,3 +271,9 @@ outer loop of the plate lines. Roof DXF modal shows the 3D summary + "นำเ�
 Ole file: 16 interior plates, 18 ดั้ง, slope 29.4°, roof design passes (1 real warning: ดั้ง at (5.00, 3.20) on a plate end with no support).
 New project / first run = EMPTY_ROOF (no sample roof); runRoof returns { empty } and the roof page says how to start. Test files
 web/public/projects/_* are git-ignored (any extension).
+UI KIT (branch feature/ui-kit, 2026-11-03): react-resizable-panels (FramePage: centre | side table panel | inspector, sizes remembered
+`structcalc.panels.*`), AG Grid Community via src/Grid.jsx (Excel-like: click selects, type / double-click edits, Ctrl+V pastes a block from
+Excel at the focused cell, Ctrl+D fills the focused column over the ticked rows — paste / fill written here, the free AG Grid has neither),
+used by PanelTable / BeamLoadTable; ui.jsx primitives restyled shadcn-like (cards, inputs h-8, badges, buttons).
+E2E fix: the project tests now wait until the app drops ?project= (before, they could read the default example → wrong expected values;
+Ole's real result is beams 24/59, columns 19/57 with its drawing types — not looked at yet).

@@ -64,3 +64,11 @@ html.printing #print-root .pagedjs_page { background: white; margin: 12px auto; 
 .compact-num { padding-left: 6px; padding-right: 4px; -moz-appearance: textfield; }
 .compact-num::-webkit-inner-spin-button, .compact-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
+
+/* Excel-like tables (AG Grid quartz) in the app's font and density; editable cells tinted */
+.sc-grid { --ag-font-family: Sarabun, "Leelawadee UI", sans-serif; --ag-font-size: 12px; --ag-grid-size: 5px; --ag-border-radius: 8px;
+  --ag-active-color: #465fff; --ag-range-selection-border-color: #465fff; --ag-header-font-weight: 600; --ag-header-foreground-color: #667085; }
+.sc-grid .sc-edit { background: rgba(70, 95, 255, 0.045); cursor: cell; }
+.sc-grid .sc-ro { color: #475467; }
+.ag-theme-quartz-dark.sc-grid .sc-edit { background: rgba(70, 95, 255, 0.12); }
+.ag-theme-quartz-dark.sc-grid .sc-ro { color: #98a2b3; }
