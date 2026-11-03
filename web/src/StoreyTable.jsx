@@ -15,7 +15,7 @@ export function baseLevel(frame) {
 }
 export const elevations = (frame) => frame.floors.reduce((a, f) => [...a, (a.at(-1) ?? baseLevel(frame)) + (f.h ?? 0)], []);
 
-const num = "h-7 w-[72px] rounded border border-gray-300 bg-transparent px-1 text-right text-[12px] tabular-nums";
+const num = "mt-0.5 h-7 w-full min-w-0 rounded border border-gray-300 bg-transparent px-1 text-right text-[12px] tabular-nums text-gray-800 dark:text-gray-200";
 
 export function StoreyTable({ frame, set, cur, goFloor }) {
   const base = baseLevel(frame), E = elevations(frame), n = frame.floors.length;
@@ -34,22 +34,22 @@ export function StoreyTable({ frame, set, cur, goFloor }) {
   const zs = [base, ...E], zMin = Math.min(base, 0), zMax = E.at(-1), H = 240, W = 300, sy = (H - 24) / Math.max(zMax - zMin, 1), Y = (z) => 12 + (zMax - z) * sy;
   return (
     <Card title="ระดับชั้น (Story)" icon={Layers}>
-      <table className="w-full text-[12px]">
-        <thead><tr className="text-left text-[11px] text-gray-500"><th className="py-1 font-medium">ชั้น / ระดับคาน</th><th className="font-medium">ระดับ (ม.)</th><th className="font-medium">สูงชั้น (ม.)</th></tr></thead>
-        <tbody>
-          {[...frame.floors.keys()].reverse().map((k) => (
-            <tr key={k} onClick={() => goFloor(k)} className={`cursor-pointer border-t border-gray-100 ${k === cur ? "bg-brand-50" : "hover:bg-gray-50"}`}>
-              <td className="py-1 pr-1"><input value={frame.floors[k].name} onClick={(e) => e.stopPropagation()} onChange={(e) => set("floors", frame.floors.map((f, i) => (i === k ? { ...f, name: e.target.value } : f)))}
-                className={`h-7 w-full rounded border border-transparent bg-transparent px-1 text-[12px] hover:border-gray-300 focus:border-brand-300 ${k === cur ? "font-semibold text-brand-600" : ""}`} /></td>
-              <td><input key={`${k}:${E[k]}`} type="number" step="0.05" defaultValue={+E[k].toFixed(3)} onClick={(e) => e.stopPropagation()} onBlur={(e) => setLevel(k, Number(e.target.value))} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} className={num} /></td>
-              <td><input key={`h${k}:${frame.floors[k].h}`} type="number" step="0.05" defaultValue={frame.floors[k].h} onClick={(e) => e.stopPropagation()} onBlur={(e) => setH(k, Number(e.target.value))} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} className={num} /></td>
-            </tr>))}
-          <tr className="border-t border-gray-200 text-gray-600">
-            <td className="py-1 pl-1">โคนเสา (หลังฐานราก)</td>
-            <td><input key={`b:${base}`} type="number" step="0.05" defaultValue={+base.toFixed(3)} onBlur={(e) => setBase(Number(e.target.value))} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} className={num} /></td><td />
-          </tr>
-        </tbody>
-      </table>
+      {/* one block per level: the name on its own line, level and storey height under it (user 2026-11-03: in the narrow side
+          panel a 3-column table cut the names and squeezed the numbers) */}
+      <div className="space-y-1 text-[12px]">
+        {[...frame.floors.keys()].reverse().map((k) => (
+          <div key={k} onClick={() => goFloor(k)} className={`cursor-pointer rounded-md border-t border-gray-100 px-1 py-1 ${k === cur ? "bg-brand-50" : "hover:bg-gray-50"}`}>
+            <input value={frame.floors[k].name} title={frame.floors[k].name} onClick={(e) => e.stopPropagation()} onChange={(e) => set("floors", frame.floors.map((f, i) => (i === k ? { ...f, name: e.target.value } : f)))}
+              className={`h-7 w-full rounded border border-transparent bg-transparent px-1 text-[12px] hover:border-gray-300 focus:border-brand-300 ${k === cur ? "font-semibold text-brand-600" : ""}`} />
+            <div className="mt-0.5 grid grid-cols-2 gap-2 text-[11px] text-gray-500">
+              <label className="block min-w-0">ระดับ (ม.)<input key={`${k}:${E[k]}`} type="number" step="0.05" defaultValue={+E[k].toFixed(3)} onClick={(e) => e.stopPropagation()} onBlur={(e) => setLevel(k, Number(e.target.value))} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} className={num} /></label>
+              <label className="block min-w-0">สูงชั้น (ม.)<input key={`h${k}:${frame.floors[k].h}`} type="number" step="0.05" defaultValue={frame.floors[k].h} onClick={(e) => e.stopPropagation()} onBlur={(e) => setH(k, Number(e.target.value))} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} className={num} /></label>
+            </div>
+          </div>))}
+        <div className="border-t border-gray-200 px-1 pt-1 text-gray-600">
+          <label className="block text-[11px]">โคนเสา (หลังฐานราก) ระดับ (ม.)<input key={`b:${base}`} type="number" step="0.05" defaultValue={+base.toFixed(3)} onBlur={(e) => setBase(Number(e.target.value))} onKeyDown={(e) => e.key === "Enter" && e.target.blur()} className={num} /></label>
+        </div>
+      </div>
       <div className="mt-2 flex gap-2">
         <button onClick={add} className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่มชั้นเหนือ {frame.floors[cur]?.name}</button>
         {n > 1 && <button onClick={del} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-600 ring-1 ring-red-200 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" />ลบชั้น</button>}

@@ -319,6 +319,17 @@ REVIEW FIXES (2026-11-03, cloud session, branch feature/review-fixes; findings i
   shows the report in the page (.report-preview); first-run tour "เริ่มโครงการของฉัน" = empty project; report As + 2·Ast labels.
 - Test house cli/models/bighouse.mjs → web/public/projects/_big.json (3 storeys, 20 × 14 m, X/T secondaries, transfer girder):
   3D ΣRz = applied (0.0000 %), beams 228/232 (8 m transfer girder with a 17 t column on it: no type in the list is big enough).
+- Cantilever beams (user: top bars full length): floor.js span.detail {ld, ext, bars, back, through, noBack} — top bars (through + extra)
+  run the whole cantilever, hooked at the tip, into the back span max(L, ld), ld = 1.4·max(0.06·Ab·fy/√f'c, 0.006·db·fy); short back
+  span → full length + warning; no back span → anchored in the column + warning. Report table + CantileverDetail figure (ReportDiagrams),
+  inspector line. An edge beam with no column rests on cantilever tips when the cantilever line has ≥ 2 columns (else as before).
+- Warnings trimmed: uplift only when > max(300 kg, 5 % of the line load); corners without a column in one line per floor; 3D
+  instability names the joint, direction and members (frame3d where()).
+- Overlaps: wall-type card / storey table restacked for narrow panels; plan labels decluttered (src/declutter.js useDeclutter on
+  FloorBoard + DrawBoard; data-keep on grid bubbles / dimensions). Scan script used: every step × sub-tab at 1920 / 1366 —
+  leaf text boxes clipped by scroll containers, pairwise overlap, inputs < 38 px, text cut in inputs.
+- Yasothon now beams 56/57 (porch arc rests on the 15 cantilever), base ΣP 197.8 t (was 210.8: inflated reactions from the
+  reversed cantilever / mutual corners), real weight (3D) 172.8 t unchanged.
 - Baselines re-saved (regress + E2E). PyNite / Excel diffs NOT re-run here (cloud): re-run frame3d/contBeam PyNite and the beam Excel
   diff on the Windows PC (only V input changed for beams; beam.js untouched).
 

@@ -154,3 +154,32 @@ export function FrameIso({ f3 }) {
     </svg>
   );
 }
+
+// Cantilever beam reinforcement (elevation sketch, not to scale in depth): the top bars that take the root moment run the whole
+// cantilever, hooked down at the tip, and continue into the back span by `ext` (max(cantilever length, ld)); bottom bars through.
+// d = span.detail from floor.js; t = beam type; L = cantilever length (m)
+export function CantileverDetail({ d, t, L, id }) {
+  const w = 680, h = 150, x0 = 40, x1 = w - 40, back = d.noBack ? 0.35 : d.through ? Math.min(d.backLen, Math.max(d.ext, L) * 1.2) : Math.max(d.ext * 1.15, L * 0.5);
+  const s = (x1 - x0) / (back + L), col = 0.2, yT = 45, yB = 105, xs = x0 + back * s; // xs = column centre
+  const X = (m) => xs + m * s;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full">
+      {/* beam outline: back span part + cantilever, column below */}
+      <rect x={X(-back)} y={yT - 12} width={(back + L) * s} height={yB - yT + 24} fill="none" stroke={INK} strokeWidth={1} />
+      <rect x={X(-col / 2)} y={yB + 12} width={col * s} height={28} fill="#f2f4f7" stroke={INK} strokeWidth={1} />
+      {!d.noBack && <line x1={X(-back)} y1={yT - 18} x2={X(-back)} y2={yB + 18} stroke={MUTE} strokeDasharray="4 3" />}
+      {/* top bars: full cantilever + hook at the tip + extension into the back span */}
+      <path d={`M${X(-Math.min(d.ext, back))},${yT} L${X(L) - 6},${yT} L${X(L) - 6},${yT + 30}`} fill="none" stroke={F3} strokeWidth={2.4} />
+      {d.noBack && <path d={`M${X(-col / 2) + 4},${yT} L${X(-col / 2) + 4},${yB + 34}`} fill="none" stroke={F3} strokeWidth={2.4} />}
+      {/* bottom bars through */}
+      <line x1={X(-back)} y1={yB} x2={X(L) - 6} y2={yB} stroke={MOM} strokeWidth={1.6} />
+      {/* dimensions */}
+      <line x1={X(0)} y1={20} x2={X(L)} y2={20} stroke={MUTE} /><T x={X(L / 2)} y={16} c={MUTE}>คานยื่น L = {fmt(L, 2)} ม.</T>
+      {!d.noBack && <><line x1={X(-Math.min(d.ext, back))} y1={h - 8} x2={X(0)} y2={h - 8} stroke={MUTE} /><T x={X(-Math.min(d.ext, back) / 2)} y={h - 12} c={MUTE}>ฝาก {d.through ? `ตลอดช่วง ${d.back} (${fmt(d.backLen, 2)} ม.)` : `${fmt(d.ext, 2)} ม. ≥ max(L, ld ${fmt(d.ld, 2)})`}</T></>}
+      <T x={X(L / 2)} y={yT - 4} c={F3} w={600}>เหล็กบน {d.bars} ยาวตลอด + งอขอที่ปลาย</T>
+      <T x={X(L / 2)} y={yB + 14} c={MOM}>เหล็กล่าง {t.bot}</T>
+      <T x={X(-col / 2) - 4} y={yB + 32} a="end" c={MUTE}>เสา</T>
+      <T x={x0} y={16} a="start" w={600}>{id} · {t.name} {fmt(t.b * 100, 0)}×{fmt(t.h * 100, 0)}</T>
+    </svg>
+  );
+}

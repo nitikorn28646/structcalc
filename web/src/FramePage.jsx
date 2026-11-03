@@ -419,6 +419,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                   <div key={s.id} className={`rounded-md px-2 py-1.5 ring-1 ${s.ok ? "ring-gray-200" : "bg-red-50 ring-red-200 dark:bg-red-500/10"}`}>
                     <div className="flex justify-between tabular-nums"><span className="font-medium">ช่วง {s.id} · {s.type.name} · {fmt(s.len, 2)} ม.</span><span className={s.ok ? "text-green-600" : "text-red-600"}>{s.ok ? "ผ่าน" : "ไม่ผ่าน"} · {s.check.util >= 8.99 ? "เกินกำลังหน้าตัด" : `ใช้ ${fmt(s.check.util * 100, 0)}%`}</span></div>
                     <div className="text-gray-500 tabular-nums">M+ {fmt(s.Mpos, 0)} · M− {fmt(s.Mneg, 0)} กก.-ม. · V {fmt(s.V, 0)} กก.{s.Mt ? ` · T ${fmt(s.Mt, 0)} กก.-ม.` : ""}</div>
+                    {s.detail && <div className="text-gray-600">คานยื่น: เหล็กบน {s.detail.bars} ยาวตลอด + งอขอที่ปลาย · {s.detail.noBack ? `ฝังในเสา ≥ ld ${fmt(s.detail.ld, 2)} ม.` : s.detail.through ? `ฝากตลอดช่วง ${s.detail.back}` : `ฝากเข้าช่วง ${s.detail.back} ${fmt(s.detail.ext, 2)} ม.`}</div>}
                     {why.map((t) => <div key={t} className="text-red-600">• {t}</div>)}
                   </div>); })}</div>) : null; })()}
             </div>)}
@@ -446,9 +447,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 return (
                 <div key={t.id} className="rounded-lg border border-gray-200 p-2">
                   {/* narrow side panel: label above each input, two columns, nothing squeezed (user 2026-11-03: fields overlapped) */}
-                  <div className="mb-1.5 flex items-center gap-1.5">
-                    <input defaultValue={t.name} key={t.name} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className="h-7 min-w-0 flex-1 rounded border border-gray-300 bg-transparent px-2 font-medium" />
-                    <b className="shrink-0 whitespace-nowrap tabular-nums text-[#b54708]">{fmt(t.w, 0)} กก./ม.²</b>
+                  <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                    <input defaultValue={t.name} key={t.name} title={t.name} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className="h-7 min-w-[10rem] flex-1 rounded border border-gray-300 bg-transparent px-2 font-medium" />
+                    <b className="ml-auto shrink-0 whitespace-nowrap tabular-nums text-[#b54708]">{fmt(t.w, 0)} กก./ม.²</b>
                     <button disabled={wallTypes.length < 2} onClick={() => set("wallTypes", wallTypes.filter((_, j) => j !== i))} className="shrink-0 text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] text-gray-500">
@@ -473,7 +474,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 <div key={kind}><p className="mt-1 text-[11px] font-semibold text-gray-500">{title}</p>
                   {loadLib.map((it, i) => it.kind === kind && <label key={it.id} className={`flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-0.5 ${libSel === it.id ? "bg-brand-50 text-brand-600" : "hover:bg-gray-50"}`}>
                     <input type="radio" checked={libSel === it.id} onChange={() => setLibSel(it.id)} />
-                    <input defaultValue={it.name} key={it.name} onBlur={(e) => set("loadLib", loadLib.map((x, j) => (j === i ? { ...x, name: e.target.value || x.name } : x)))} className="h-6 flex-1 rounded border border-transparent bg-transparent px-1 hover:border-gray-300" />
+                    <input defaultValue={it.name} key={it.name} title={it.name} onBlur={(e) => set("loadLib", loadLib.map((x, j) => (j === i ? { ...x, name: e.target.value || x.name } : x)))} className="h-6 flex-1 rounded border border-transparent bg-transparent px-1 hover:border-gray-300" />
                     <input type="number" value={it.v} onChange={(e) => set("loadLib", loadLib.map((x, j) => (j === i ? { ...x, v: Number(e.target.value) } : x)))} className="h-6 w-16 rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums" />
                     <button onClick={() => set("loadLib", loadLib.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3 w-3" /></button></label>)}
                   <button onClick={() => set("loadLib", [...loadLib, { id: `u${Date.now()}`, name: "รายการใหม่", kind, v: kind === "point" ? 500 : 100 }])} className="ml-1 text-[11px] text-brand-500">+ เพิ่ม</button></div>))}

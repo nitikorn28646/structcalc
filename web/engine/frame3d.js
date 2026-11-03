@@ -92,7 +92,7 @@ function solveDense(K, Fs) {
   const n = K.length, m = Fs.length, A = K.map((r, i) => Float64Array.from([...r, ...Fs.map((F) => F[i])]));
   for (let c = 0; c < n; c++) {
     let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
-    if (Math.abs(A[p][c]) < 1e-9) return null;
+    if (Math.abs(A[p][c]) < 1e-9) { solveDense.bad = c; return null; } // the unknown with no stiffness (reported by the caller)
     if (p !== c) [A[c], A[p]] = [A[p], A[c]];
     const rc = A[c];
     for (let r = c + 1; r < n; r++) { const f = A[r][c] / rc[c]; if (f) { const rr = A[r]; for (let j = c; j < n + m; j++) rr[j] -= f * rc[j]; } }
@@ -143,6 +143,17 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
     const dofs = [...[0, 1, 2, 3, 4, 5].map((dd) => m.i * 6 + dd), ...[0, 1, 2, 3, 4, 5].map((dd) => m.j * 6 + dd)];
     return { m, L, T3, E: m.E ?? E, A: m.b * m.h, Iy: Iy * f, Iz: Iz * f, J: Jrect(m.b, m.h) * factors.J, fl: nodalLoads(m.loads, m.torque, L), rel, dofs };
   });
+  // the joint where the elimination found no stiffness (a mechanism): position, direction and what meets there (user 2026-11-03:
+  // "ไม่มีเสถียรภาพ" alone did not say where)
+  let unstable = null;
+  const DIRS = ["X", "Y", "Z (ดิ่ง)", "หมุนรอบ X", "หมุนรอบ Y", "หมุนรอบ Z"];
+  const where = () => {
+    if (unstable == null) return "";
+    const n = Math.floor(unstable / 6), d = unstable % 6, nd0 = nodes[n];
+    if (nd0.master) return ` ที่พื้นแข็งระดับ z = ${nd0.z.toFixed(2)} ม. ทิศ ${DIRS[d]}`;
+    const at = members.filter((m) => m.i === n || m.j === n), what = [...new Set(at.map((m) => (m.kind === "column" ? "เสา" : `คานแนว ${m.line + 1}${m.release?.some(Boolean) ? " (ปลายหมุน)" : ""}`)))].join(", ");
+    return ` ที่จุด (${nd0.x.toFixed(2)}, ${nd0.y.toFixed(2)}) ระดับ z = ${nd0.z.toFixed(2)} ม. ทิศ ${DIRS[d]}${what ? ` — มี ${what}` : ""}`;
+  };
   const toG = (T3, v) => [0, 1, 2].map((c) => T3[0][c] * v[0] + T3[1][c] * v[1] + T3[2][c] * v[2]); // local → global (3-vector)
   const toL = (T3, v) => T3.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
   const held = (n) => nodes[n].fixed || nodes[n].pinned;
@@ -196,8 +207,9 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
       if (d >= 3) K[n * 6 + d][n * 6 + d] += 1e-3; free.push(n * 6 + d);
     }
     const Fv = cs.map(loadVector); // after the member matrices are set (condensation of the loads uses them)
+    solveDense.bad = null;
     const sol = solveMany(free.map((i) => free.map((j) => K[i][j])), Fv.map((F) => free.map((i) => F[i])));
-    if (!sol) return null;
+    if (!sol) { unstable = solveDense.bad != null ? free[solveDense.bad] : null; return null; }
     return sol.map((x) => { const u = new Float64Array(nd); free.forEach((i, k) => (u[i] = x[k])); return u; });
   };
   // reactions at the supports (global), including loads applied right at a support
@@ -234,7 +246,7 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
   let N = prep.map(() => 0), u = null, res;
   for (let it = 0; it < (pDelta ? 4 : 1); it++) {
     const s = solveK(N, [main]);
-    if (!s) return { error: "โครงสร้างไม่มีเสถียรภาพ (ตรวจจุดรองรับ / เสา)" };
+    if (!s) return { error: `โครงสร้างไม่มีเสถียรภาพ${where()} (ตรวจจุดรองรับ / เสา)` };
     u = s[0]; res = endForces(u, main.fls);
     N = res.map((f) => -f[0]); // axial force (tension +) at end i: force on the member along −x
   }
@@ -243,7 +255,7 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
   if (cases.length) {
     const cs = cases.map((c) => ({ ...c, fls: prep.map((e, k) => nodalLoads(c.loads?.[k]?.loads, c.loads?.[k]?.torque, e.L)) }));
     const us = solveK(N, cs);
-    if (!us) return { ...out, error: "โครงสร้างไม่มีเสถียรภาพภายใต้แรงด้านข้าง" };
+    if (!us) return { ...out, error: `โครงสร้างไม่มีเสถียรภาพภายใต้แรงด้านข้าง${where()}` };
     out.cases = cs.map((c, q) => { const r = endForces(us[q], c.fls); return { u: us[q], R: reactions(c, r), members: memberOut(r, (k) => c.loads?.[k]?.loads ?? []) }; });
   }
   return out;

@@ -1,5 +1,6 @@
 ﻿// Large drawing workspace: walls → columns → wall plates → interior plates, all by clicking on a snapped grid.
 // Nothing is drawn automatically; each layer has an "auto" button that only runs when pressed.
+import { useDeclutter } from "./declutter.js";
 import { useEffect, useRef, useState } from "react";
 import { CircleDot, Columns3, Eraser, FileUp, GitCommitHorizontal, Hand, Magnet, MousePointer2, Redo2, Ruler, Square, Undo2, Wand2 } from "lucide-react";
 import { fmt } from "./beamModel.js";
@@ -37,6 +38,7 @@ function autoGrid(pts) {
 
 export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark, onFromFrame = null, plateMembers = [] }) {
   const svg = useRef(null), [tool, setTool] = useState("column"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true);
+  useDeclutter(svg); // overlapping plan labels hidden until zoomed in
   const [start, setStart] = useState(null), [draft, setDraft] = useState([]), [cur, setCur] = useState(null), [drag, setDrag] = useState(null);
   // box selection like the structure board: drag on empty space with the select tool; Delete removes the selection
   const hl = useHighlight(), [tScale] = useTextScale();
@@ -293,15 +295,15 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
     <text x={ext.x0 - 4 * kt} y={-y} fontSize={10 * kt} textAnchor="end" dominantBaseline="middle" fill="#f79009" stroke="none">{fmt(y, 2)}</text></g>));
   const bubble = (key, p, t) => (
     <g key={key}><circle cx={p[0]} cy={-p[1]} r={11 * kt} fill={dark ? "#181c30" : "#fff"} stroke={dark ? "#9097b1" : "#667085"} strokeWidth={1.2 * k} />
-      <text x={p[0]} y={-p[1]} fontSize={11 * kt} textAnchor="middle" dominantBaseline="central" stroke="none" fill={dark ? "#cdd1e2" : "#344054"}>{t}</text></g>
+      <text data-keep="" x={p[0]} y={-p[1]} fontSize={11 * kt} textAnchor="middle" dominantBaseline="central" stroke="none" fill={dark ? "#cdd1e2" : "#344054"}>{t}</text></g>
   );
   const axes = [
     ...GX.flatMap((x, i) => [<line key={`gx${i}`} x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} strokeWidth={1.1 * k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />,
       bubble(`bx${i}`, [x, ext.y1 + 12 * kt], xName(i))]),
     ...GY.flatMap((y, i) => [<line key={`gy${i}`} y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} strokeWidth={1.1 * k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />,
       bubble(`by${i}`, [ext.x1 + 12 * kt, y], yName(i))]),
-    ...GX.slice(1).map((x, i) => <text key={`dx${i}`} x={(x + GX[i]) / 2} y={-(ext.y1 - 4 * kt)} fontSize={10 * kt} textAnchor="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(x - GX[i], 2)}</text>),
-    ...GY.slice(1).map((y, i) => <text key={`dy${i}`} x={ext.x1 - 4 * kt} y={-(y + GY[i]) / 2} fontSize={10 * kt} textAnchor="end" dominantBaseline="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(y - GY[i], 2)}</text>),
+    ...GX.slice(1).map((x, i) => <text data-keep="" key={`dx${i}`} x={(x + GX[i]) / 2} y={-(ext.y1 - 4 * kt)} fontSize={10 * kt} textAnchor="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(x - GX[i], 2)}</text>),
+    ...GY.slice(1).map((y, i) => <text data-keep="" key={`dy${i}`} x={ext.x1 - 4 * kt} y={-(y + GY[i]) / 2} fontSize={10 * kt} textAnchor="end" dominantBaseline="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(y - GY[i], 2)}</text>),
   ];
   const from = lineTool ? start : tool === "wall" ? draft[draft.length - 1] : null, live = cur?.p && from ? dist(from, cur.p) : null;
   const txt = (p, s, color, size = 12, anchor = "middle") => <text x={p[0]} y={-p[1]} fontSize={size * kt} fill={color} textAnchor={anchor} dominantBaseline="middle">{s}</text>;

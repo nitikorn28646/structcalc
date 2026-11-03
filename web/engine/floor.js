@@ -359,11 +359,13 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     const main = lines.find((o) => along(o, J, true) !== null), secs = lines.filter((o) => o !== main && (dist(o.A, J) < TOL || dist(o.B, J) < TOL));
     if (main && secs.length) warnings.push(`คานตัดกันที่ (${J[0].toFixed(2)}, ${J[1].toFixed(2)}) ไม่มีเสา — คิดว่าแนว ${secs.map((o) => o.id + 1).join(", ")} (คานซอย) วางบนแนว ${main.id + 1} (คานหลัก: ช่วงสั้นกว่าหรือวาดก่อน) · เปลี่ยนได้ที่ "บทบาท" ของคาน`);
   }
+  const corners = [];
   for (const ln of lines) for (const c of ln.carriers) { // two lines resting on each other (corner without a column): no real support there
     const h = lines.find((o) => o.id === c.host);
-    if (ln.id < h.id && h.carriers.some((d) => d.host === ln.id && Math.hypot(...[0, 1].map((k) => (d.t ? h.B : h.A)[k] - (c.t ? ln.B : ln.A)[k])) < TOL))
-      warnings.push(`มุมคานแนว ${ln.id + 1} กับแนว ${h.id + 1} ไม่มีเสา — คานต่อเนื่องคิดว่าวางบนกันเอง ใช้ผลโครง 3 มิติ (มุมยึดแน่น) ประกอบ`);
+    if (ln.id < h.id && h.carriers.some((d) => d.host === ln.id && Math.hypot(...[0, 1].map((k) => (d.t ? h.B : h.A)[k] - (c.t ? ln.B : ln.A)[k])) < TOL)) corners.push(`${ln.id + 1}/${h.id + 1}`);
   }
+  // one line for all of them (user 2026-11-03: too many warnings)
+  if (corners.length) warnings.push(`มุมคานไม่มีเสา ${corners.length} จุด (แนว ${corners.join(", ")}) — คานต่อเนื่องคิดว่าวางบนกันเอง ใช้ผลโครง 3 มิติ (มุมยึดแน่น) ประกอบ · ใส่เสาที่มุม หรือให้คานด้านหนึ่งยื่นรับ`);
   // slab panels by kind: S cast in place (two-way / one-way), PS precast planks (one-way along dir), GS on ground (nothing to the beams)
   const panels = findPanels(lines).map((P) => {
     const key = panelKey(P), o = floor.panels?.[key] ?? {}, open = !!o.open, st = o.kind ?? "S", dir = st === "PS" ? o.dir ?? "x" : null;
@@ -548,13 +550,30 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     sp.check = { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) };
   }
   for (const sp of result.spans) Object.assign(sp, { type: types[sp.typeIdx], ok: sp.check.ok });
+  // Cantilever detailing (user 2026-11-03: "คานยื่นต้องเน้นเหล็กบนยาวตลอด"): the top bars that take the root moment (through + extra)
+  // run the whole cantilever, hooked down at the tip, and continue into the back span by max(cantilever length, ld) — not the L/4
+  // cut-off of the extra top bars elsewhere. ld (WSD, ว.ส.ท. / ACI 318 working stress): 0.06·Ab·fy/√f'c ≥ 0.006·db·fy (cm), × 1.4
+  // for top bars. A back span shorter than that: the bars run its whole length; no back span (one column): anchored in the column.
+  const ldOf = (bar) => { const b = BARS[bar]; if (!b) return 0; const fc = mat.fcBeam ?? mat.fcPrime, fy = mat.fy ?? 4000;
+    return (1.4 * Math.max((0.06 * b.A * fy) / Math.sqrt(fc), 0.006 * b.d * fy)) / 100; };
+  for (const sp of result.spans.filter((x) => x.kind === "cantilever" && x.fixedAt)) {
+    const t = sp.type, bars = [parseBars(t.top), parseBars(t.topX)].filter(Boolean), big = bars.reduce((a, b) => (!a || BARS[b.bar].d > BARS[a.bar].d ? b : a), null);
+    const ld = big ? ldOf(big.bar) : 0, ext = Math.max(sp.len, ld);
+    const back = result.spans.find((o) => o !== sp && o.line === sp.line && (sp.fixedAt === "start" ? Math.abs(o.x1 - sp.x0) < 1e-6 : Math.abs(o.x0 - sp.x1) < 1e-6));
+    const through = !!back && back.len < ext - 1e-9;
+    sp.detail = { ld, ext, bars: [t.top, t.topX].filter(Boolean).join(" + "), bar: big?.bar ?? null, back: back?.id ?? null, backLen: back?.len ?? 0, through, noBack: !back };
+    if (!back) warnings.push(`คานยื่น ${sp.id} (${sp.len.toFixed(2)} ม.) ไม่มีช่วงคานด้านหลัง — เหล็กบน ${sp.detail.bars} ต้องฝังในเสาอย่างน้อย ld = ${ld.toFixed(2)} ม. พร้อมงอขอ (หรือต่อคานเข้าไปช่วงหลัง)`);
+    else if (through) warnings.push(`คานยื่น ${sp.id}: ช่วงหลัง ${back.id} ยาว ${back.len.toFixed(2)} ม. < ระยะฝาก ${ext.toFixed(2)} ม. — เหล็กบน ${sp.detail.bars} ยาวตลอดช่วง ${back.id} แล้วฝังต่อในเสา/คานถัดไป`);
+  }
   // a support that the continuous beam pulls down (negative reaction: a short end span next to a long one lifts its far end):
   // the column load is not reduced (envelope), but that end must be held down — beam bars anchored into the column, and the
   // column / footing able to take the pull. Said once per support (review 2026-11-03: −9.5 t on Yasothon with no warning)
   for (const ln of result.lines) {
     if (!ln.res) continue;
     ln.x.forEach((x, k) => {
-      if (!ln.sup[k] || !(ln.res.R[k] < -10)) return;
+      // small pulls are normal at a pinned end next to a long span: warn when it matters (> 300 kg and > 5 % of the line's load)
+      const total = (ln.loads ?? []).reduce((t, l) => t + (l.P ?? ((l.wa + l.wb) / 2) * (l.b - l.a)), 0);
+      if (!ln.sup[k] || !(-ln.res.R[k] > Math.max(300, 0.05 * total))) return;
       const p = [ln.A[0] + ln.u[0] * x, ln.A[1] + ln.u[1] * x], col = cols.some((c) => dist(c, p) < TOL);
       (ln.uplift ??= []).push({ x, p, R: ln.res.R[k] });
       warnings.push(`แนวคาน ${ln.id + 1} ที่ (${p[0].toFixed(2)}, ${p[1].toFixed(2)}): ปลายคานถูกยก ${Math.round(-ln.res.R[k]).toLocaleString()} กก. (คานต่อเนื่อง — ช่วงสั้นติดช่วงยาว) — ${col ? "ยึดเหล็กคานเข้าเสาให้รับแรงดึง และตรวจเสา/ฐานรากรับแรงถอน" : "จุดรองรับต้องรับแรงดึงได้"} หรือปรับช่วงคาน/ตำแหน่งเสา`);
@@ -665,6 +684,7 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
         // every drawn beam lying on this span (a span over a missing column covers two or more drawn beams; all get its type)
         const members = ln.parts.filter((p) => Math.min(p.t1, x[i1]) - Math.max(p.t0, x[i0]) > 1e-6).map((p) => p.i);
         spans.push({ id: `${ln.id + 1}-${spans.filter((s) => s.line === ln.id).length + 1}`, line: ln.id, member, members: members.length ? members : [member], x0: x[i0], x1: x[i1], len: x[i1] - x[i0], kind,
+          ...(cant ? { fixedAt: sup[i0] ? "start" : sup[i1] ? "end" : null } : {}),
           a: [ln.A[0] + ln.u[0] * x[i0], ln.A[1] + ln.u[1] * x[i0]], b: [ln.A[0] + ln.u[0] * x[i1], ln.A[1] + ln.u[1] * x[i1]],
           Mpos: Math.max(0, ...env.slice(i0, i1).map((e) => e.Mmax)), Mneg: Math.max(0, -env[i0].ML, -env[i1 - 1].MR, ...(cant ? env.slice(i0, i1).map((e) => -e.Mmin) : [])),
           V: Math.max(...env.slice(i0, i1).map((e) => e.Vmax)),

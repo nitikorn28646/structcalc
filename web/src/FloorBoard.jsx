@@ -3,6 +3,7 @@
 // on a beam; typed lengths (digits + Enter) place exact points.
 import { useEffect, useRef, useState } from "react";
 import { arcPolyline } from "../engine/arc.js";
+import { useDeclutter } from "./declutter.js";
 import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Hand, Magnet, MousePointer2, PanelTop, Redo2, Ruler, Undo2, Wand2, Copy } from "lucide-react";
 import { frame3dFromDxf, guessRole, parseDxf, toPlan } from "./dxfImport.js";
 import { Tip } from "@/components/ui/tooltip";
@@ -210,6 +211,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   });
+  useDeclutter(svg); // overlapping plan labels hidden until zoomed in
   useEffect(() => { const el = svg.current, h = (e) => e.preventDefault(); el.addEventListener("wheel", h, { passive: false }); return () => el.removeEventListener("wheel", h); }, []);
   const onWheel = (e) => { const m = toModel(e), f = e.deltaY > 0 ? 1.15 : 1 / 1.15; setVb((v) => ({ x: m[0] - (m[0] - v.x) * f, y: m[1] - (m[1] - v.y) * f, w: v.w * f, h: v.h * f })); };
 
@@ -218,7 +220,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
 
   // labels grow with the plan when zoomed in past "fit" (like CAD); zoomed out they keep their screen size so they stay readable
   const kFit = fitBox().w / (svg.current?.clientWidth || 1000), kt = Math.max(k, kFit) * tScale;
-  const txt = (p, s, color, size = 12, anchor = "middle", weight) => <text x={p[0]} y={-p[1]} fontSize={size * kt} fill={color} textAnchor={anchor} dominantBaseline="middle" fontWeight={weight} stroke="none">{s}</text>;
+  const txt = (p, s, color, size = 12, anchor = "middle", weight, keep) => <text x={p[0]} y={-p[1]} fontSize={size * kt} fill={color} textAnchor={anchor} dominantBaseline="middle" fontWeight={weight} stroke="none" data-keep={keep ? "" : undefined}>{s}</text>; // keep: never hidden by useDeclutter
   const ext = { x0: Math.min(...SX) - 1.2, x1: Math.max(...SX) + 1.2, y0: Math.min(...SY) - 1.2, y1: Math.max(...SY) + 1.2 };
   const ink = dark ? "#cdd1e2" : "#344054", muted = dark ? "#9097b1" : "#667085", btn = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1";
   const spanOf = (bi) => an?.spans.filter((s) => (s.members ?? [s.member]).includes(bi)) ?? [];
@@ -277,11 +279,11 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             </g>
             <g stroke={dark ? "#6e7591" : "#98a2b3"}>
               {GX.map((x, i) => <g key={`gx${i}`}><line x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} strokeWidth={k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />
-                <circle cx={x} cy={-(ext.y1 + 12 * kt)} r={11 * kt} fill={dark ? "#181c30" : "#fff"} strokeWidth={1.2 * k} />{txt([x, ext.y1 + 12 * kt], xName(i), ink, 11)}</g>)}
+                <circle cx={x} cy={-(ext.y1 + 12 * kt)} r={11 * kt} fill={dark ? "#181c30" : "#fff"} strokeWidth={1.2 * k} />{txt([x, ext.y1 + 12 * kt], xName(i), ink, 11, "middle", undefined, true)}</g>)}
               {GY.map((y, i) => <g key={`gy${i}`}><line y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} strokeWidth={k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />
-                <circle cx={ext.x1 + 12 * kt} cy={-y} r={11 * kt} fill={dark ? "#181c30" : "#fff"} strokeWidth={1.2 * k} />{txt([ext.x1 + 12 * kt, y], yName(i), ink, 11)}</g>)}
-              {GX.slice(1).map((x, i) => <g key={`dx${i}`}>{txt([(x + GX[i]) / 2, ext.y1 - 6 * k], fmt(x - GX[i], 2), muted, 10)}</g>)}
-              {GY.slice(1).map((y, i) => <g key={`dy${i}`}>{txt([ext.x1 - 6 * k, (y + GY[i]) / 2], fmt(y - GY[i], 2), muted, 10, "end")}</g>)}
+                <circle cx={ext.x1 + 12 * kt} cy={-y} r={11 * kt} fill={dark ? "#181c30" : "#fff"} strokeWidth={1.2 * k} />{txt([ext.x1 + 12 * kt, y], yName(i), ink, 11, "middle", undefined, true)}</g>)}
+              {GX.slice(1).map((x, i) => <g key={`dx${i}`}>{txt([(x + GX[i]) / 2, ext.y1 - 6 * k], fmt(x - GX[i], 2), muted, 10, "middle", undefined, true)}</g>)}
+              {GY.slice(1).map((y, i) => <g key={`dy${i}`}>{txt([ext.x1 - 6 * k, (y + GY[i]) / 2], fmt(y - GY[i], 2), muted, 10, "end", undefined, true)}</g>)}
             </g>
           </>}
           {an?.panels.map((p, i) => { // slab panels: kind, thickness, loads of the shown groups
