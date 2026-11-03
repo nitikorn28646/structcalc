@@ -412,7 +412,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
               if (ln) return <line x1={ln.a[0]} y1={-ln.a[1]} x2={ln.b[0]} y2={-ln.b[1]} stroke="#f79009" strokeOpacity={0.5} strokeWidth={12 * k} strokeLinecap="round" pointerEvents="none" />;
               return null;
             })()}
-            {cols.map((c, i) => <rect key={`c${i}`} x={c[0] - 6 * k} y={-c[1] - 6 * k} width={12 * k} height={12 * k} fill={dark ? "#f2f4fa" : COL} stroke={dark ? "#0f1222" : "#fff"} strokeWidth={1.5 * k} />)}
+            {cols.map((c, i) => { const h = Math.max((roof.colSize ?? 0.2) / 2, 3 * k); return <rect key={`c${i}`} x={c[0] - h} y={-c[1] - h} width={2 * h} height={2 * h} fill={dark ? "#f2f4fa" : COL} stroke={dark ? "#0f1222" : "#fff"} strokeWidth={1.5 * k} />; })}
             {tool === "select" && roof.pts.map((c, i) => <circle key={`v${i}`} cx={c[0]} cy={-c[1]} r={6 * k} fill={dark ? "#0f1222" : "#fff"} stroke="#465fff" strokeWidth={2 * k} />)}
             {draft.length > 0 && <polyline points={[...draft, ...(cur?.p ? [cur.p] : [])].map(S).join(" ")} fill="none" stroke="#344054" strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />}
             {from && cur?.p && lineTool && <line x1={from[0]} y1={-from[1]} x2={cur.p[0]} y2={-cur.p[1]} stroke={{ plate: PLATE, inner: INNER, support: SUP }[tool]} strokeWidth={4 * k} opacity={0.6} />}

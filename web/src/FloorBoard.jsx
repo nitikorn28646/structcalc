@@ -29,7 +29,7 @@ const BOXABLE = { frame: ["column", "beam"], wall: ["wall"], other: ["lineLoad",
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, onImportFrame = null }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, onImportFrame = null, colSize = () => null }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -385,7 +385,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             return (
               <g key={`c${i}`}>
                 {isSel("column", i) && <circle cx={c[0]} cy={-c[1]} r={15 * k} fill="none" stroke="#f79009" strokeWidth={3 * k} />}
-                <rect x={c[0] - 6 * k} y={-c[1] - 6 * k} width={12 * k} height={12 * k} fill={ci ? (ci.ok ? ci.color : "#f04438") : dark ? "#f2f4fa" : "#1d2939"} stroke={dark ? "#0f1222" : "#fff"} strokeWidth={1.5 * k} />
+                {(() => { const sz = colSize(i) ?? [0.2, 0.2], hx = Math.max(sz[0] / 2, 3 * k), hy = Math.max(sz[1] / 2, 3 * k); // true size (m), never under 6 px
+                  return <rect x={c[0] - hx} y={-c[1] - hy} width={2 * hx} height={2 * hy} fill={ci ? (ci.ok ? ci.color : "#f04438") : dark ? "#f2f4fa" : "#1d2939"} stroke={dark ? "#0f1222" : "#fff"} strokeWidth={1.5 * k} />; })()}
                 {ci && txt([c[0] + 9 * k, c[1] - 12 * k], ci.text, ci.ok ? ci.color : "#f04438", 10, "start", 600)}
                 {result && R > 0 && txt([c[0] + 9 * k, c[1] - 12 * k], `${fmt(R / 1000, 1)} ตัน`, ink, 10, "start")}
               </g>
