@@ -25,6 +25,7 @@ import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
 import { roofFromFrame, roofPoints } from "./roofLink.js";
+import { RoofLinkCard } from "./RoofLinkCard.jsx";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { autoInnerPlates } from "../engine/roofMembers.js";
 import { HelpCircle, Redo2, Undo2 } from "lucide-react";
@@ -215,6 +216,7 @@ export default function App() {
     const r = roofFromFrame(frame, fres);
     if (r.error) { setNotice({ ok: false, text: r.error }); return; }
     const { linkFloor, ...patch } = r;
+    patch.fromFrame = true;
     // plates under the ดั้ง (posts on the ridges) as on the drawings, so post loads reach columns through real members
     try { const sk = await loadSkeleton(), rr = runRoof({ ...roof, ...patch }, sk); if (rr.g && rr.fr) patch.innerPlates = splitAtColumns(autoInnerPlates(rr.g, rr.fr), patch.columns); } catch { /* keep without */ }
     remember(); setRoofState((x) => { const next = { ...x, ...patch }; try { localStorage.setItem("structcalc.roof", JSON.stringify(next)); } catch { /* ignore */ } return next; });
@@ -479,12 +481,12 @@ export default function App() {
           {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} />}
 
           <ErrorBoundary resetKey={mod}>
-          {mod === "work" ? (step === "roof" ? <RoofPage roof={roof} set={setRoof} dark={dark} onFromFrame={roofFromStructure} /> : step === "report" ? (
+          {mod === "work" ? (step === "roof" ? <div className="flex min-h-0 flex-1 flex-col"><div className="px-4 pt-3"><RoofLinkCard frame={frame} roof={roof} onFromFrame={roofFromStructure} /></div><RoofPage roof={roof} set={setRoof} dark={dark} onFromFrame={roofFromStructure} /></div> : step === "report" ? (
             <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
               <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง (หลังคา → โครงสร้าง → ฐานราก) · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
               <RoofReport roof={roof} project={st.project} /><FrameReport frame={frame} project={st.project} />
             </div></main>
-          ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} onProjectInfo={() => setProjOpen(true)} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
+          ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} onProjectInfo={() => setProjOpen(true)}  onRoofFromFrame={roofFromStructure} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
           <main className="grid min-h-0 flex-1 gap-4 p-4 md:p-5 xl:grid-cols-[300px_1fr_1fr_1.15fr] xl:grid-rows-[auto_1fr]">
             {/* inputs */}
             <div className="space-y-4 xl:row-span-2 xl:overflow-y-auto">

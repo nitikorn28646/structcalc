@@ -21,6 +21,7 @@ import Frame3D from "./Frame3D.jsx";
 import { downloadDxf, framePlanModel } from "./drawings.js";
 import { LateralChoice, LateralPanel } from "./LateralPanel.jsx";
 import { FootingTypes } from "./FootingTypes.jsx";
+import { RoofLinkCard } from "./RoofLinkCard.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
@@ -146,7 +147,7 @@ const STEPS = [["frame", "1 โครง", false, "ขั้น 1 โครง: 
   ["wall", "4 ผนัง", false, "ขั้น 4 ผนัง"], ["other", "5 น้ำหนักอื่น", false, "ขั้น 5 น้ำหนักอื่น: ราวกันตก น้ำหนักจุด แรงจากหลังคา"], ["result", "6 ผลคาน", false, "ผลออกแบบคาน (WSD)"], ["cols", "7 ผลเสา", false, "ผลออกแบบเสา (WSD)"],
   ["types", "Type คาน", false, "ตาราง Type คาน"], ["ctypes", "Type เสา", false, "ตาราง Type เสา"]];
 
-export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo }) {
+export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo, onRoofFromFrame }) {
   const [subState, setSubState] = useState(null), [view, setView] = useState("2d"), [sel, setSel] = useState(null), mode = step, setMode = () => {};
   const [show, setShow] = useState({ DL: true, SDL: true, WALL: true, LL: true, SP: true }), wallTypes = frame.wallTypes ?? DEFAULT_WALL_TYPES;
   const cur = Math.min(frame.cur ?? 0, frame.floors.length - 1), fl = frame.floors[cur], types = frame.beamTypes, cTypes = frame.colTypes;
@@ -404,6 +405,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           </Card>
   ) : step === "loads" && sub === "other" ? (          <Card title="น้ำหนักอื่น" icon={Ruler}>
             <div className="space-y-2 text-[12px] text-gray-500">
+              {onRoofFromFrame && <RoofLinkCard frame={frame} roof={roof} onFromFrame={onRoofFromFrame} />}
               <p>ราวกันตก/น้ำหนักเส้น: วาดที่ปลายพื้นยื่น (ลงคานริม + แรงบิด) บนคาน หรือบนพื้น · น้ำหนักจุด: คลิกวาง · ฝ้า/งานระบบ: แก้ที่แผ่นพื้น (ขั้น 2)</p>
               <button onClick={roofLoads} disabled={!roof?.pts} className="w-full rounded-lg px-3 py-2 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50 disabled:opacity-40">{frame.roofLink?.on ? `เชื่อมกับ ${frame.floors[frame.roofLink.floor]?.name ?? "-"} อยู่ · ย้ายมาชั้นนี้` : "เชื่อมแรงจากหลังคาลงชั้นนี้ (อัตโนมัติ)"}</button>
               {roofMsg && <p className="text-[#d6409f]">{roofMsg}</p>}
