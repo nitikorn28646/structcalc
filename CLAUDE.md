@@ -204,5 +204,10 @@ to rea-lab/results/history.jsonl) — run it before hand tests; findings in docs
 เเบบสำหรับทดสอบ/ (e.g. คุณโอเล่/model.mjs → web/public/projects/_ole.json, also git-ignored). Snapshots: 5 latest works kept in
 localStorage `structcalc.snapshots` before New/Open, header "กู้คืน". Roof from structure (step 5 "ใช้แปลนจากโครงสร้าง", src/roofLink.js
 roofFromFrame + App splitAtColumns). RB 9 added to BARS (GB 2-RB9); unreadable bar strings in a beam type → warning.
+STEP 8 EDITING 2026-11-03 (user: change sizes / bars of every member in one place): tabs คาน / เสา / พื้น-บันได / Type คาน / Type เสา / ฐานราก.
+Slab table: thickness (floor.panels[key].t) and bar (panels[key].bar → slabDesign pbar) per panel; stairs t + mainBar (stair.mainBar).
+Footing types `frame.footTypes [{name,n,pile,bar,s,w}]` + `frame.footPick {stack: idx}` → designFooting fo.fixed (one try) — src/FootingTypes.jsx;
+footing results carry `type`. Steel check (user asked "too much steel?"): beams take the lightest passing type, columns mostly 1 % minimum;
+extra steel comes from fc ≤ 65 ksc (Yasothon beams +10 % vs uncapped) and coarse type lists. E2E 76/76.
 Next agreed: C = 3D rigid-joint frame analysis + P-Delta (gravity first, compare with the current results), then B = wind / seismic / WSD
 combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).

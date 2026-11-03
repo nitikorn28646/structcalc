@@ -146,6 +146,18 @@ def test_new_project(browser, expected, save):
         expected["new"] = s1
     elif "new" in expected:
         check("new: results = expected", s1 == expected["new"], f"got {s1} expected {expected['new']}")
+    page.locator("header select").select_option(index=1)  # a floor with slabs
+    page.wait_for_timeout(600)
+    for sub, what in [("พื้น / บันได", "input[type=number]"), ("ฐานราก", "text=เพิ่ม type ฐานราก")]:
+        page.click(f"main button:has-text('{sub}')")
+        page.wait_for_timeout(600)
+        check(f"new: step 8 tab {sub} editable", page.locator(what).count() > 0 and not page_problems(page), ", ".join(page_problems(page)))
+    page.click("text=เพิ่ม type ฐานราก")
+    page.locator("main table").nth(1).locator("select").first.select_option(index=1)
+    page.wait_for_timeout(1500)
+    check("new: footing type picked", "F1" in page.inner_text("main"), "")
+    page.locator("main table").nth(1).locator("select").first.select_option(index=0)  # back to auto (the saved file is compared with s1)
+    page.wait_for_timeout(1500)
     step(page, "วิเคราะห์")
     check("new: force diagram", page.locator("svg[viewBox='0 0 680 300']").count() > 0)
     step(page, "รายการคำนวณ")

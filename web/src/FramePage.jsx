@@ -14,12 +14,13 @@ import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { analyzeFrame, stackKey } from "../engine/frame.js";
 import { designSlabs } from "../engine/slabDesign.js";
 import { frame3dModel } from "../engine/frame3d.js";
-import { GRADES } from "../engine/tables.js";
+import { GRADES, SLAB_BARS } from "../engine/tables.js";
 import FloorBoard, { TYPE_COLORS } from "./FloorBoard.jsx";
 import ForceCharts from "./ForceCharts.jsx";
 import Frame3D from "./Frame3D.jsx";
 import { downloadDxf, framePlanModel } from "./drawings.js";
 import { LateralChoice, LateralPanel } from "./LateralPanel.jsx";
+import { FootingTypes } from "./FootingTypes.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
@@ -203,10 +204,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
 
   // ---- workflow layout: sub-tabs + view switch, centre (2D / 3D / split or a table page), inspector on the right, drawer, status bar
   const SUBS = { analysis: [["cont", "แรงภายในคาน"], ["colf", "แรงในเสา"], ["frame3d", "เทียบ 2 วิธี / ตั้งค่า"]], loads: [["wall", "ผนัง"], ["other", "น้ำหนักอื่น / หลังคา"], ["groups", "สรุปกลุ่มน้ำหนัก"], ["lateral", "ลม / แผ่นดินไหว / Combination"]],
-    design: [["result", "คาน"], ["cols", "เสา"], ["slabs", "พื้น / บันได"], ["types", "Type คาน"], ["ctypes", "Type เสา"]] };
+    design: [["result", "คาน"], ["cols", "เสา"], ["slabs", "พื้น / บันได"], ["types", "Type คาน"], ["ctypes", "Type เสา"], ["foot", "ฐานราก"]] };
   const subs = SUBS[step], sub = subs ? (subs.some((x) => x[0] === subState) ? subState : subs[0][0]) : null;
   const boardStep = { frame: "frame", grid: "grid", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
-  const tablePage = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || (step === "loads" && ["groups", "lateral"].includes(sub));
+  const tablePage = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs", "foot"].includes(sub)) || (step === "loads" && ["groups", "lateral"].includes(sub));
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
@@ -234,11 +235,17 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     </div>
   ) : step === "design" && sub === "types" ? <TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} />
     : step === "design" && sub === "ctypes" ? <ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} />
+    : step === "design" && sub === "foot" ? <FootingTypes frame={frame} set={set} res={res} />
     : step === "design" && sub === "slabs" ? (
       <div className="space-y-3">
-      <table className="w-full border-collapse text-[12px]"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "เหล็กเสริม", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
+      <table className="w-full border-collapse text-[12px]"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "หนา (ม.)", "ขนาดเหล็ก", "เหล็กเสริม", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
         <tbody>{slabRows.map((x) => <tr key={x.name} className="border-b border-gray-100 tabular-nums"><td className="px-1 py-1">{x.name}</td><td className="px-1">{x.way ?? x.kind}</td><td className="px-1">{x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-"}</td>
-          <td className="px-1">{x.cont ?? "-"}</td><td className="px-1">{x.text ?? x.note}</td><td className={`px-1 ${x.r ? (x.ok ? "text-green-600" : "font-semibold text-red-600") : "text-gray-400"}`}>{x.r ? (x.ok ? "ผ่าน" : "ไม่ผ่าน") : "-"}</td></tr>)}</tbody></table>
+          <td className="px-1">{x.cont ?? "-"}</td>
+          <td className="px-1">{x.key ? <input type="number" step="0.01" value={fl.panels?.[x.key]?.t ?? fl.t} onChange={(e) => setFloor({ panels: { ...fl.panels, [x.key]: { ...fl.panels?.[x.key], t: Number(e.target.value) } } })} className="h-7 w-16 rounded border border-gray-300 bg-transparent px-1" />
+            : x.si !== undefined ? <input type="number" step="0.01" value={fl.stairs[x.si].t ?? 0.12} onChange={(e) => setFloor({ stairs: fl.stairs.map((q, j) => (j === x.si ? { ...q, t: Number(e.target.value) } : q)) })} className="h-7 w-16 rounded border border-gray-300 bg-transparent px-1" /> : "-"}</td>
+          <td className="px-1">{x.key && x.r ? <select value={fl.panels?.[x.key]?.bar ?? "RB 9"} onChange={(e) => setFloor({ panels: { ...fl.panels, [x.key]: { ...fl.panels?.[x.key], bar: e.target.value } } })} className="h-7 rounded border border-gray-300 bg-transparent px-1">{Object.keys(SLAB_BARS).map((b) => <option key={b}>{b}</option>)}</select>
+            : x.si !== undefined && x.r ? <select value={fl.stairs[x.si].mainBar ?? "DB 12"} onChange={(e) => setFloor({ stairs: fl.stairs.map((q, j) => (j === x.si ? { ...q, mainBar: e.target.value } : q)) })} className="h-7 rounded border border-gray-300 bg-transparent px-1">{Object.keys(SLAB_BARS).map((b) => <option key={b}>{b}</option>)}</select> : "-"}</td>
+          <td className="px-1">{x.text ?? x.note}</td><td className={`px-1 ${x.r ? (x.ok ? "text-green-600" : "font-semibold text-red-600") : "text-gray-400"}`}>{x.r ? (x.ok ? "ผ่าน" : "ไม่ผ่าน") : "-"}</td></tr>)}</tbody></table>
       <p className="text-sm font-semibold text-gray-800">โมเมนต์ในพื้นและบันได (ต่อความกว้าง 1 ม.) — {fl.name}</p>
       <div className="grid gap-3 xl:grid-cols-2">{slabRows.filter((x) => x.r).map((x) => <div key={x.name} className="rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200"><p className="text-[12px] font-medium text-[#344054]">{x.name} · {x.way ?? ({ C: "พื้นยื่น", ST: "บันได" })[x.kind]} · {x.text}</p><SlabStrip row={x} /></div>)}</div>
       </div>

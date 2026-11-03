@@ -32,7 +32,9 @@ const capOk = (r) => r.pileOk && r.dOk && r.vOk && r.vpOk && r.vppOk && r.AsOkL 
 export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0) {
   let best = null;
   // per option: bars @0.15 then @0.10; 1–2 pile caps may be widened (bar anchorage, minimum steel)
-  const tries = fo.options.flatMap(([n, pile]) => [fo.bar, "DB 16"].flatMap((bar) => [0.15, 0.1].flatMap((bs) => (n <= 2 ? [0, 0.8, 0.9, 1.0] : [0]).map((w) => [n, pile, bs, w, bar]))));
+  // a footing type (step 8) fixes piles, bar, spacing and cap width (0 = smallest that fits); otherwise every option is tried
+  const tries = fo.fixed ? [[fo.fixed.n, fo.fixed.pile, fo.fixed.s ?? 0.15, fo.fixed.w ?? 0, fo.fixed.bar ?? fo.bar]]
+    : fo.options.flatMap(([n, pile]) => [fo.bar, "DB 16"].flatMap((bar) => [0.15, 0.1].flatMap((bs) => (n <= 2 ? [0, 0.8, 0.9, 1.0] : [0]).map((w) => [n, pile, bs, w, bar]))));
   for (const [n, pile, bs, capWidth, bar] of tries) {
     const b = Number(pile.split("-")[1]) / 100, s = Math.max(0.6, fo.spacing * b);
     const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: fo.cover, t: fo.t, Df: fo.Df, P, Mx, My, gamma: 1800, pier: "rect",
@@ -213,9 +215,9 @@ export function analyzeFrame(frame) {
   const base = (c, list = f3?.base) => list?.find((b) => near(b.p, c.p));
   const footings = g.cols.filter((c) => c.floor === 0).map((c) => {
     const b = base(c), P = Math.max(c.Pbot, b?.R[2] ?? 0), Mx = Math.abs(b?.R[3] ?? 0), My = Math.abs(b?.R[4] ?? 0);
-    const fo = frame.footing ?? DEFAULT_FOOTING, grav = { p: c.p, stack: c.stack, P, Mx, My, combo: "D+L", ...designFooting(P, c.lv, mat, fo, Mx, My) };
+    const ft = frame.footTypes?.[frame.footPick?.[c.stack]], fo = { ...(frame.footing ?? DEFAULT_FOOTING), ...(ft ? { fixed: ft } : {}) }, grav = { p: c.p, stack: c.stack, P, Mx, My, combo: "D+L", ...designFooting(P, c.lv, mat, fo, Mx, My) };
     const lc = (f3?.combos ?? []).filter((cb) => cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, R: base(c, cb.base)?.R })).filter((x) => x.R);
-    if (!lc.length) return grav;
+    if (!lc.length) return { ...grav, type: ft?.name ?? null };
     // lateral combinations: the one with the largest axial load and the ones with the largest base moments are designed too
     const pick = [...new Set([lc.reduce((a, x) => (x.R[2] > a.R[2] ? x : a)), lc.reduce((a, x) => (Math.abs(x.R[3]) > Math.abs(a.R[3]) ? x : a)), lc.reduce((a, x) => (Math.abs(x.R[4]) > Math.abs(a.R[4]) ? x : a))])];
     const minP = Math.min(...lc.map((x) => x.R[2]));
@@ -225,7 +227,7 @@ export function analyzeFrame(frame) {
       if ((worst.ok && !r.ok) || (r.ok === worst.ok && (r.util ?? 0) > (worst.util ?? 0))) worst = r;
     }
     if (minP < 0) g.warnings.push(`ฐานราก ${c.stack}: แรงถอน ${Math.round(-minP)} กก. (ชุด ${lc.find((x) => x.R[2] === minP).name}) — ตรวจแรงถอนเข็ม`);
-    return { ...worst, minP };
+    return { ...worst, minP, type: ft?.name ?? null };
   });
   const lateral = lat && f3?.combos ? lateralChecks(frame, lat, f3) : null;
   // a type whose bars cannot be read would be checked with no steel at all: say so instead of a silent NG
