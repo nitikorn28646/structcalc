@@ -213,16 +213,16 @@ export default function App() {
     const pts = [a, ...ts.map((t) => [+(a[0] + u[0] * t).toFixed(3), +(a[1] + u[1] * t).toFixed(3)]), b];
     return pts.slice(1).map((q, i) => ({ a: pts[i], b: q }));
   });
-  const roofFromStructure = async () => {
+  // roof from the structure (user: import only the columns and the plan, I draw the roof shape and the wall plates myself):
+  // columns + grid + plate level + a faint guide of the top floor (outline + beams) to trace; the roof loads are linked to that floor
+  const roofFromStructure = () => {
     const r = roofFromFrame(frame, fres);
     if (r.error) { setNotice({ ok: false, text: r.error }); return; }
-    const { linkFloor, ...patch } = r;
-    patch.fromFrame = true;
-    // plates under the ดั้ง (posts on the ridges) as on the drawings, so post loads reach columns through real members
-    try { const sk = await loadSkeleton(), rr = runRoof({ ...roof, ...patch }, sk); if (rr.g && rr.fr) patch.innerPlates = splitAtColumns(autoInnerPlates(rr.g, rr.fr), patch.columns); } catch { /* keep without */ }
+    const { linkFloor, pts, columns, grid, H } = r, beams = (frame.floors[linkFloor]?.beams ?? []).map((b) => ({ a: b.a, b: b.b }));
+    const patch = { columns, grid, H, fromFrame: true, guide: { outline: pts, beams } };
     remember(); setRoofState((x) => { const next = { ...x, ...patch }; try { localStorage.setItem("structcalc.roof", JSON.stringify(next)); } catch { /* ignore */ } return next; });
     setFrame("roofLink", { on: true, floor: linkFloor });
-    setNotice({ ok: true, text: `หลังคาจากแปลนโครงสร้าง: ขอบ ${patch.pts.length} มุม · เสา ${patch.columns.length} ต้น · อะเสรับดั้ง ${patch.innerPlates.length} เส้น · ส่งแรงลง ${frame.floors[linkFloor].name}` });
+    setNotice({ ok: true, text: `นำเข้าเสา ${columns.length} ต้น + กริด + แปลน ${frame.floors[linkFloor].name} (เส้นจาง) แล้ว — วาดผนัง/ขอบหลังคา (หรือกด "ใช้ขอบอาคารเป็นผนัง") และวาดอะเสเอง แรงหลังคาจะลงเสา/คานชั้นนั้นอัตโนมัติ` });
   };
   const [tour, setTour] = useState(() => !tourSeen() && !new URLSearchParams(location.search).has("print"));
   const closeTour = () => { markTourSeen(); setTour(false); };
@@ -280,6 +280,8 @@ export default function App() {
   }, [frame]);
   useEffect(() => { // roof → structure link: refresh the roof reactions (not an undo step) when the roof or the link changes
     if (!frame.roofLink?.on || !roof?.pts) return;
+    // nothing drawn to carry the roof yet (no columns / plates — e.g. the user cleared them): no load points, nothing to ask about
+    if (!(roof.columns?.length || roof.plates?.length || roof.innerPlates?.length)) { setFrameState((x) => (x.roofPoints?.length ? { ...x, roofPoints: [] } : x)); return; }
     let alive = true;
     roofPoints(roof, frame.floors[frame.roofLink.floor ?? frame.floors.length - 1] ?? {}).then((r) => { if (!alive || r.error) return; setFrameState((x) => { const next = { ...x, roofPoints: r.pts }; try { localStorage.setItem("structcalc.frame", JSON.stringify(next)); } catch { /* ignore */ } return next; }); });
     return () => { alive = false; };

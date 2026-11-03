@@ -6,14 +6,16 @@ import { fmt } from "./beamModel.js";
 import { autoInnerPlates } from "../engine/roofMembers.js";
 import { LINE_COLORS } from "./Roof3D.jsx";
 import { guessRole, parseDxf, roof3d, roof3dPatch, toPlan } from "./dxfImport.js";
+import { splitPlates } from "./RoofPage.jsx";
+import { useHighlight } from "./highlight.js";
+import { TextSizeControl, useTextScale } from "./uiPrefs.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const TOOLS = [
-  ["select", "เลือก/ย้าย", MousePointer2, "คลิกเลือกเพื่อแก้ตัวเลข · ลากมุมผนัง เสา ดั้ง เพื่อย้าย · คลิกเส้นก่อนแล้วลากปลายเส้น · ลากพื้นที่ว่างเพื่อเลื่อนภาพ · หมุนล้อเมาส์เพื่อซูม"],
+  ["select", "เลือก/ย้าย", MousePointer2, "คลิกเลือกเพื่อแก้ตัวเลข · ลากกรอบที่ว่าง = เลือกหลายชิ้น แล้วกด Delete ลบ (Shift+ลาก = เลื่อนแปลน) · ลากมุมผนัง เสา ดั้ง เพื่อย้าย · คลิกเส้นก่อนแล้วลากปลายเส้น · ลากพื้นที่ว่างเพื่อเลื่อนภาพ · หมุนล้อเมาส์เพื่อซูม"],
   ["wall", "1 ผนัง", Square, "คลิกทีละมุม · คลิกจุดแรกหรือดับเบิลคลิกเพื่อปิดรูป (ร่างใหม่ทับของเดิม) · คลิกป้ายกลางขอบเพื่อสลับ ปั้นหยา/จั่ว"],
   ["column", "2 เสา", Columns3, "คลิกวางเสา (ดูดเข้ามุมผนัง/แนวผนัง/กริด)"],
-  ["plate", "3 อะเส", Ruler, "คลิกเสาต้น → เสาปลาย · ต่อเส้นต่อไปได้เลย · Esc/คลิกขวา เพื่อจบเส้น"],
-  ["inner", "4 อะเสรับดั้ง", Ruler, "คลิกจุดเริ่มบนอะเส → จุดปลาย · ล็อคแนวแกน X/Y เสมอ · ผ่านดั้ง (วงกลมเขียว)"],
+  ["plate", "3 อะเส", Ruler, "คลิกต้น → ปลาย ต่อเส้นได้ · Esc/คลิกขวา จบ · เส้นบนขอบหลังคา = อะเส · เส้นข้างใน = อะเสรับดั้ง (โปรแกรมแยกให้เอง ไม่ต้องเลือก)"],
   ["dang", "ดั้ง", CircleDot, "คลิกวางดั้ง (ดูดเข้าแนวอกไก่/โหนด) · ลบด้วยเครื่องมือลบ · ย้ายด้วยเครื่องมือเลือก"],
   ["support", "สะพาน", GitCommitHorizontal, "สะพานรับจันทัน: คลิกต้น → ปลาย (ล็อคแกน) · ต่อเส้นต่อได้ · Esc จบเส้น"],
   ["erase", "ลบ", Eraser, "คลิกเสา อะเส หรืออะเสรับดั้งที่ต้องการลบ"],
@@ -36,9 +38,16 @@ function autoGrid(pts) {
 export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark, onFromFrame = null }) {
   const svg = useRef(null), [tool, setTool] = useState("column"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true);
   const [start, setStart] = useState(null), [draft, setDraft] = useState([]), [cur, setCur] = useState(null), [drag, setDrag] = useState(null);
+  // box selection like the structure board: drag on empty space with the select tool; Delete removes the selection
+  const hl = useHighlight(), [tScale] = useTextScale();
+  const [box, setBox] = useState(null), [multi, setMulti] = useState([]), [menu, setMenu] = useState(null), [askClear, setAskClear] = useState(false);
   const [pick, setPick] = useState(null), [dims, setDims] = useState(true); // selected item {key, i} for the number panel; column dimensions on plates
   const [hist, setHist] = useState({ undo: [], redo: [] }), [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null);
   const cols = roof.columns ?? [], plates = roof.plates ?? [], inner = roof.innerPlates ?? [];
+  // plates drawn with the one tool: shown as wall plate / interior plate by where they lie (same rule as the design)
+  const innerSet = new Set(splitPlates(roof).innerPlates), autoWallPlates = roof.pts?.length > 2 && !splitPlates(roof).plates.length; // none drawn on the outline → the program puts them on every edge
+  // guide from the structure (faint): outline + beams of the linked floor, to trace the roof; snapped to like any line
+  const guide = roof.guide ?? null, guideSegs = guide ? [...(guide.beams ?? []).map((b) => [b.a, b.b, "แนวคาน (แปลนโครงสร้าง)"]), ...(guide.outline ?? []).map((a, i, P) => [a, P[(i + 1) % P.length], "ขอบอาคาร"])] : [];
   const sups = (roof.supports ?? fr?.supports ?? []).map((s) => ({ a: [+s.a[0].toFixed(3), +s.a[1].toFixed(3)], b: [+s.b[0].toFixed(3), +s.b[1].toFixed(3)] })), supAuto = !roof.supports;
   const posts = fr?.posts.filter((p) => p.kind === "ดั้ง") ?? [], dangList = roof.dang ?? posts.map((p) => [+p.x.toFixed(3), +p.y.toFixed(3)]);
   const ridgeSegs = (g?.lines ?? []).filter((l) => l.type === "ridge" || l.type === "hip" || l.type === "valley").map((l) => [[l.p[0], l.p[1]], [l.q[0], l.q[1]], "แนวอกไก่/ตะเข้"]);
@@ -83,7 +92,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
 
   // ---- snapping: columns, plate ends, wall corners, posts, crossings of walls / plates, points on lines, then grid
   const wallSegs = roof.pts.map((a, i) => [a, roof.pts[(i + 1) % roof.pts.length], "แนวผนัง"]);
-  const allSegs = [...wallSegs, ...plates.map((l) => [l.a, l.b]), ...inner.map((l) => [l.a, l.b]), ...sups.map((l) => [l.a, l.b]), ...ridgeSegs], crossings = [];
+  const allSegs = [...wallSegs, ...plates.map((l) => [l.a, l.b]), ...inner.map((l) => [l.a, l.b]), ...sups.map((l) => [l.a, l.b]), ...ridgeSegs, ...guideSegs], crossings = [];
   for (let i = 0; i < allSegs.length; i++) for (let j = i + 1; j < allSegs.length; j++) {
     const [a, b] = allSegs[i], [c, e] = allSegs[j], rx = b[0] - a[0], ry = b[1] - a[1], sx = e[0] - c[0], sy = e[1] - c[1], den = rx * sy - ry * sx;
     if (Math.abs(den) < 1e-12) continue;
@@ -110,7 +119,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
     if (axis >= 0) { // locked axis: where it meets walls, plates, beams, ridges and grid lines
       let hit = null;
       const take = (q, kind) => { const dd = dist(q, p); if (dd < r && (!hit || dd < hit.d)) hit = { d: dd, p: q, kind }; };
-      for (const [a, b, kind] of [...wallSegs, ...plates.map((l) => [l.a, l.b, "แนวอะเส"]), ...inner.map((l) => [l.a, l.b, "แนวอะเสรับดั้ง"]), ...sups.map((l) => [l.a, l.b, "แนวสะพาน"]), ...ridgeSegs]) {
+      for (const [a, b, kind] of [...guideSegs, ...wallSegs, ...plates.map((l) => [l.a, l.b, "แนวอะเส"]), ...inner.map((l) => [l.a, l.b, "แนวอะเสรับดั้ง"]), ...sups.map((l) => [l.a, l.b, "แนวสะพาน"]), ...ridgeSegs]) {
         const den = axis === 1 ? b[1] - a[1] : b[0] - a[0];
         if (Math.abs(den) < 1e-9) continue;
         const t = axis === 1 ? (from[1] - a[1]) / den : (from[0] - a[0]) / den;
@@ -126,6 +135,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
   // ---- pointer handling
   const lineTool = tool === "plate" || tool === "inner" || tool === "support";
   const onMove = (e) => {
+    if (drag?.box) { const raw0 = toModel(e); setBox((b) => b && { ...b, p1: raw0 }); return; }
     const raw = toModel(e);
     lastRaw.current = raw;
     if (drag?.pan) { const k = px(); setVb((v) => ({ ...v, x: drag.vb.x - (e.clientX - drag.sx) * k, y: drag.vb.y + (e.clientY - drag.sy) * k })); return; }
@@ -159,14 +169,30 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
     for (const [key, list] of Object.entries(LINES)) { const i = list.findIndex((l) => segDist(raw, l.a, l.b).d < r); if (i >= 0) return { sel: { key, i } }; }
     return null;
   };
+  const BOXL = { columns: [cols, (c) => [c]], dang: [dangList, (c) => [c]], plates: [plates, (l) => [l.a, l.b]], innerPlates: [inner, (l) => [l.a, l.b]], supports: [sups, (l) => [l.a, l.b]] };
+  const endBox = () => {
+    const b = box; setBox(null);
+    if (!b || dist(b.p0, b.p1) < 3 * px()) return;
+    const x0 = Math.min(b.p0[0], b.p1[0]), x1 = Math.max(b.p0[0], b.p1[0]), y0 = Math.min(b.p0[1], b.p1[1]), y1 = Math.max(b.p0[1], b.p1[1]), win = b.p1[0] >= b.p0[0];
+    const inside = ([x, y]) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+    const hits = (P) => (win ? P.every(inside) : P.some(inside) || (P.length === 2 && [0.25, 0.5, 0.75].some((t) => inside([P[0][0] + (P[1][0] - P[0][0]) * t, P[0][1] + (P[1][1] - P[0][1]) * t]))));
+    setMulti(Object.entries(BOXL).flatMap(([key, [list, pts]]) => list.map((o, i) => (hits(pts(o)) ? { key, i } : null)).filter(Boolean)));
+  };
+  const delItems = (list) => {
+    const patch = {};
+    for (const [key, [arr]] of Object.entries(BOXL)) { const ids = new Set(list.filter((x) => x?.key === key).map((x) => x.i)); if (ids.size) patch[key] = arr.filter((_, i) => !ids.has(i)); }
+    if (Object.keys(patch).length) { commit(patch); setMulti([]); setPick(null); }
+  };
   const onDown = (e) => {
-    if (e.button === 2) { setStart(null); setDraft([]); return; }
+    if (e.button === 2) { setStart(null); setDraft([]); if (tool === "select" && (multi.length || pick)) setMenu({ x: e.clientX, y: e.clientY }); return; }
+    setMenu(null);
     const raw = toModel(e), r = 12 * px();
     if (e.button === 1 || tool === "select") {
       if (tool === "select" && e.button === 0) {
         const h = grabAt(raw, r);
         setPick(h?.sel ?? null);
         if (h?.drag) { setHist((x) => ({ undo: [...x.undo.slice(-50), snapshot()], redo: [] })); setDrag(h.drag); return; }
+        if (!h && !e.shiftKey) { setMulti([]); setDrag({ box: true }); setBox({ p0: raw, p1: raw }); return; }
       }
       setDrag({ pan: true, sx: e.clientX, sy: e.clientY, vb }); return;
     }
@@ -218,7 +244,9 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
     const k = (e) => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
       const drawing = (lineTool && start) || (tool === "wall" && draft.length);
-      if (e.key === "Escape") { setStart(null); setDraft([]); setTyped(""); }
+      if (e.key === "Escape") { setStart(null); setDraft([]); setTyped(""); setMulti([]); setMenu(null); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") { e.preventDefault(); setTool("select"); setMulti(Object.entries(BOXL).flatMap(([key, [list]]) => list.map((_, i) => ({ key, i })))); }
+      else if (!drawing && (e.key === "Delete" || e.key === "Backspace") && (multi.length || pick)) { e.preventDefault(); delItems(multi.length ? multi : [pick]); }
       else if (drawing && /^[0-9.]$/.test(e.key)) setTyped((t) => t + e.key);
       else if (drawing && e.key === "Backspace") setTyped((t) => t.slice(0, -1));
       else if (e.key === "Enter" && typed) { const p = typedPoint(); setTyped(""); if (p) place(p); }
@@ -252,40 +280,50 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
   // ---- drawing helpers (svg y = −y)
   const k = px(), S = (p) => `${p[0]},${-p[1]}`, ring = (P) => P.map(S).join(" ");
   // structural grid: axis lines dash-dot with bubbles (A, B… along X, 1, 2… along Y), subdivision lines faint
+  // text grows with the drawing once zoomed in past the fit view (never smaller than at fit), times the user's text size
+  const kFit = fit().w / (svg.current?.clientWidth || 1000), kt = Math.max(k, kFit) * tScale;
   const ext = { x0: Math.min(...SX) - 1.5, x1: Math.max(...SX) + 1.5, y0: Math.min(...SY) - 1.5, y1: Math.max(...SY) + 1.5 };
   const grid = [
     ...SX.filter((x) => !GX.some((v) => Math.abs(v - x) < 1e-6)).map((x, i) => <line key={`sx${i}`} x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} strokeWidth={0.6 * k} />),
     ...SY.filter((y) => !GY.some((v) => Math.abs(v - y) < 1e-6)).map((y, i) => <line key={`sy${i}`} y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} strokeWidth={0.6 * k} />),
   ];
   grid.push(...(G.ax ?? []).map((x, i) => <g key={`ax${i}`}><line x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} stroke="#f79009" strokeOpacity={0.55} strokeWidth={1 * k} strokeDasharray={`${6 * k} ${4 * k}`} />
-    <text x={x} y={-(ext.y0 - 14 * k)} fontSize={10 * k} textAnchor="middle" fill="#f79009" stroke="none">{fmt(x, 2)}</text></g>));
+    <text x={x} y={-(ext.y0 - 14 * kt)} fontSize={10 * kt} textAnchor="middle" fill="#f79009" stroke="none">{fmt(x, 2)}</text></g>));
   grid.push(...(G.ay ?? []).map((y, i) => <g key={`ay${i}`}><line y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} stroke="#f79009" strokeOpacity={0.55} strokeWidth={1 * k} strokeDasharray={`${6 * k} ${4 * k}`} />
-    <text x={ext.x0 - 4 * k} y={-y} fontSize={10 * k} textAnchor="end" dominantBaseline="middle" fill="#f79009" stroke="none">{fmt(y, 2)}</text></g>));
+    <text x={ext.x0 - 4 * kt} y={-y} fontSize={10 * kt} textAnchor="end" dominantBaseline="middle" fill="#f79009" stroke="none">{fmt(y, 2)}</text></g>));
   const bubble = (key, p, t) => (
-    <g key={key}><circle cx={p[0]} cy={-p[1]} r={11 * k} fill={dark ? "#181c30" : "#fff"} stroke={dark ? "#9097b1" : "#667085"} strokeWidth={1.2 * k} />
-      <text x={p[0]} y={-p[1]} fontSize={11 * k} textAnchor="middle" dominantBaseline="central" stroke="none" fill={dark ? "#cdd1e2" : "#344054"}>{t}</text></g>
+    <g key={key}><circle cx={p[0]} cy={-p[1]} r={11 * kt} fill={dark ? "#181c30" : "#fff"} stroke={dark ? "#9097b1" : "#667085"} strokeWidth={1.2 * k} />
+      <text x={p[0]} y={-p[1]} fontSize={11 * kt} textAnchor="middle" dominantBaseline="central" stroke="none" fill={dark ? "#cdd1e2" : "#344054"}>{t}</text></g>
   );
   const axes = [
     ...GX.flatMap((x, i) => [<line key={`gx${i}`} x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} strokeWidth={1.1 * k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />,
-      bubble(`bx${i}`, [x, ext.y1 + 12 * k], xName(i))]),
+      bubble(`bx${i}`, [x, ext.y1 + 12 * kt], xName(i))]),
     ...GY.flatMap((y, i) => [<line key={`gy${i}`} y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} strokeWidth={1.1 * k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />,
-      bubble(`by${i}`, [ext.x1 + 12 * k, y], yName(i))]),
-    ...GX.slice(1).map((x, i) => <text key={`dx${i}`} x={(x + GX[i]) / 2} y={-(ext.y1 - 4 * k)} fontSize={10 * k} textAnchor="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(x - GX[i], 2)}</text>),
-    ...GY.slice(1).map((y, i) => <text key={`dy${i}`} x={ext.x1 - 4 * k} y={-(y + GY[i]) / 2} fontSize={10 * k} textAnchor="end" dominantBaseline="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(y - GY[i], 2)}</text>),
+      bubble(`by${i}`, [ext.x1 + 12 * kt, y], yName(i))]),
+    ...GX.slice(1).map((x, i) => <text key={`dx${i}`} x={(x + GX[i]) / 2} y={-(ext.y1 - 4 * kt)} fontSize={10 * kt} textAnchor="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(x - GX[i], 2)}</text>),
+    ...GY.slice(1).map((y, i) => <text key={`dy${i}`} x={ext.x1 - 4 * kt} y={-(y + GY[i]) / 2} fontSize={10 * kt} textAnchor="end" dominantBaseline="middle" fill={dark ? "#9097b1" : "#667085"} stroke="none">{fmt(y - GY[i], 2)}</text>),
   ];
   const from = lineTool ? start : tool === "wall" ? draft[draft.length - 1] : null, live = cur?.p && from ? dist(from, cur.p) : null;
-  const txt = (p, s, color, size = 12, anchor = "middle") => <text x={p[0]} y={-p[1]} fontSize={size * k} fill={color} textAnchor={anchor} dominantBaseline="middle">{s}</text>;
+  const txt = (p, s, color, size = 12, anchor = "middle") => <text x={p[0]} y={-p[1]} fontSize={size * kt} fill={color} textAnchor={anchor} dominantBaseline="middle">{s}</text>;
   const btn = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1";
   const info = TOOLS.find((t) => t[0] === tool);
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-5">
+      {menu && <div className="fixed z-50 min-w-[170px] rounded-lg border border-gray-200 bg-white p-1 text-[13px] shadow-lg" style={{ left: menu.x, top: menu.y }} onPointerLeave={() => setMenu(null)}>
+        <button onClick={() => { delItems(multi.length ? multi : [pick]); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-red-600 hover:bg-red-50">ลบที่เลือก ({multi.length || 1})</button>
+        <button onClick={() => { setMulti([]); setPick(null); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50">ยกเลิกการเลือก</button>
+      </div>}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2">
         {TOOLS.map(([key, label, Icon]) => (
           <button key={key} onClick={() => { setTool(key); setStart(null); setDraft([]); }}
             className={`${btn} ${tool === key ? "bg-brand-500 text-[#fff] ring-brand-500" : "text-gray-700 ring-gray-300 hover:bg-gray-50"}`}><Icon className="h-3.5 w-3.5" />{label}</button>
         ))}
+        <button onClick={() => { if (!askClear) { setAskClear(true); setTimeout(() => setAskClear(false), 4000); return; }
+            commit({ pts: [], edges: [], columns: [], plates: [], innerPlates: [], dang: [], supports: null }); setAskClear(false); setMulti([]); setPick(null); }}
+          title="ลบผนัง เสา อะเส ดั้ง และสะพานทั้งหมดของหลังคา (ย้อนกลับได้ Ctrl+Z)" className={`${btn} ${askClear ? "bg-red-600 text-[#fff] ring-red-600" : "text-red-600 ring-red-200 hover:bg-red-50"}`}>{askClear ? "กดอีกครั้งเพื่อลบทั้งหมด" : "ลบทั้งหมด"}</button>
         <span className="mx-1 h-6 w-px bg-gray-200" />
+        <TextSizeControl />
         <button onClick={() => setOrtho(!ortho)} className={`${btn} ${ortho ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}>ล็อคแกน X/Y</button>
         <button onClick={() => setSnapOn(!snapOn)} className={`${btn} ${snapOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Magnet className="h-3.5 w-3.5" />ล็อคโหนด</button>
         <button onClick={() => setDims(!dims)} className={`${btn} ${dims ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}>ระยะเสา</button>
@@ -300,7 +338,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
         <div className="relative min-h-[480px] overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <svg ref={svg} viewBox={`${vb.x} ${-(vb.y + vb.h)} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet"
             className={`h-full w-full select-none ${tool === "select" ? "cursor-grab" : "cursor-crosshair"}`}
-            onPointerMove={onMove} onPointerDown={onDown} onPointerUp={() => setDrag(null)} onPointerLeave={() => { setDrag(null); setCur(null); }}
+            onPointerMove={onMove} onPointerDown={onDown} onPointerUp={() => { if (drag?.box) endBox(); setDrag(null); }} onPointerLeave={() => { setDrag(null); setCur(null); }}
             onDoubleClick={() => tool === "wall" && closeWall()} onContextMenu={(e) => e.preventDefault()} onWheel={onWheel}>
             <g stroke={dark ? "#323a5c" : "#e4e7ec"}>{grid}</g>
             <g stroke={dark ? "#6e7591" : "#98a2b3"}>{axes}</g>
@@ -317,7 +355,23 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
                 </g>
               );
             })}
-            {plates.map((l, i) => <line key={`p${i}`} x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={PLATE} strokeWidth={5 * k} strokeLinecap="round" />)}
+            {multi.map((m, j) => { const o = BOXL[m.key][0][m.i]; if (!o) return null; const P = BOXL[m.key][1](o);
+              return P.length === 1 ? <circle key={`m${j}`} cx={P[0][0]} cy={-P[0][1]} r={14 * k} fill="#f79009" fillOpacity={0.3} />
+                : <line key={`m${j}`} x1={P[0][0]} y1={-P[0][1]} x2={P[1][0]} y2={-P[1][1]} stroke="#f79009" strokeOpacity={0.5} strokeWidth={12 * k} strokeLinecap="round" />; })}
+            {box && <rect x={Math.min(box.p0[0], box.p1[0])} y={-Math.max(box.p0[1], box.p1[1])} width={Math.abs(box.p1[0] - box.p0[0])} height={Math.abs(box.p1[1] - box.p0[1])}
+              fill={box.p1[0] >= box.p0[0] ? "#465fff14" : "#12b76a14"} stroke={box.p1[0] >= box.p0[0] ? "#465fff" : "#12b76a"} strokeWidth={1.2 * k} strokeDasharray={box.p1[0] >= box.p0[0] ? "none" : `${5 * k} ${3 * k}`} />}
+            {hl && <g pointerEvents="none">
+            {hl.to && <line x1={hl.p[0]} y1={-hl.p[1]} x2={hl.to[0]} y2={-hl.to[1]} stroke="#d92d20" strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />}
+            <circle cx={hl.p[0]} cy={-hl.p[1]} r={16 * k} fill="#d92d2033" stroke={hl.bad ? "#d92d20" : "#12b76a"} strokeWidth={3 * k}><animate attributeName="r" values={`${12 * k};${24 * k};${12 * k}`} dur="1s" repeatCount="indefinite" /></circle>
+            {hl.to && <circle cx={hl.to[0]} cy={-hl.to[1]} r={7 * k} fill="#d92d20" />}
+          </g>}
+            {guide && <g opacity={0.55} pointerEvents="none">
+              {(guide.beams ?? []).map((b, i) => <line key={`gb${i}`} x1={b.a[0]} y1={-b.a[1]} x2={b.b[0]} y2={-b.b[1]} stroke="#98a2b3" strokeWidth={2 * k} />)}
+              {guide.outline?.length > 2 && <polygon points={ring(guide.outline)} fill="none" stroke="#667085" strokeWidth={1.5 * k} strokeDasharray={`${6 * k} ${4 * k}`} />}
+            </g>}
+            {autoWallPlates && <g pointerEvents="none"><polygon points={ring(roof.pts)} fill="none" stroke={PLATE} strokeWidth={4 * k} strokeDasharray={`${10 * k} ${6 * k}`} opacity={0.75} />
+              {txt([roof.pts[0][0] + 8 * k, roof.pts[0][1] - 16 * k], "อะเสรอบนอก: อัตโนมัติ (ตัดช่วงที่เสา) — วาดเองเฉพาะถ้าต้องการกำหนดช่วงเอง", PLATE, 11, "start")}</g>}
+            {plates.map((l, i) => <line key={`p${i}`} x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={innerSet.has(l) ? INNER : PLATE} strokeWidth={(innerSet.has(l) ? 4 : 5) * k} strokeLinecap="round" />)}
             {inner.map((l, i) => (
               <g key={`i${i}`}>
                 <line x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={INNER} strokeWidth={4 * k} strokeLinecap="round" />
@@ -376,8 +430,10 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
 
         <div className="space-y-3 overflow-y-auto">
           <section className="rounded-2xl border border-gray-200 bg-white p-3 text-[13px]">
-            {onFromFrame && <button onClick={onFromFrame} title="แทนผนัง เสา อะเส และกริดของหลังคาด้วยขอบอาคารและเสาจากขั้น 2 แล้วส่งแรงหลังคาลงเสาชั้นบนสุด (ย้อนกลับได้ Ctrl+Z)"
-              className={`${btn} mb-2 w-full justify-center bg-brand-500 text-[#fff] ring-brand-500`}>ใช้แปลนจากโครงสร้าง (ขั้น 2)</button>}
+            {onFromFrame && <button onClick={onFromFrame} title="นำเข้าเสา กริด และแปลนคานชั้นบนสุด (เส้นจาง) — ไม่สร้างหลังคาหรืออะเสให้ วาดเอง แรงหลังคาลงเสา/คานชั้นนั้นอัตโนมัติ"
+              className={`${btn} mb-2 w-full justify-center bg-brand-500 text-[#fff] ring-brand-500`}>นำเข้าเสา + แปลนจากโครงสร้าง (ขั้น 2)</button>}
+            {guide?.outline?.length > 2 && <button onClick={() => { commit({ pts: guide.outline, edges: guide.outline.map(() => ({ type: "hip" })), supports: null }); setTimeout(() => setVb(fit()), 50); }}
+              title="วางผนัง/ขอบหลังคาตามขอบอาคารจากแปลนโครงสร้าง (แก้มุมต่อได้)" className={`${btn} mb-2 w-full justify-center text-gray-700 ring-gray-300`}>ใช้ขอบอาคารเป็นผนัง</button>}
             <label className={`${btn} w-full cursor-pointer justify-center ${onFromFrame ? "text-gray-700 ring-gray-300" : "bg-brand-500 text-[#fff] ring-brand-500"}`}><FileUp className="h-3.5 w-3.5" />นำเข้าจาก CAD (DXF)
               <input type="file" accept=".dxf" className="hidden" onChange={async (e) => {
                 const f = e.target.files[0]; e.target.value = "";

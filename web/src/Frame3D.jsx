@@ -9,6 +9,7 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import * as THREE from "three";
 import { TYPE_COLORS } from "./FloorBoard.jsx";
 import { DEFAULT_WALL_TYPES, resolveWall, wallThick, wallsOf } from "../engine/floor.js";
+import { useHighlight } from "./highlight.js";
 
 const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"]];
 const WALL_T = { brick: 0.1, brick2: 0.2, block: 0.1, light: 0.1, gypsum: 0.1 }; // wall thickness (m) incl. plaster
@@ -98,7 +99,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
   const Z = frame.floors.map((f) => (z += f.h ?? 3)), top = z, span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), top, 4);
   const shown = (k) => floorsShown === "all" || (floorsShown === "upto" ? k <= cur : k === cur);
   const wt = frame.wallTypes ?? DEFAULT_WALL_TYPES, base0 = (frame.floors[0]?.name ?? "").includes("+0.40") ? 0.4 : 0.4; // footing top at −0.40 in the drawings
-  const fo = frame.footing ?? { t: 0.4 };
+  const fo = frame.footing ?? { t: 0.4 }, hl = useHighlight(), hz = Z[frame.roofLink?.floor ?? frame.floors.length - 1] ?? top; // highlighted point: at the linked (roof) floor
   const scene = (
     <Canvas dpr={[1, 2]} camera={{ position: [span, span * 0.8, span * 1.1], fov: 35, near: 0.1, far: 500 }}>
       <color attach="background" args={[dark ? "#0f1222" : "#f4f5f7"]} />
@@ -112,6 +113,10 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
               {(f.r.piles ?? []).map(([px, py], j) => <Box key={j} p={[f.p[0] + px - 0.09, f.p[1] + py]} q={[f.p[0] + px + 0.09, f.p[1] + py]} w={0.18} z0={-(f.inp?.t ?? fo.t ?? 0.4) - 1.5} h={1.5} color="#7c828f" />)}
             </group>
           ))}
+          {hl && <group>
+            <mesh position={[hl.p[0], hz + 0.35, -hl.p[1]]}><sphereGeometry args={[0.28, 24, 16]} /><meshStandardMaterial color={hl.bad ? "#d92d20" : "#12b76a"} emissive={hl.bad ? "#d92d20" : "#12b76a"} emissiveIntensity={0.6} /></mesh>
+            {hl.to && <mesh position={[hl.to[0], hz + 0.35, -hl.to[1]]}><sphereGeometry args={[0.16, 16, 12]} /><meshStandardMaterial color="#d92d20" /></mesh>}
+          </group>}
           {frame.floors.map((fl, k) => {
             if (!shown(k)) return null;
             const an = res.floors[k], Zk = Z[k], H = fl.h ?? 3, zb = k ? Z[k - 1] : 0;

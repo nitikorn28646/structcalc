@@ -135,7 +135,7 @@ export function designRoof(g, fr, roof, d) {
   // Members designed span by span: each may carry its own section ("memberPick") and single/double ("memberCount").
   const members = [];
   const lerp = (p, q, t) => p.map((v, i) => v + (q[i] - v) * t);
-  const addMember = (group, pk, ck, id, label, p, q, span, run) => {
+  const addMember = (group, pk, ck, id, label, p, q, span, run, extra = {}) => {
     const len = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]), types = group === "plate" ? (d.plateTypes ?? []).filter((t) => findSection(...t.pick.split(":"))) : [];
     if (types.length) {
       // wall-plate types (AS1, AS2, …): the span's own type, or the lightest type that passes
@@ -150,12 +150,12 @@ export function designRoof(g, fr, roof, d) {
         for (const c of order) { const rc = run(c.sec, c.t.count); if (rc.ok) { o = c; r = rc; break; } if (!best || util(rc) < util(best.r)) best = { o: c, r: rc }; }
         if (!r) ({ o, r } = best);
       }
-      members.push({ id, group, label, p, q, span, count: o.t.count, len, r: { ...r, fixed: true }, own: !!fixed, typeName: o.t.name, typeIdx: o.i });
+      members.push({ id, group, label, p, q, span, count: o.t.count, len, r: { ...r, fixed: true }, own: !!fixed, typeName: o.t.name, typeIdx: o.i, ...extra });
       return;
     }
     const count = d.memberCount?.[id] ?? d.counts[ck], choice = d.memberPick?.[id] ?? d.pick[pk];
     const r = choose(choice, (section) => run(section, count), d, true);
-    members.push({ id, group, label, p, q, span, count, len: Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]), r, own: !!d.memberPick?.[id] });
+    members.push({ id, group, label, p, q, span, count, len: Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]), r, own: !!d.memberPick?.[id], ...extra });
   };
   // split a straight line into n equal spans between posts / columns
   const spans = (group, pk, ck, id, label, p, q, maxL, run, nFix) => {
@@ -210,10 +210,16 @@ export function designRoof(g, fr, roof, d) {
     const fb = r.fb * km, dd = r.d * kd, dAllow = (Ld * 100) / lim;
     return { ...r, Mx: r.Mx * km, SxReq: r.SxReq * km, fb, d: dd, dAllow, Ld, mode, ok: fb <= r.Fb && dd <= dAllow };
   };
-  if (roof.plates?.length) {
+  const cantRun = (section, count, L) => {
+    const r = plateRun(section, count, L), fb = r.fb * 4, dd = r.d * 9.6, dAllow = r.dAllow * 2;
+    return { ...r, Mx: r.Mx * 4, SxReq: r.SxReq * 4, fb, d: dd, dAllow, R: r.w * (r.Ld ?? L), cant: true, ok: fb <= r.Fb && dd <= dAllow };
+  };
+  // no plates drawn but columns placed (e.g. imported from the structure): wall plates on every outline edge, cut at those columns
+  const platesIn = roof.plates?.length ? roof.plates : (roof.columns?.length ? g.pts.map((a, i) => ({ a, b: g.pts[(i + 1) % g.pts.length] })) : []);
+  if (platesIn.length) {
     // plates drawn by the user: each line is split into spans at the drawn columns lying on it
     const cols = roof.columns ?? [];
-    roof.plates.forEach((ln, i) => {
+    platesIn.forEach((ln, i) => {
       const L = Math.hypot(ln.b[0] - ln.a[0], ln.b[1] - ln.a[1]);
       if (L < 0.1) return;
       const cuts = [0, ...cols.map((c) => {
@@ -222,9 +228,15 @@ export function designRoof(g, fr, roof, d) {
         return t > 0.01 && t < 0.99 && off < 0.05 ? t : null;
       }).filter((t) => t !== null).sort((x, y) => x - y), 1];
       const P = (t) => [ln.a[0] + (ln.b[0] - ln.a[0]) * t, ln.a[1] + (ln.b[1] - ln.a[1]) * t, g.H];
-      cuts.slice(1).forEach((t, j) => addMember("plate", "plate", "plate", `plate-${i + 1}-${j + 1}`,
-        cuts.length > 2 ? `อะเส เส้น ${i + 1} ช่วง ${j + 1}/${cuts.length - 1}` : `อะเส เส้น ${i + 1}`, P(cuts[j]), P(t), (t - cuts[j]) * L,
-        (section, count) => plateRun(section, count, (t - cuts[j]) * L)));
+      // an end piece beyond the last column on a line with columns = cantilever plate (อะเสยื่น) — its free end carries nothing
+      const hasCol = (t) => cols.some((c) => Math.hypot(c[0] - (ln.a[0] + (ln.b[0] - ln.a[0]) * t), c[1] - (ln.a[1] + (ln.b[1] - ln.a[1]) * t)) < 0.05);
+      const nCol = cuts.filter((t) => hasCol(t)).length;
+      cuts.slice(1).forEach((t, j) => {
+        const t0 = cuts[j], free = nCol > 0 ? (t0 === 0 && !hasCol(0) ? "p" : t === 1 && !hasCol(1) ? "q" : null) : null, Ls = (t - t0) * L;
+        addMember("plate", "plate", "plate", `plate-${i + 1}-${j + 1}`,
+          `${free ? "อะเสยื่น" : "อะเส"} เส้น ${i + 1}${cuts.length > 2 ? ` ช่วง ${j + 1}/${cuts.length - 1}` : ""}`, P(t0), P(t), Ls,
+          (section, count) => (free ? cantRun : plateRun)(section, count, Ls), free ? { free } : {});
+      });
     });
   } else {
     g.pts.forEach((p, i) => { const q = g.pts[(i + 1) % g.pts.length];

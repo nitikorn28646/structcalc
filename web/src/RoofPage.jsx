@@ -44,9 +44,21 @@ export function useSkeleton() {
 // a new project starts with no roof (user: a sample roof appeared from nowhere) — outline from the structure, DXF or drawing
 export const EMPTY_ROOF = { ...DEFAULT_ROOF, pts: [], edges: [], columns: [], plates: [], innerPlates: [], dang: null, supports: null, grid: null };
 
-export function runRoof(roof, sk) {
+// one kind of wall plate for the user (no separate อะเส / อะเสรับดั้ง tools): a plate lying on an outline edge is a wall plate,
+// any other plate is an interior plate (carries ดั้ง / plates resting on it) — decided here from the geometry every time
+export function splitPlates(roof) {
+  const P = roof.pts ?? [], all = [...(roof.plates ?? []), ...(roof.innerPlates ?? [])];
+  const onEdge = (p) => P.some((q, i) => { const r = P[(i + 1) % P.length], L = Math.hypot(r[0] - q[0], r[1] - q[1]); if (L < 1e-9) return false;
+    const t = ((p[0] - q[0]) * (r[0] - q[0]) + (p[1] - q[1]) * (r[1] - q[1])) / (L * L);
+    return t > -0.001 && t < 1.001 && Math.abs((p[0] - q[0]) * (r[1] - q[1]) - (p[1] - q[1]) * (r[0] - q[0])) / L < 0.05; });
+  const out = (l) => onEdge(l.a) && onEdge(l.b) && onEdge([(l.a[0] + l.b[0]) / 2, (l.a[1] + l.b[1]) / 2]);
+  return { plates: all.filter(out), innerPlates: all.filter((l) => !out(l)) };
+}
+
+export function runRoof(roof0, sk) {
   if (!sk) return {};
-  if (!(roof?.pts?.length >= 3)) return { empty: true };
+  if (!(roof0?.pts?.length >= 3)) return { empty: true };
+  const roof = { ...roof0, ...splitPlates(roof0) };
   try { const g = roofGeometry(roof, sk); const fr = frameRoof(g, roof, roof.supports); return { g, fr, dz: designRoof(g, fr, roof, roof.design) }; } catch (e) { return { error: e.message }; }
 }
 
@@ -326,13 +338,20 @@ function SlopeFrom({ roof, g, set }) {
         onBlur={(e) => { const t = parse(e.target.value.trim()); if (t > 0 && t < 20 && Math.abs(toDeg(t) - roof.slope) > 1e-3) set("slope", toDeg(t)); }} />
     </Field>
   );
-  return (<>
-    {box("ระดับยอดอกไก่", "m", g.top.toFixed(3), (v) => (Number(v) - roof.H) / run)}
-    {box("สูง : ราบ", "", `1:${(1 / tan).toFixed(3).replace(/\.?0+$/, "")}`, (v) => {
-      const m = /^([\d.]+)\s*[:/]\s*([\d.]+)$/.exec(v);
-      return m ? Number(m[1]) / Number(m[2]) : Number(v);
-    })}
-  </>);
+  // hip / gable roofs are set by the slope alone (the ridge level follows); the ridge level or rise : run is an optional
+  // second way in, folded away (user: only needed when a drawing gives heights, e.g. a lean-to)
+  return (
+    <details className="col-span-2 rounded-md border border-gray-200 px-2 py-1 text-[12px]">
+      <summary className="cursor-pointer text-gray-500">อกไก่สูง +{g.top.toFixed(2)} ม. (จากความชัน) · กำหนดจากความสูงแทน (ไม่บังคับ)</summary>
+      <div className="mt-2 grid grid-cols-2 gap-3">
+        {box("ระดับยอดอกไก่", "m", g.top.toFixed(3), (v) => (Number(v) - roof.H) / run)}
+        {box("สูง : ราบ", "", `1:${(1 / tan).toFixed(3).replace(/\.?0+$/, "")}`, (v) => {
+          const m = /^([\d.]+)\s*[:/]\s*([\d.]+)$/.exec(v);
+          return m ? Number(m[1]) / Number(m[2]) : Number(v);
+        })}
+      </div>
+    </details>
+  );
 }
 
 export function RoofPage({ roof, set, dark, onFromFrame = null }) {

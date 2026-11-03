@@ -140,9 +140,11 @@ def test_new_project(browser, expected, save):
     check("new: model built from the UI", s and s["columns"].split("/")[1] != "0", str(s))
     step(page, "หลังคา")
     page.wait_for_timeout(1500)
-    page.click("button:has-text('ใช้แปลนจากโครงสร้าง')")
+    page.click("button:has-text('นำเข้าเสา + แปลนจากโครงสร้าง')")
+    page.wait_for_timeout(1500)
+    check("new: roof from structure (columns + plan)", "นำเข้าเสา" in page.inner_text("header"), page.inner_text("header")[:200])
+    page.click("button:has-text('ใช้ขอบอาคารเป็นผนัง')")  # the user draws the roof; here the building outline is taken as the walls
     page.wait_for_timeout(5000)
-    check("new: roof from structure", "หลังคาจากแปลนโครงสร้าง" in page.inner_text("header"), page.inner_text("header")[:200])
     card = page.locator("text=หลังคา → โครงสร้าง").first.locator("xpath=..").inner_text()
     check("new: roof loads reach the columns", "ตัน ลง" in card, card[:160])
     step(page, "ออกแบบสมาชิก")

@@ -8,7 +8,8 @@ export async function roofPoints(roof, host = {}) {
     if (error || !dz) return { error: error ?? "ไม่มีข้อมูลหลังคา" };
     const pts = [], plates = dz.members.filter((x) => x.group === "plate"), cols = roof.columns ?? [];
     const addAt = (p, P) => { const hit = pts.find((x) => Math.hypot(x.p[0] - p[0], x.p[1] - p[1]) < 0.05); if (hit) hit.P += P; else pts.push({ p: [+p[0].toFixed(3), +p[1].toFixed(3)], P, name: "หลังคา" }); };
-    for (const m of plates) for (const [p, R] of [[m.p, m.inner ? m.r.Rl : m.r.R], [m.q, m.inner ? m.r.Rr : m.r.R]]) {
+    for (const m of plates) for (const [p, R] of [[m.p, m.inner ? m.r.Rl : m.free === "p" ? 0 : m.r.R], [m.q, m.inner ? m.r.Rr : m.free === "q" ? 0 : m.r.R]]) {
+      if (!(R > 0)) continue; // free end of a cantilever plate
       // an interior plate ending on a wall plate between columns: split its reaction to that span's ends (lever rule)
       const onCol = cols.some((c) => Math.hypot(c[0] - p[0], c[1] - p[1]) < 0.05), host = m.inner && !onCol && plates.find((w) => !w.inner && (() => {
         const L = Math.hypot(w.q[0] - w.p[0], w.q[1] - w.p[1]), t = ((p[0] - w.p[0]) * (w.q[0] - w.p[0]) + (p[1] - w.p[1]) * (w.q[1] - w.p[1])) / (L * L);

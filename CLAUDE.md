@@ -287,3 +287,11 @@ Radix + class-variance-authority + tailwind-merge, `@` alias → src in vite.con
 follows). ui.jsx Card / Field / NumberInput / TextInput / Select (native, shadcn style) / Badge / Button wrap them; FramePage sub-tabs and view
 switch = Tabs; tool rail + side-panel rail = Tooltip (TooltipProvider in main.jsx); DXF import (floor + roof) and the tour = Dialog.
 Side-panel tables fill the panel height (no fixed 260 px).
+ROOF DRAWING (2026-11-03, user feedback): "นำเข้าเสา + แปลนจากโครงสร้าง" brings columns + grid + plate level + roof.guide {outline, beams} (faint,
+snappable) — no roof shape / plates are made ("ใช้ขอบอาคารเป็นผนัง" adopts the outline). One plate tool: RoofPage splitPlates decides wall plate
+(on an outline edge) vs interior plate every run. No plates drawn + columns → outline edges as plates cut at the columns; an end piece beyond the
+last column = cantilever plate (cantRun: M ×4, δ ×9.6, allow ×2, all load to the column; roofLink skips the free end). No columns/plates → no
+roof load points (card says draw plates first). Point table closed by default; hovering a row highlights the point on the plan boards and in
+Frame3D (src/highlight.js). Box select (drag on empty; L→R window, R→L crossing), Delete / right-click menu, Ctrl+A, roof "ลบทั้งหมด" (two clicks)
+in both boards; Shift / middle-drag pans. Plan text grows with zoom (kt = max(k, kFit)) × the user's text size (src/uiPrefs.jsx, A−/A+, per browser).
+Ridge level / rise:run folded as optional (slope sets hip / gable roofs).

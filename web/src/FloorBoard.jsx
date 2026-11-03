@@ -6,13 +6,15 @@ import { arcPolyline } from "../engine/arc.js";
 import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Hand, Magnet, MousePointer2, PanelTop, Redo2, Ruler, Undo2, Wand2, Copy } from "lucide-react";
 import { frame3dFromDxf, guessRole, parseDxf, toPlan } from "./dxfImport.js";
 import { Tip } from "@/components/ui/tooltip";
+import { useHighlight } from "./highlight.js";
+import { TextSizeControl, useTextScale } from "./uiPrefs.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "./beamModel.js";
 import { dist, gridAxes, round3, segCross, segDist } from "./planKit.js";
 import { GROUPS, STAIR_KINDS, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
 
 export const TYPE_COLORS = ["#3e63dd", "#30a46c", "#f76b15", "#8e4ec6", "#0e9384", "#b54708", "#d6409f", "#465fff"];
-const SEL = ["select", "เลือก/ย้าย", MousePointer2, "คลิกเพื่อเลือกและแก้ค่า · ลากเสาเพื่อย้าย (ปลายคานตามไป) · ลากที่ว่างเพื่อเลื่อน · ล้อเมาส์ซูม"];
+const SEL = ["select", "เลือก/ย้าย", MousePointer2, "คลิกเพื่อเลือกและแก้ค่า · ลากเสาเพื่อย้าย (ปลายคานตามไป) · ลากกรอบที่ว่าง = เลือกหลายชิ้น (ซ้าย→ขวา เฉพาะที่อยู่ในกรอบ · ขวา→ซ้าย ที่แตะกรอบ) แล้วกด Delete เพื่อลบ · Shift+ลาก หรือปุ่มกลางเมาส์ = เลื่อนแปลน · ล้อเมาส์ซูม"];
 const TOOLS = {
   frame: [SEL, ["column", "เสา", Columns3, "คลิกวางเสา · กรอบประ = เสาชั้นล่าง · ชี้บนคานแล้วพิมพ์ระยะ + Enter = วางห่างปลายคาน"],
     ["beam", "คาน", Ruler, "คลิกต้น → ปลาย ต่อเนื่องได้ · พิมพ์ความยาว + Enter · Esc จบ · ปลายบนคานอื่น = คานซอย · ปลายลอย = คานยื่น"],
@@ -23,6 +25,7 @@ const TOOLS = {
   other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["area", "เพิ่มบนพื้น", PanelTop, "คลิกแผ่นพื้นเพื่อเพิ่มน้ำหนักต่อพื้นที่จากคลัง เช่น ห้องน้ำ / ฝ้า"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
   result: [SEL], cols: [SEL], grid: [SEL],
 };
+const BOXABLE = { frame: ["column", "beam"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
@@ -32,6 +35,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
   useEffect(() => { setToolState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
   const [start, setStart] = useState(null), [cur, setCur] = useState(null), [drag, setDrag] = useState(null), [hist, setHist] = useState({ undo: [], redo: [] });
+  // box selection (select tool, drag on empty space): left → right = window (fully inside), right → left = crossing (touching);
+  // Delete removes everything selected in one undo step; Shift / middle-drag pans
+  const [box, setBox] = useState(null), [multi, setMulti] = useState([]), [menu, setMenu] = useState(null), hl = useHighlight(), [tScale] = useTextScale();
   const [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null);
   useEffect(() => { setToolState(tools[1]?.[0] ?? "select"); setStart(null); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
   const setTool = (t) => { setToolState(t); setStart(null); setTyped(""); };
@@ -112,8 +118,26 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     else commit({ walls: [...walls, { a: start, b: p, kind: wallTypes[0]?.id ?? "brick", h: 3, hAuto: true, open: 0, layers: 1 }] }); // clear height under the beam above
     setStart(p);
   };
+  const ITEM = { column: ["columns", (c) => [c]], beam: ["beams", (b) => [b.a, b.b]], wall: ["walls", (w) => [w.a, w.b]], lineLoad: ["lineLoads", (l) => [l.a, l.b]],
+    point: ["pointLoads", (q) => [q.p]], stair: ["stairs", (st) => [st.a, st.b, [st.a[0], st.b[1]], [st.b[0], st.a[1]]]], cant: ["cants", (c) => [c.a, c.b]] };
+  const listOf = (kind) => (kind === "wall" ? walls : floor[ITEM[kind][0]] ?? []);
+  const endBox = () => {
+    const b = box; setBox(null);
+    if (!b || dist(b.p0, b.p1) < 3 * px()) return;
+    const x0 = Math.min(b.p0[0], b.p1[0]), x1 = Math.max(b.p0[0], b.p1[0]), y0 = Math.min(b.p0[1], b.p1[1]), y1 = Math.max(b.p0[1], b.p1[1]), win = b.p1[0] >= b.p0[0];
+    const inside = ([x, y]) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+    const hits = (P) => (win ? P.every(inside) : P.some(inside) || (P.length === 2 && [0.25, 0.5, 0.75].some((t) => inside([P[0][0] + (P[1][0] - P[0][0]) * t, P[0][1] + (P[1][1] - P[0][1]) * t]))));
+    const got = BOXABLE[step].flatMap((kind) => listOf(kind).map((o, i) => (hits(ITEM[kind][1](o)) ? { kind, i } : null)).filter(Boolean));
+    setMulti(got); setSel(got.length === 1 ? got[0] : null);
+  };
+  const delItems = (list) => {
+    const patch = {};
+    for (const kind of Object.keys(ITEM)) { const ids = new Set(list.filter((x) => x?.kind === kind).map((x) => x.i)); if (ids.size) patch[ITEM[kind][0]] = listOf(kind).filter((_, i) => !ids.has(i)); }
+    if (Object.keys(patch).length) { commit(patch); setMulti([]); setSel(null); }
+  };
   const onDown = (e) => {
-    if (e.button === 2) { setStart(null); setTyped(""); return; }
+    if (e.button === 2) { setStart(null); setTyped(""); if (tool === "select" && (multi.length || sel)) setMenu({ x: e.clientX, y: e.clientY }); return; }
+    setMenu(null);
     const raw = toModel(e);
     lastRaw.current = raw;
     if (e.button === 1 || tool === "select") {
@@ -123,6 +147,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
         if (h?.kind === "column" && step === "frame") { setDrag({ col: h.i, from: cols[h.i] }); return; }
         if (h) return;
       }
+      if (e.button === 0 && !e.shiftKey && BOXABLE[step]) { setMulti([]); setDrag({ box: true }); setBox({ p0: raw, p1: raw }); return; }
       setDrag({ pan: true, sx: e.clientX, sy: e.clientY, vb }); return;
     }
     if (tool === "erase") {
@@ -163,6 +188,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const onMove = (e) => {
     const raw = toModel(e);
     lastRaw.current = raw;
+    if (drag?.box) { setBox((b) => b && { ...b, p1: raw }); return; }
     if (drag?.pan) { const kk = px(); setVb((v) => ({ ...v, x: drag.vb.x - (e.clientX - drag.sx) * kk, y: drag.vb.y + (e.clientY - drag.sy) * kk })); return; }
     if (drag?.col !== undefined) {
       const s = snap(raw).p; if (!s) return;
@@ -175,7 +201,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   useEffect(() => {
     const h = (e) => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
-      if (e.key === "Escape") { setStart(null); setTyped(""); }
+      if (e.key === "Escape") { setStart(null); setTyped(""); setMulti([]); setMenu(null); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && BOXABLE[step]) { e.preventDefault(); setTool("select"); setMulti(BOXABLE[step].flatMap((kind) => listOf(kind).map((_, i) => ({ kind, i })))); }
+      else if ((e.key === "Delete" || (e.key === "Backspace" && !typed)) && (multi.length || sel)) { e.preventDefault(); delItems(multi.length ? multi : [sel]); }
       else if ((tool === "column" || (lineTool && tool !== "stair")) && /^[0-9.]$/.test(e.key)) setTyped((t) => t + e.key);
       else if (typed && e.key === "Backspace") setTyped((t) => t.slice(0, -1));
       else if (e.key === "Enter" && typed) { const p = typedPoint(); setTyped(""); if (p) place(p); }
@@ -189,7 +217,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const autoBeams = () => commit({ beams: [...GY.flatMap((y) => GX.slice(1).map((x, i) => [[GX[i], y], [x, y]])), ...GX.flatMap((x) => GY.slice(1).map((y, i) => [[x, GY[i]], [x, y]]))].map(([a, b]) => ({ a, b, type: null })) });
 
   // labels grow with the plan when zoomed in past "fit" (like CAD); zoomed out they keep their screen size so they stay readable
-  const kFit = fitBox().w / (svg.current?.clientWidth || 1000), kt = Math.max(k, kFit);
+  const kFit = fitBox().w / (svg.current?.clientWidth || 1000), kt = Math.max(k, kFit) * tScale;
   const txt = (p, s, color, size = 12, anchor = "middle", weight) => <text x={p[0]} y={-p[1]} fontSize={size * kt} fill={color} textAnchor={anchor} dominantBaseline="middle" fontWeight={weight} stroke="none">{s}</text>;
   const ext = { x0: Math.min(...SX) - 1.2, x1: Math.max(...SX) + 1.2, y0: Math.min(...SY) - 1.2, y1: Math.max(...SY) + 1.2 };
   const ink = dark ? "#cdd1e2" : "#344054", muted = dark ? "#9097b1" : "#667085", btn = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1";
@@ -199,6 +227,10 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const from = lineTool ? start : null;
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
+      {menu && <div className="fixed z-50 min-w-[170px] rounded-lg border border-gray-200 bg-white p-1 text-[13px] shadow-lg" style={{ left: menu.x, top: menu.y }} onPointerLeave={() => setMenu(null)}>
+        <button onClick={() => { delItems(multi.length ? multi : [sel]); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-red-600 hover:bg-red-50">ลบที่เลือก ({multi.length || 1})</button>
+        <button onClick={() => { setMulti([]); setSel(null); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50">ยกเลิกการเลือก</button>
+      </div>}
       <div className="flex flex-wrap items-center gap-1.5">
         {(step === "frame" || step === "grid") && <>
           <button onClick={() => { setGridOn(!gridOn); setFloor({ grid: { ...G, on: !gridOn } }); }} className={`${btn} ${gridOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Grid3x3 className="h-3.5 w-3.5" />กริด</button>
@@ -223,6 +255,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
           }} /></label>}
         {onCopyBelow && <><button onClick={() => onCopyBelow(true)} title="แทนเสาและคานชั้นนี้ด้วยของชั้นล่าง (ย้อนกลับได้ Ctrl+Z)" className={`${btn} text-gray-600 ring-gray-300`}><Copy className="h-3.5 w-3.5" />คัดลอกชั้นล่าง</button>
           <button onClick={() => onCopyBelow(false)} title="วางเสาตรงเสาชั้นล่างทุกต้น ลบคานชั้นนี้ (เช่น ชั้นอะเส / ชั้นที่มีแต่เสา)" className={`${btn} text-gray-600 ring-gray-300`}>เฉพาะเสา</button></>}
+        <TextSizeControl />
         {onDxf && <button onClick={onDxf} className={`${btn} text-gray-600 ring-gray-300`}><Download className="h-3.5 w-3.5" />DXF</button>}
         {modeBar && <div className="ml-auto">{modeBar}</div>}
       </div>
@@ -235,7 +268,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       </div>}
       <div className={`relative ${compact ? "min-h-[180px]" : "min-h-[420px]"} flex-1 overflow-hidden rounded-xl bg-gray-50`}>
         <svg ref={svg} viewBox={`${vb.x} ${-(vb.y + vb.h)} ${vb.w} ${vb.h}`} className={`h-full w-full select-none ${tool === "select" ? "cursor-default" : "cursor-crosshair"}`}
-          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => setDrag(null)} onPointerLeave={() => { setDrag(null); setCur(null); }} onContextMenu={(e) => e.preventDefault()} onWheel={onWheel}>
+          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => { if (drag?.box) endBox(); setDrag(null); }} onPointerLeave={() => { setDrag(null); setCur(null); }} onContextMenu={(e) => e.preventDefault()} onWheel={onWheel}>
           <defs><pattern id="gs-hatch" width={0.3} height={0.3} patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="0.3" stroke={muted} strokeWidth={0.02} /></pattern></defs>
           {gridOn && <>
             <g stroke={dark ? "#323a5c" : "#e4e7ec"}>
@@ -244,9 +277,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             </g>
             <g stroke={dark ? "#6e7591" : "#98a2b3"}>
               {GX.map((x, i) => <g key={`gx${i}`}><line x1={x} x2={x} y1={-ext.y1} y2={-ext.y0} strokeWidth={k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />
-                <circle cx={x} cy={-(ext.y1 + 12 * k)} r={11 * k} fill={dark ? "#181c30" : "#fff"} strokeWidth={1.2 * k} />{txt([x, ext.y1 + 12 * k], xName(i), ink, 11)}</g>)}
+                <circle cx={x} cy={-(ext.y1 + 12 * kt)} r={11 * kt} fill={dark ? "#181c30" : "#fff"} strokeWidth={1.2 * k} />{txt([x, ext.y1 + 12 * kt], xName(i), ink, 11)}</g>)}
               {GY.map((y, i) => <g key={`gy${i}`}><line y1={-y} y2={-y} x1={ext.x0} x2={ext.x1} strokeWidth={k} strokeDasharray={`${14 * k} ${4 * k} ${3 * k} ${4 * k}`} />
-                <circle cx={ext.x1 + 12 * k} cy={-y} r={11 * k} fill={dark ? "#181c30" : "#fff"} strokeWidth={1.2 * k} />{txt([ext.x1 + 12 * k, y], yName(i), ink, 11)}</g>)}
+                <circle cx={ext.x1 + 12 * kt} cy={-y} r={11 * kt} fill={dark ? "#181c30" : "#fff"} strokeWidth={1.2 * k} />{txt([ext.x1 + 12 * kt, y], yName(i), ink, 11)}</g>)}
               {GX.slice(1).map((x, i) => <g key={`dx${i}`}>{txt([(x + GX[i]) / 2, ext.y1 - 6 * k], fmt(x - GX[i], 2), muted, 10)}</g>)}
               {GY.slice(1).map((y, i) => <g key={`dy${i}`}>{txt([ext.x1 - 6 * k, (y + GY[i]) / 2], fmt(y - GY[i], 2), muted, 10, "end")}</g>)}
             </g>
@@ -336,6 +369,16 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               {txt([q.p[0] + 12 * k, q.p[1] + 10 * k], `${q.name ? `${q.name} ` : ""}${fmt(q.P, 0)} กก.`, SP_C, 10, "start", 600)}
             </g>
           ))}
+          {multi.map((m, j) => { const P = ITEM[m.kind][1](listOf(m.kind)[m.i] ?? {}); if (!P[0]) return null;
+            return P.length === 1 ? <circle key={`m${j}`} cx={P[0][0]} cy={-P[0][1]} r={14 * k} fill="#f79009" fillOpacity={0.3} />
+              : <line key={`m${j}`} x1={P[0][0]} y1={-P[0][1]} x2={P[1][0]} y2={-P[1][1]} stroke="#f79009" strokeOpacity={0.5} strokeWidth={12 * k} strokeLinecap="round" />; })}
+          {box && <rect x={Math.min(box.p0[0], box.p1[0])} y={-Math.max(box.p0[1], box.p1[1])} width={Math.abs(box.p1[0] - box.p0[0])} height={Math.abs(box.p1[1] - box.p0[1])}
+            fill={box.p1[0] >= box.p0[0] ? "#465fff14" : "#12b76a14"} stroke={box.p1[0] >= box.p0[0] ? "#465fff" : "#12b76a"} strokeWidth={1.2 * k} strokeDasharray={box.p1[0] >= box.p0[0] ? "none" : `${5 * k} ${3 * k}`} />}
+          {hl && <g pointerEvents="none">
+            {hl.to && <line x1={hl.p[0]} y1={-hl.p[1]} x2={hl.to[0]} y2={-hl.to[1]} stroke="#d92d20" strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />}
+            <circle cx={hl.p[0]} cy={-hl.p[1]} r={16 * k} fill="#d92d2033" stroke={hl.bad ? "#d92d20" : "#12b76a"} strokeWidth={3 * k}><animate attributeName="r" values={`${12 * k};${24 * k};${12 * k}`} dur="1s" repeatCount="indefinite" /></circle>
+            {hl.to && <circle cx={hl.to[0]} cy={-hl.to[1]} r={7 * k} fill="#d92d20" />}
+          </g>}
           {ghost.map((c, i) => <rect key={`g${i}`} x={c[0] - 8 * k} y={-c[1] - 8 * k} width={16 * k} height={16 * k} fill="none" stroke="#98a2b3" strokeWidth={1.2 * k} strokeDasharray={`${3 * k} ${2 * k}`} />)}
           {cols.map((c, i) => {
             const R = an?.columns[i]?.R, ci = colInfo?.[i];
