@@ -232,3 +232,4 @@ Selector in step 7 next to the beam method. Spread types: buttons "เพิ่�
 Footing limit `frame.footUtil` (e.g. 0.85 = q ≤ 85 % qa / pile load ≤ 85 % safe; flag r.limOk, reason shown). Spread auto size also thickens t
 (+0.05 m steps) and closes spacing to @0.125/@0.10; auto button adds ONE type per press and re-spreads all spread types (columns sorted by
 needed size, k groups of ~equal count, type = largest of its group with that run's t and bar counts).
+Footing moments: step 8 footing tab has the base-fixity select (fixed → 3D base Mx/My into every footing, both axes; first spread type sets fixed when unset) and "↻ จัดขนาดใหม่" (re-size the same number of spread types after loads change).

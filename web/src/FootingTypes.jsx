@@ -46,11 +46,12 @@ export function FootingTypes({ frame, set, res }) {
   // the group's governing column already passed at this size: its thickness and bar counts become the type
   const typeAt = (base, x, name) => ({ ...base, name, Bx: x.B, By: x.B, t: x.d.inp?.t ?? base.t, nb: x.d.r.nLong, nbS: x.d.r.nShort });
   const nextName = (k = 0) => { let i = types.length + 1 + k; while (types.some((t) => t.name === `F${i}`)) i++; return `F${i}`; };
-  const addSpread = () => { const base = spreadBase(), list = needed(base), big = list.at(-1);
+  const firstSpread = () => { if (!spreadRows.length && frame.baseFixity == null) set("baseFixity", "fixed"); };
+  const addSpread = () => { firstSpread(); const base = spreadBase(), list = needed(base), big = list.at(-1);
     set("footTypes", [...types, big ? typeAt(base, big, nextName()) : { ...base, name: nextName(), Bx: 0, By: 0 }]); };
-  const autoSpread = () => {
+  const autoSpread = (add = 1) => { firstSpread();
     const base = spreadBase(), list = needed(base), nSizes = new Set(list.map((x) => x.B)).size;
-    const k = Math.max(1, Math.min(spreadRows.length + 1, nSizes)), groups = [...new Set(Array.from({ length: k }, (_, g) => list[Math.ceil(((g + 1) * list.length) / k) - 1].B))];
+    const k = Math.max(1, Math.min(spreadRows.length + add, nSizes)), groups = [...new Set(Array.from({ length: k }, (_, g) => list[Math.ceil(((g + 1) * list.length) / k) - 1].B))];
     const keep = types.map((t, i) => [t, i]).filter(([t]) => t.kind !== "spread"), map = Object.fromEntries(keep.map(([, i], j) => [i, j]));
     const made = groups.map((B, g) => typeAt(base, list.filter((x) => x.B === B).at(-1), `F${keep.length + g + 1}`));
     set("footTypes", [...keep.map(([t]) => t), ...made]);
@@ -77,6 +78,13 @@ export function FootingTypes({ frame, set, res }) {
           <span className="font-medium text-gray-600">ใช้กำลังรับไม่เกิน</span>
           <Num v={Math.round((frame.footUtil ?? 1) * 100)} on={(v) => set("footUtil", Math.min(100, Math.max(50, v)) / 100)} step="5" w="w-16" /><span>%</span>
           <span className="text-[11px] text-gray-400">ของแรงแบกทานดิน qa (ฐานแผ่) / น้ำหนักปลอดภัยของเข็ม (ฐานเข็ม) — เช่น 80–90 % เผื่อไว้ · ใช้ทั้งการเลือก type อัตโนมัติ การหาขนาด และการตรวจผ่าน</span>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]">
+          <span className="font-medium text-gray-600">โมเมนต์ที่ฐาน Mx / My</span>
+          <select value={frame.baseFixity ?? "pinned"} onChange={(e) => set("baseFixity", e.target.value)} className={box}>
+            <option value="fixed">ฐานเสายึดแน่น — โมเมนต์จากโครง 3 มิติลงฐานราก (ฐานแผ่ / เข็มกลุ่ม)</option>
+            <option value="pinned">ฐานเสาเป็นหมุด — ไม่มีโมเมนต์ลงฐาน (เข็ม 1–2 ต้น)</option></select>
+          <span className="text-[11px] text-gray-400">ค่าเดียวกับขั้น 7 · ฐานตรวจแรงดันดิน / แรงต่อเข็มด้วย P + Mx + My ทั้งสองแกน และทุกชุดผสมแรงด้านข้างเมื่อเปิดใช้{frame.analysis === "continuous" ? " · ต้องใช้แรงออกแบบแบบค่ามากสุด (โครง 3 มิติ) ในขั้น 7 จึงมีโมเมนต์" : ""}</span>
         </div>
         <p className="mb-1 text-sm font-semibold text-gray-800">1 · Type ฐานรากเสาเข็ม</p>
         <table className="w-full"><thead><tr>{["ชื่อ", "เข็ม (ต้น)", "ขนาดเข็ม", "หนาฐาน t (ม.)", "ลึก Df (ม.)", "ระยะเข็ม (× ขนาดเข็ม)", "กว้างฐาน (ม.) 1–2 ต้น", "เหล็กแนวยาว", "จำนวน (เส้น)", "@ (ม.)", "เหล็กแนวสั้น", "จำนวน (เส้น)", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
@@ -111,7 +119,8 @@ export function FootingTypes({ frame, set, res }) {
             {barCells(t, i)}
           </tr>)}</tbody></table>}
         <div className="mt-1 flex gap-4"><button onClick={addSpread} className="flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />เพิ่ม type ฐานแผ่</button>
-          <button onClick={autoSpread} title="เพิ่ม 1 type แล้วจัดขนาดทุก type ใหม่ให้จำนวนฐานต่อ type ใกล้กัน (จากแรงที่ฐานเสาจริง) แก้ต่อได้ทุกช่อง" className="flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />เพิ่ม type อัตโนมัติ (จัดขนาดใหม่เป็น {spreadRows.length + 1} type)</button></div>
+          <button onClick={() => autoSpread(1)} title="เพิ่ม 1 type แล้วจัดขนาดทุก type ใหม่ให้จำนวนฐานต่อ type ใกล้กัน (จากแรงที่ฐานเสาจริง) แก้ต่อได้ทุกช่อง" className="flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />เพิ่ม type อัตโนมัติ (จัดขนาดใหม่เป็น {spreadRows.length + 1} type)</button>
+          {spreadRows.length > 0 && <button onClick={() => autoSpread(0)} title="คำนวณขนาดทุก type ใหม่จากแรงล่าสุด (เช่น หลังเปลี่ยน qa / ขีดใช้งาน / ฐานยึดแน่น) จำนวน type เท่าเดิม" className="flex items-center gap-1 text-[12px] font-medium text-brand-500">↻ จัดขนาดใหม่ ({spreadRows.length} type เท่าเดิม)</button>}</div>
         <p className="mt-1 text-[11px] text-gray-400">เพิ่ม type = ขนาดที่ฐานหนักสุดต้องการ · เพิ่มอัตโนมัติ = กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดขนาดทุก type ใหม่จากแรงจริงให้แต่ละ type มีจำนวนฐานใกล้กัน พร้อมจำนวนเหล็ก (แก้ต่อได้) · Bx / By = 0 → โปรแกรมหาขนาดจาก qa (รวมน้ำหนักฐาน + ดินถม) แล้วขยายทีละ 0.10 ม. จนผ่านทุกข้อ · ตรวจ แรงดันดิน (รวมโมเมนต์ 2 ทาง), ความลึก, เฉือนทางเดียว, เฉือนทะลุ, เหล็ก, แรงยึดเหนี่ยว, ระยะฝัง, เหล็กเดือย, แรงแบกทาน · อัตโนมัติจะลองฐานแผ่ก่อนฐานเข็ม</p>
       </section>
       <section>
