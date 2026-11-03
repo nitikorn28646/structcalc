@@ -14,7 +14,10 @@ import { fmt } from "./beamModel.js";
 import { dist, gridAxes, round3, segCross, segDist } from "./planKit.js";
 import { GROUPS, STAIR_KINDS, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
 
-export const TYPE_COLORS = ["#3e63dd", "#30a46c", "#f76b15", "#8e4ec6", "#0e9384", "#b54708", "#d6409f", "#465fff"];
+// type colours (user 2026-11-03: different types had the same colour — 8 colours repeated, two blues alike): 12 distinct hues,
+// then more by the golden angle so a long type list does not repeat
+const BASE_COLORS = ["#3e63dd", "#30a46c", "#f76b15", "#8e4ec6", "#0e9384", "#b54708", "#d6409f", "#65a30d", "#0284c7", "#dc2626", "#a16207", "#475467"];
+export const TYPE_COLORS = [...BASE_COLORS, ...Array.from({ length: 36 }, (_, i) => `hsl(${Math.round((i * 137.5 + 20) % 360)}, 65%, 45%)`)];
 const SEL = ["select", "เลือก/ย้าย", MousePointer2, "คลิกเพื่อเลือกและแก้ค่า · ลากเสาเพื่อย้าย (ปลายคานตามไป) · ลากกรอบที่ว่าง = เลือกหลายชิ้น (ซ้าย→ขวา เฉพาะที่อยู่ในกรอบ · ขวา→ซ้าย ที่แตะกรอบ) แล้วกด Delete เพื่อลบ · Shift+ลาก หรือปุ่มกลางเมาส์ = เลื่อนแปลน · ล้อเมาส์ซูม"];
 const TOOLS = {
   frame: [SEL, ["column", "เสา", Columns3, "คลิกวางเสา · กรอบประ = เสาชั้นล่าง · ชี้บนคานแล้วพิมพ์ระยะ + Enter = วางห่างปลายคาน"],
