@@ -21,6 +21,7 @@ import Frame3D from "./Frame3D.jsx";
 import { downloadDxf, framePlanModel } from "./drawings.js";
 import { LateralChoice, LateralPanel } from "./LateralPanel.jsx";
 import { FootingTypes } from "./FootingTypes.jsx";
+import { BeamTypeFigures, ColumnTypeFigures } from "./DesignFigures.jsx";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
@@ -234,8 +235,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         </div>
       </Card>
     </div>
-  ) : step === "design" && sub === "types" ? <TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} />
-    : step === "design" && sub === "ctypes" ? <ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} />
+  ) : step === "design" && sub === "types" ? <div><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+    : step === "design" && sub === "ctypes" ? <div><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "design" && sub === "foot" ? <FootingTypes frame={frame} set={set} res={res} />
     : step === "design" && sub === "slabs" ? (
       <div className="space-y-3">

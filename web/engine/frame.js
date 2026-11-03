@@ -5,7 +5,7 @@ import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, faceBars, parseBars 
 import { BARS } from "./tables.js";
 import { frame3dModel } from "./frame3d.js";
 import { tiedColumn } from "./column.js";
-import { pileCap } from "./footing.js";
+import { PILES, pileCap } from "./footing.js";
 import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
 
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
@@ -29,21 +29,32 @@ export function checkColumn(lv, P, L, mat, mom = {}) {
 export const DEFAULT_FOOTING = { t: 0.4, Df: 1.2, cover: 7.5, fy: 4000, fcPile: 350, pileL: 6, Psafe: 18000, bar: "DB 12", spacing: 3,
   options: [[1, "I-18"], [1, "I-22"], [1, "I-26"], [2, "I-18"], [2, "I-22"], [2, "I-26"], [3, "I-22"], [4, "I-22"]] };
 const capOk = (r) => r.pileOk && r.dOk && r.vOk && r.vpOk && r.vppOk && r.AsOkL && r.AsOkS && r.perimOk && r.ancOk && r.bearingOk;
+// typical safe loads per pile (kg) — starting values only; the engineer enters the values of the pile maker / load test (frame.pileLoads)
+export const PILE_SAFE = { "I-18": 18000, "I-22": 25000, "I-26": 35000, "I-30": 45000, "I-35": 55000, "I-40": 70000, "S-16": 14000, "S-18": 18000,
+  "S-22": 25000, "S-26": 35000, "S-30": 45000, "S-35": 60000, "S-40": 80000, "SO-40": 70000, "SO-525": 120000, "HP-15": 12000,
+  "Ø0.35": 30000, "Ø0.40": 40000, "Ø0.50": 60000, "Ø0.60": 85000, "Ø0.80": 150000, "Ø1.00": 230000 };
+// footing type (step 8, like the drawings' F1, F2…): { name, n piles, pile, t cap (m), Df (m), k pile spacing (× pile width), w cap width
+// (m, 1–2 piles; 0 = smallest), bar / s long bars, barS / sS short bars }. fo.fixed = the type picked for this column; fo.types = auto
+// among the types (lightest first: piles × pile area, then cap thickness); neither = the built-in options (as before 2026-11-03).
 export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0) {
   let best = null;
-  // per option: bars @0.15 then @0.10; 1–2 pile caps may be widened (bar anchorage, minimum steel)
-  // a footing type (step 8) fixes piles, bar, spacing and cap width (0 = smallest that fits); otherwise every option is tried
-  const tries = fo.fixed ? [[fo.fixed.n, fo.fixed.pile, fo.fixed.s ?? 0.15, fo.fixed.w ?? 0, fo.fixed.bar ?? fo.bar]]
-    : fo.options.flatMap(([n, pile]) => [fo.bar, "DB 16"].flatMap((bar) => [0.15, 0.1].flatMap((bs) => (n <= 2 ? [0, 0.8, 0.9, 1.0] : [0]).map((w) => [n, pile, bs, w, bar]))));
-  for (const [n, pile, bs, capWidth, bar] of tries) {
-    const b = Number(pile.split("-")[1]) / 100, s = Math.max(0.6, fo.spacing * b);
-    const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: fo.cover, t: fo.t, Df: fo.Df, P, Mx, My, gamma: 1800, pier: "rect",
-      bx: pier.Bx / 100, by: pier.By / 100, longBar: bar, shortBar: fo.bar, sLong: bs, sShort: bs, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4, n, pile, pileL: fo.pileL, fcPile: fo.fcPile, Ptest: fo.Psafe, sx: s, sy: s, capWidth };
+  const safe = (pile) => (fo.pileLoads ? fo.pileLoads[pile] ?? PILE_SAFE[pile] ?? fo.Psafe : fo.Psafe);
+  const T = (n, pile, s, w, bar, extra = {}) => ({ n, pile, s, w, bar, ...extra });
+  const weight = (t) => t.n * (PILES[t.pile]?.A ?? 1e9) * 1e3 + (t.t ?? fo.t);
+  const tries = fo.fixed ? [T(fo.fixed.n, fo.fixed.pile, fo.fixed.s ?? 0.15, fo.fixed.w ?? 0, fo.fixed.bar ?? fo.bar, fo.fixed)]
+    : fo.types?.length ? [...fo.types].sort((a, b) => weight(a) - weight(b)).map((t) => T(t.n, t.pile, t.s ?? 0.15, t.w ?? 0, t.bar ?? fo.bar, t))
+      // per option: bars @0.15 then @0.10; 1–2 pile caps may be widened (bar anchorage, minimum steel)
+      : fo.options.flatMap(([n, pile]) => [fo.bar, "DB 16"].flatMap((bar) => [0.15, 0.1].flatMap((bs) => (n <= 2 ? [0, 0.8, 0.9, 1.0] : [0]).map((w) => T(n, pile, bs, w, bar)))));
+  for (const tt of tries) {
+    const { n, pile, s: bs, w: capWidth, bar } = tt, b = PILES[pile]?.b ?? Number(String(pile).split("-")[1]) / 100, s = Math.max(0.6, (tt.k ?? fo.spacing) * b);
+    const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: fo.cover, t: tt.t ?? fo.t, Df: tt.Df ?? fo.Df, P, Mx, My, gamma: 1800, pier: "rect",
+      bx: pier.Bx / 100, by: pier.By / 100, longBar: bar, shortBar: tt.barS ?? fo.bar, sLong: bs, sShort: tt.sS ?? bs, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4, n, pile,
+      pileL: tt.L ?? fo.pileL, fcPile: fo.fcPile, Ptest: safe(pile), sx: s, sy: s, capWidth };
     try {
       const r = pileCap(inp), ok = capOk(r), u = r.Ptmax / r.Pallow;
-      if (ok) return { n, pile, r, ok, util: u };
-      if (!best || u < best.util) best = { n, pile, r, ok, util: u };
-    } catch (e) { best ??= { n, pile, error: e.message, ok: false, util: 9 }; }
+      if (ok) return { n, pile, r, ok, util: u, inp, type: tt.name ?? null };
+      if (!best || u < best.util) best = { n, pile, r, ok, util: u, inp, type: tt.name ?? null };
+    } catch (e) { best ??= { n, pile, error: e.message, ok: false, util: 9, type: tt.name ?? null }; }
   }
   return best;
 }
@@ -215,9 +226,9 @@ export function analyzeFrame(frame) {
   const base = (c, list = f3?.base) => list?.find((b) => near(b.p, c.p));
   const footings = g.cols.filter((c) => c.floor === 0).map((c) => {
     const b = base(c), P = Math.max(c.Pbot, b?.R[2] ?? 0), Mx = Math.abs(b?.R[3] ?? 0), My = Math.abs(b?.R[4] ?? 0);
-    const ft = frame.footTypes?.[frame.footPick?.[c.stack]], fo = { ...(frame.footing ?? DEFAULT_FOOTING), ...(ft ? { fixed: ft } : {}) }, grav = { p: c.p, stack: c.stack, P, Mx, My, combo: "D+L", ...designFooting(P, c.lv, mat, fo, Mx, My) };
+    const ft = frame.footTypes?.[frame.footPick?.[c.stack]], fo = { ...(frame.footing ?? DEFAULT_FOOTING), ...(frame.pileLoads ? { pileLoads: frame.pileLoads } : {}), ...(ft ? { fixed: ft } : frame.footTypes?.length ? { types: frame.footTypes } : {}) }, grav = { p: c.p, stack: c.stack, P, Mx, My, combo: "D+L", ...designFooting(P, c.lv, mat, fo, Mx, My) };
     const lc = (f3?.combos ?? []).filter((cb) => cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, R: base(c, cb.base)?.R })).filter((x) => x.R);
-    if (!lc.length) return { ...grav, type: ft?.name ?? null };
+    if (!lc.length) return grav;
     // lateral combinations: the one with the largest axial load and the ones with the largest base moments are designed too
     const pick = [...new Set([lc.reduce((a, x) => (x.R[2] > a.R[2] ? x : a)), lc.reduce((a, x) => (Math.abs(x.R[3]) > Math.abs(a.R[3]) ? x : a)), lc.reduce((a, x) => (Math.abs(x.R[4]) > Math.abs(a.R[4]) ? x : a))])];
     const minP = Math.min(...lc.map((x) => x.R[2]));
@@ -227,7 +238,7 @@ export function analyzeFrame(frame) {
       if ((worst.ok && !r.ok) || (r.ok === worst.ok && (r.util ?? 0) > (worst.util ?? 0))) worst = r;
     }
     if (minP < 0) g.warnings.push(`ฐานราก ${c.stack}: แรงถอน ${Math.round(-minP)} กก. (ชุด ${lc.find((x) => x.R[2] === minP).name}) — ตรวจแรงถอนเข็ม`);
-    return { ...worst, minP, type: ft?.name ?? null };
+    return { ...worst, minP };
   });
   const lateral = lat && f3?.combos ? lateralChecks(frame, lat, f3) : null;
   // a type whose bars cannot be read would be checked with no steel at all: say so instead of a silent NG
