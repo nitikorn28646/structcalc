@@ -16,7 +16,7 @@ export const stackKey = (p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
 export function checkColumn(lv, P, L, mat, mom = {}) {
   const [nx, ny] = faceBars(lv.n), e = Math.max(2.5, 0.1 * Math.min(lv.Bx, lv.By)); // cm
   const ST = { L: L * 100, bx: lv.Bx, by: lv.By }, BM = { L: 400, b: 20, t: 40 }; // stiffness data only enter frame cases 3–4
-  const inp = { ...mat, L, Bx: lv.Bx, By: lv.By, nx, ny, mainBar: lv.mainBar, tieBar: lv.tieBar, tieSets: 1, P: Math.max(P, 1), Mx: Math.max((Math.max(P, 1) * e) / 100, mom.Mx ?? 0), My: mom.My ?? 0,
+  const inp = { ...mat, cover: mat.coverCol ?? mat.cover, L, Bx: lv.Bx, By: lv.By, nx, ny, mainBar: lv.mainBar, tieBar: lv.tieBar, tieSets: 1, P: Math.max(P, 1), Mx: Math.max((Math.max(P, 1) * e) / 100, mom.Mx ?? 0), My: mom.My ?? 0,
     frameCase: 2, beamTL: BM, beamTR: BM, beamBL: BM, beamBR: BM, colTop: ST, colThis: ST, colThisB: ST, colBot: ST };
   try {
     const r = tiedColumn(inp), sOk = lv.s * 100 <= r.sTie + 1e-6;
@@ -28,7 +28,9 @@ export function checkColumn(lv, P, L, mat, mom = {}) {
 // Pile caps under the base columns: lightest option (pile count, pile size) that passes, with the pile safe load from the drawings
 export const DEFAULT_FOOTING = { t: 0.4, Df: 1.2, cover: 7.5, fy: 4000, fcPile: 350, pileL: 6, Psafe: 18000, bar: "DB 12", spacing: 3,
   options: [[1, "I-18"], [1, "I-22"], [1, "I-26"], [2, "I-18"], [2, "I-22"], [2, "I-26"], [3, "I-22"], [4, "I-22"]] };
-const capOk = (r) => r.pileOk && r.dOk && r.vOk && r.vpOk && r.vppOk && r.AsOkL && r.AsOkS && r.perimOk && r.ancOk && r.bearingOk;
+// a cap on one pile carries the column straight into the pile (no bending, no bond / anchorage demand; the bars are minimum steel
+// with standard hooks) — the reference sheet checks pile load + minimum steel only, so bond and anchorage are not counted there
+const capOk = (r, n) => r.pileOk && r.dOk && r.vOk && r.vpOk && r.vppOk && r.AsOkL && r.AsOkS && (n === 1 || (r.perimOk && r.ancOk)) && r.bearingOk;
 // typical safe loads per pile (kg) — starting values only; the engineer enters the values of the pile maker / load test (frame.pileLoads)
 export const PILE_SAFE = { "I-18": 18000, "I-22": 25000, "I-26": 35000, "I-30": 45000, "I-35": 55000, "I-40": 70000, "S-16": 14000, "S-18": 18000,
   "S-22": 25000, "S-26": 35000, "S-30": 45000, "S-35": 60000, "S-40": 80000, "SO-40": 70000, "SO-525": 120000, "HP-15": 12000,
@@ -47,11 +49,19 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
       : fo.options.flatMap(([n, pile]) => [fo.bar, "DB 16"].flatMap((bar) => [0.15, 0.1].flatMap((bs) => (n <= 2 ? [0, 0.8, 0.9, 1.0] : [0]).map((w) => T(n, pile, bs, w, bar)))));
   for (const tt of tries) {
     const { n, pile, s: bs, w: capWidth, bar } = tt, b = PILES[pile]?.b ?? Number(String(pile).split("-")[1]) / 100, s = Math.max(0.6, (tt.k ?? fo.spacing) * b);
-    const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: fo.cover, t: tt.t ?? fo.t, Df: tt.Df ?? fo.Df, P, Mx, My, gamma: 1800, pier: "rect",
+    const inp = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: mat.coverFoot ?? fo.cover, t: tt.t ?? fo.t, Df: Math.max(tt.Df ?? fo.Df, tt.t ?? fo.t), P, Mx, My, gamma: 1800, pier: "rect",
       bx: pier.Bx / 100, by: pier.By / 100, longBar: bar, shortBar: tt.barS ?? fo.bar, sLong: bs, sShort: tt.sS ?? bs, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4, n, pile,
       pileL: tt.L ?? fo.pileL, fcPile: fo.fcPile, Ptest: safe(pile), sx: s, sy: s, capWidth };
     try {
-      const r = pileCap(inp), ok = capOk(r), u = r.Ptmax / r.Pallow;
+      // bars given as a count (schedule "5-DB 12"): spacing from the cap width — the engine counts floor((B − 2c)/s + 1) on 1–2 pile caps, floor(B/s + 1) otherwise
+      if (tt.nb > 1 || tt.nbS > 1) {
+        const r0 = pileCap(inp), c2 = n <= 2 ? (inp.cover * 2) / 100 : 0, sp = (B, k) => ((B - c2) / (k - 1)) * (1 - 1e-9);
+        if (tt.nb > 1) inp.sLong = sp(r0.By, tt.nb);
+        if (tt.nbS > 1) inp.sShort = sp(r0.Bx, tt.nbS);
+      }
+      const r = pileCap(inp), ok = capOk(r, n), u = r.Ptmax / r.Pallow;
+      if (tt.nb > 1) r.longText = `${r.nLong}-${inp.longBar} @ ${inp.sLong.toFixed(3)}`;
+      if (tt.nbS > 1) r.shortText = `${r.nShort}-${inp.shortBar} @ ${inp.sShort.toFixed(3)}`;
       if (ok) return { n, pile, r, ok, util: u, inp, type: tt.name ?? null };
       if (!best || u < best.util) best = { n, pile, r, ok, util: u, inp, type: tt.name ?? null };
     } catch (e) { best ??= { n, pile, error: e.message, ok: false, util: 9, type: tt.name ?? null }; }

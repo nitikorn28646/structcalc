@@ -29,7 +29,7 @@ User data lives in project files (.json from "บันทึกโครงก�
 
 ## Status (latest runs in `D:\REA\rea-lab\results\`)
 beam 18/18 · slab 31/31 · tied column 12/16 (slender = Excel circular-ref defect) · spiral 12/12 · stair 7/7 · spread footing 8/8 ·
-pile caps 15/16 (6-pile = Excel defect) · steel roof 20/20 (run 20261030-153300, incl. C-Channel cases; purlin/rafter/hip/valley/ridge/pole-plate sheets).
+pile caps 15/16 (6-pile = Excel defect) · wall footing 8/8 (20261103-095510) · steel roof 20/20 (run 20261030-153300, incl. C-Channel cases; purlin/rafter/hip/valley/ridge/pole-plate sheets).
 Analysis vs PyNite (open-source FEA, `pip install PyNiteFEA` in the rea-lab venv): frame3d 7/7 (run 20261102-093430: portal, boxes with pinned
 secondary + torque, 2 storeys lateral ± P-Delta, Yasothon linear + P-Delta; linear 0.01 %, P-Delta 0.5 %), contBeam 2/2 (run 20261102-093446:
 3 hand lines + all 37 Yasothon lines). Models: `node cli/frame3d-export.mjs` → difftest/frame3d/*.json; scenarios `difftest/frame3d_cases.py`;
@@ -210,4 +210,15 @@ Footing types `frame.footTypes [{name,n,pile,bar,s,w}]` + `frame.footPick {stack
 footing results carry `type`. Steel check (user asked "too much steel?"): beams take the lightest passing type, columns mostly 1 % minimum;
 extra steel comes from fc ≤ 65 ksc (Yasothon beams +10 % vs uncapped) and coarse type lists. E2E 76/76.
 Next agreed: C = 3D rigid-joint frame analysis + P-Delta (gravity first, compare with the current results), then B = wind / seismic / WSD
-combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).
+combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).WALL FOOTING (2026-11-03): `engine/wallFooting.js` (strip footing per metre, learnt from the Excel "Wall footings" sheet: soil q, M at the
+wall face, V at d, d/vc, main bars across, 0.002·B·t distribution, bond/anchorage, dowels, bearing); single tool ฐานรากเดี่ยว → ชนิด
+"ฐานรากแถบใต้ผนัง" (`src/WallFooting.jsx`, fields wB/wt/wP/wM/wbw/wShortBar/wsShort); `node cli/footing.mjs wall '<json>'`; diff
+`difftest/wallfooting.scenario.json` (oracle/excel_wallfooting.py). Excel gap check 2026-11-03: all other sheets covered (Stair1–10 = copies);
+FrameReport lists the laws/standards used (พ.ร.บ.ควบคุมอาคาร, กฎกระทรวง 2566, ประกาศ มท. 2567, มยผ., ว.ส.ท.).
+Over-design study (Yasothon, drawing types only): beams NG 16/57 → 10 continuous-only → 2 with fc uncapped; columns NG 30/43 mostly
+ties @0.20 > 16db (12/43 with @0.15; 4/43 with @0.15 + continuous). Drivers: fc ≤ 65 ksc cap (law), 3D envelope moments, 16db ties.
+COVERS + FOOTING TYPES (2026-11-03): `frame.mat` cover (beams) / coverCol (falls back to cover) / coverSlab (2) / coverFoot (7.5), edited in step 0
+and on top of the step 8 tabs. Footing types take a bar count `nb` / `nbS` ("5-DB 12", spacing from the cap width) instead of @; a 1-pile cap
+is checked like the reference sheet (pile load + minimum steel 0.002·B·t; no bond/anchorage); Df < t is clamped to t (negative soil weight).
+User's F1 PDF (คุณกิ๊บ): 0.50×0.50×0.50, 5-DB 12, As 5.00 ≤ 5.65 → same result here now.
+Columns failing where the Excel passes: envelope mode adds 3D-frame / wind moments (edge and corner columns, short stubs); "continuous" = Excel-like.

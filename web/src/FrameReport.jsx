@@ -56,8 +56,19 @@ export function FrameReport({ frame, project }) {
           intro={`ใช้วิธีหน่วยแรงใช้งาน น้ำหนักบรรทุกคงที่รวมน้ำหนักบรรทุกจรโดยไม่คูณตัวคูณ ${res.analysis === "envelope"
             ? `แรงออกแบบ = ค่ามากสุดของ (ก) คานต่อเนื่องบนจุดรองรับแบบหมุน จัดน้ำหนักจรแบบหมากรุก และ (ข) โครง 3 มิติจุดต่อแข็งทั้งอาคาร (ฐานเสา${frame.baseFixity === "fixed" ? "ยึดแน่น" : "เป็นหมุด เพราะฐานเข็ม 1–2 ต้นรับโมเมนต์ไม่ได้"} ปลายคานซอยเป็นหมุด stiffness แตกร้าว คาน 0.5Ig เสา 0.7Ig รวม P-Delta) — เสาใช้โมเมนต์จากโครง 3 มิติทั้งสองแกนแต่ไม่น้อยกว่าระยะเยื้องศูนย์ขั้นต่ำ ความยาวเสาใช้ความสูงสุทธิ (หลังคานล่างถึงท้องคานบน)`
             : "คานคิดเป็นคานต่อเนื่องวางบนจุดรองรับแบบหมุน (เสาหรือคานที่รับ) จัดน้ำหนักจรแบบหมากรุก"}`}>
+          <div className="mb-2 break-inside-avoid text-[9pt] leading-relaxed text-[#344054]">
+            <p className="font-semibold">เกณฑ์และกฎหมายที่ใช้ในการออกแบบ</p>
+            <ol className="list-decimal pl-5">
+              <li>พระราชบัญญัติควบคุมอาคาร พ.ศ. 2522 และที่แก้ไขเพิ่มเติม (ฉบับที่ 2) พ.ศ. 2535 และ (ฉบับที่ 3) พ.ศ. 2543</li>
+              <li>กฎกระทรวงกำหนดการออกแบบโครงสร้างอาคาร และลักษณะและคุณสมบัติของวัสดุที่ใช้ในงานโครงสร้างอาคาร พ.ศ. 2566</li>
+              <li>ประกาศกระทรวงมหาดไทย เรื่อง การกำหนดฐานรากของอาคารและพื้นดินที่รองรับอาคาร พ.ศ. 2567</li>
+              <li>ประกาศกระทรวงมหาดไทย เรื่อง การออกแบบอาคารและลักษณะและคุณสมบัติของวัสดุที่ใช้ในงานโครงสร้างอาคาร พ.ศ. 2567</li>
+              <li>มาตรฐานการออกแบบอาคารคอนกรีตเสริมเหล็กของกรมโยธาธิการและผังเมือง และมาตรฐาน ว.ส.ท. (วิธีหน่วยแรงใช้งาน) พ.ศ. 2517 ประกอบ ACI 318 (WSD)</li>
+              <li>หน่วยแรงที่ยอมให้: คอนกรีต fc = F·f'c (F = {fmt(mat.F ?? 0.45, 3)}){mat.capFc !== false ? " ไม่เกิน 65 กก./ซม.²" : ""} · เหล็กเสริม fs ตามชั้นคุณภาพ (SR24 1,200 · SD30 1,500 · SD40 {(mat.F ?? 0.45) === 0.45 ? "1,700" : "1,500"} กก./ซม.²) · คอนกรีตหุ้มเหล็กตามมาตรฐาน</li>
+            </ol>
+          </div>
           <Item th="กำลังอัดคอนกรีต" f="f'c" v={fmt(mat.fcPrime, 0)} u={ksc} note={`fc = ${fmt(fc, 1)} ${ksc}${mat.capFc !== false && mat.F * mat.fcPrime > 65 ? " (ไม่เกิน 65 ตามกฎกระทรวง)" : ""}`} />
-          <Item th="เหล็กเสริม" f="fy" v={fmt(mat.fy, 0)} u={ksc} note={`เหล็กปลอก fy = ${fmt(mat.fys, 0)} ${ksc} · คอนกรีตหุ้ม ${fmt(mat.cover, 1)} ซม.`} />
+          <Item th="เหล็กเสริม" f="fy" v={fmt(mat.fy, 0)} u={ksc} note={`เหล็กปลอก fy = ${fmt(mat.fys, 0)} ${ksc} · คอนกรีตหุ้ม คาน ${fmt(mat.cover, 1)} · เสา ${fmt(mat.coverCol ?? mat.cover, 1)} · พื้น-บันได ${fmt(mat.coverSlab ?? 2, 1)} · ฐานราก ${fmt(mat.coverFoot ?? 7.5, 1)} ซม.`} />
           <Item th="หน่วยน้ำหนักคอนกรีต" v={fmt(CONC, 0)} u="กก./ม.³" note={`ผนัง: ${(frame.wallTypes ?? DEFAULT_WALL_TYPES).map((t) => `${t.name} ${t.w}`).join(" · ")} กก./ม.²`} />
           <Item th="กลุ่มน้ำหนัก" v={Object.values(GROUPS).map((g) => g[0]).join(" · ")} note="แยกแสดงทุกชั้น · วิเคราะห์ทุกกลุ่มรวมกัน (น้ำหนักใช้งาน) · คำนวณจากชั้นบนลงล่าง" />
           <Table head={["ระดับ (ล่าง → บน)", "เสาใต้ชั้นสูง (ม.)", "พื้นหนา (ม.)", "ปูผิว", "จร", "รวม w (กก./ม.²)"]}
@@ -213,7 +224,7 @@ export function FrameReport({ frame, project }) {
             {colTypes.flatMap((t, i) => t.levels.filter((lv) => res.columns.some((c) => c.typeIdx === i && c.lv === lv)).map((lv) => { const [nx, ny] = faceBars(lv.n);
               return (
                 <Figure key={`${t.name}${lv.level}`} caption={`${t.name} ${lv.level} · ${lv.n}-${lv.mainBar} · ${lv.tieBar} @${fmt(lv.s, 2)}`}>
-                  <Drawing model={columnSectionModel({ Bx: lv.Bx, By: lv.By, cover: mat.cover, tieD: SLAB_BARS[lv.tieBar]?.d ?? 0.6, barD: SLAB_BARS[lv.mainBar]?.d ?? 1.2, nx, ny })} className="mx-auto h-[38mm]" fontSize={8} width={150} />
+                  <Drawing model={columnSectionModel({ Bx: lv.Bx, By: lv.By, cover: mat.coverCol ?? mat.cover, tieD: SLAB_BARS[lv.tieBar]?.d ?? 0.6, barD: SLAB_BARS[lv.mainBar]?.d ?? 1.2, nx, ny })} className="mx-auto h-[38mm]" fontSize={8} width={150} />
                 </Figure>
               ); }))}
           </div>

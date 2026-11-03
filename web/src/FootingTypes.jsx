@@ -19,7 +19,7 @@ const BARS = Object.keys(SLAB_BARS).filter((b) => b.startsWith("DB"));
 // the pile-cap checks that failed, in words (engine/footing.js flags)
 const WHY = { pileOk: "แรงต่อเข็มเกินค่าปลอดภัย", dOk: "ฐานบางไป (ความลึกประสิทธิผล)", vOk: "แรงเฉือนทางเดียว", vpOk: "แรงเฉือนทะลุรอบเสา", vppOk: "แรงเฉือนทะลุรอบเข็ม",
   AsOkL: "เหล็กแนวยาวไม่พอ", AsOkS: "เหล็กแนวสั้นไม่พอ", perimOk: "แรงยึดเหนี่ยวเหล็ก", ancOk: "ระยะฝังเหล็กไม่พอ (ขยายฐาน / ใช้เหล็กเล็กลง)", bearingOk: "แรงแบกทานใต้เสา" };
-const why = (f) => (f.error ? f.error : f.r ? Object.keys(WHY).filter((k) => f.r[k] === false).map((k) => WHY[k]).join(" · ") : "");
+const why = (f) => (f.error ? f.error : f.r ? Object.keys(WHY).filter((k) => f.r[k] === false && !(f.n === 1 && (k === "ancOk" || k === "perimOk"))).map((k) => WHY[k]).join(" · ") : "");
 const Num = ({ v, on, step = "0.05", w = "w-16" }) => <input type="number" step={step} value={v} onChange={(e) => on(Number(e.target.value))} className={`${box} ${w}`} />;
 
 export function FootingTypes({ frame, set, res }) {
@@ -28,7 +28,8 @@ export function FootingTypes({ frame, set, res }) {
   const safe = (p) => (loads ? loads[p] ?? PILE_SAFE[p] : fo.Psafe ?? 18000);
   const setSafe = (p, t) => set("pileLoads", { ...Object.fromEntries(Object.keys(PILES).map((k) => [k, safe(k)])), [p]: Math.round(t * 1000) });
   const put = (i, k, v) => set("footTypes", types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
-  const add = () => set("footTypes", [...types, { name: `F${types.length + 1}`, n: types.length ? Math.min(9, types[types.length - 1].n + 1) : 1, pile: "I-18", t: 0.4, Df: 1.2, k: 3, w: types.length ? 0 : 0.9, bar: "DB 12", s: 0.1, barS: "DB 12", sS: 0.1 }]);
+  const add = () => set("footTypes", [...types, (types.length ? { name: `F${types.length + 1}`, n: Math.min(9, types[types.length - 1].n + 1), pile: "I-18", t: 0.4, Df: 1.2, k: 3, w: 0, bar: "DB 12", s: 0.15, barS: "DB 12", sS: 0.15 }
+    : { name: "F1", n: 1, pile: "I-18", t: 0.5, Df: 1.2, k: 3, w: 0.5, bar: "DB 12", nb: 5, s: 0.15, barS: "DB 12", nbS: 5, sS: 0.15 })]);
   const del = (i) => { set("footTypes", types.filter((_, j) => j !== i)); set("footPick", Object.fromEntries(Object.entries(pick).filter(([, v]) => v !== i).map(([k, v]) => [k, v > i ? v - 1 : v]))); };
   const foots = res.footings ?? [], shown = foots.find((f) => f.stack === selStack);
   const governing = [...new Set(foots.map((f) => f.type ?? null))].map((ty) => foots.filter((f) => (f.type ?? null) === ty).reduce((a, f) => ((f.util ?? 0) > (a.util ?? 0) ? f : a)));
@@ -37,7 +38,7 @@ export function FootingTypes({ frame, set, res }) {
     <div className="max-w-[1500px] space-y-5 text-[12px]">
       <section>
         <p className="mb-1 text-sm font-semibold text-gray-800">1 · Type ฐานราก</p>
-        <table className="w-full"><thead><tr>{["ชื่อ", "เข็ม (ต้น)", "ขนาดเข็ม", "หนาฐาน t (ม.)", "ลึก Df (ม.)", "ระยะเข็ม (× ขนาดเข็ม)", "กว้างฐาน (ม.) 1–2 ต้น", "เหล็กแนวยาว", "@ (ม.)", "เหล็กแนวสั้น", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
+        <table className="w-full"><thead><tr>{["ชื่อ", "เข็ม (ต้น)", "ขนาดเข็ม", "หนาฐาน t (ม.)", "ลึก Df (ม.)", "ระยะเข็ม (× ขนาดเข็ม)", "กว้างฐาน (ม.) 1–2 ต้น", "เหล็กแนวยาว", "จำนวน (เส้น)", "@ (ม.)", "เหล็กแนวสั้น", "จำนวน (เส้น)", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
           <tbody>{types.map((t, i) => <tr key={i} className="border-t border-gray-100">
             <td className={td}><input value={t.name} onChange={(e) => put(i, "name", e.target.value)} className={`${box} w-14`} /></td>
             <td className={td}><select value={t.n} onChange={(e) => put(i, "n", Number(e.target.value))} className={box}>{[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => <option key={n} value={n}>{n}</option>)}</select></td>
@@ -47,9 +48,11 @@ export function FootingTypes({ frame, set, res }) {
             <td className={td}><Num v={t.k ?? 3} on={(v) => put(i, "k", v)} step="0.5" w="w-14" /></td>
             <td className={td}>{t.n <= 2 ? <Num v={t.w ?? 0} on={(v) => put(i, "w", v)} step="0.1" w="w-14" /> : <span className="text-gray-400">ตามระยะเข็ม</span>}</td>
             <td className={td}><select value={t.bar ?? "DB 12"} onChange={(e) => put(i, "bar", e.target.value)} className={box}>{BARS.map((b) => <option key={b}>{b}</option>)}</select></td>
-            <td className={td}><Num v={t.s ?? 0.15} on={(v) => put(i, "s", v)} step="0.025" w="w-14" /></td>
+            <td className={td}><Num v={t.nb ?? 0} on={(v) => put(i, "nb", v)} step="1" w="w-12" /></td>
+            <td className={td}>{t.nb > 1 ? <span className="text-gray-400">ตามจำนวน</span> : <Num v={t.s ?? 0.15} on={(v) => put(i, "s", v)} step="0.025" w="w-14" />}</td>
             <td className={td}><select value={t.barS ?? t.bar ?? "DB 12"} onChange={(e) => put(i, "barS", e.target.value)} className={box}>{BARS.map((b) => <option key={b}>{b}</option>)}</select></td>
-            <td className={td}><Num v={t.sS ?? t.s ?? 0.15} on={(v) => put(i, "sS", v)} step="0.025" w="w-14" /></td>
+            <td className={td}><Num v={t.nbS ?? 0} on={(v) => put(i, "nbS", v)} step="1" w="w-12" /></td>
+            <td className={td}>{t.nbS > 1 ? <span className="text-gray-400">ตามจำนวน</span> : <Num v={t.sS ?? t.s ?? 0.15} on={(v) => put(i, "sS", v)} step="0.025" w="w-14" />}</td>
             <td className={td}>{foots.filter((f) => f.type === t.name).length} ฐาน</td>
             <td className={td}><button onClick={() => del(i)} title="ลบ type" className="text-gray-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button></td>
           </tr>)}</tbody></table>

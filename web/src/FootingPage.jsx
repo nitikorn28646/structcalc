@@ -9,6 +9,7 @@ import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import PressureChart from "./PressureChart.jsx";
 import Footing3D from "./Footing3D.jsx";
+import { WallFootingPage, WallFootingReport } from "./WallFooting.jsx";
 import { downloadDxf, footingModel } from "./drawings.js";
 
 export const DEFAULT_FOOTING = {
@@ -42,6 +43,7 @@ function Row({ label, value, unit, ok }) {
 }
 
 export function FootingPage({ f, set, dark }) {
+  if (f.type === "wall") return <WallFootingPage f={f} set={set} />;
   const { r, error } = runFooting(f);
   const n = (key, label, unit, step) => (
     <Field label={label} unit={unit}><NumberInput value={f[key]} step={step} onChange={(v) => set(key, v)} /></Field>
@@ -58,7 +60,7 @@ export function FootingPage({ f, set, dark }) {
       <div className="space-y-4 xl:row-span-2 xl:overflow-y-auto">
         <Card title="ชนิดฐานราก วัสดุ ดิน" icon={Wrench}>
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">{sel("type", "ชนิดฐานราก", [["spread", "ฐานแผ่ (วางบนดิน)"], ["pile", "ฐานรากบนเสาเข็ม"]])}</div>
+            <div className="col-span-2">{sel("type", "ชนิดฐานราก", [["spread", "ฐานแผ่ (วางบนดิน)"], ["pile", "ฐานรากบนเสาเข็ม"], ["wall", "ฐานรากแถบใต้ผนัง"]])}</div>
             {n("fcPrime", "f'c", "ksc")}{sel("fy", "เหล็กเสริม", GRADE_OPTS, true)}
             {pc ? <>{sel("n", "จำนวนเข็ม", [1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => [k, `${k} ต้น`]), true)}{sel("pile", "ชนิดเข็ม", PILE_OPTS)}
               {n("pileL", "ความยาวเข็ม", "m", "1")}{n("fcPile", "f'c เข็ม", "ksc")}
@@ -156,6 +158,7 @@ export function FootingPage({ f, set, dark }) {
 
 export function FootingReport({ f, project }) {
   if (f.type === "pile") return <PileCapReport f={f} project={project} />;
+  if (f.type === "wall") return <WallFootingReport f={f} project={project} />;
   const { r } = runFooting(f);
   if (!r) return <div className="report">ข้อมูลไม่ถูกต้อง</div>;
   const ok = footingOk(r);

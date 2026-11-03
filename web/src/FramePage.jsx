@@ -27,6 +27,8 @@ import { RoofLinkCard } from "./RoofLinkCard.jsx";
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
 // example: 2 × 2 bays, columns at every node, beams on the grid lines, walls on the outside beams
+// concrete cover per member kind (cm); coverCol falls back to the old single `cover` so saved projects keep their results
+const COVERS = [["cover", "คาน", 3], ["coverCol", "เสา", 3], ["coverSlab", "พื้น / บันได", 2], ["coverFoot", "ฐานราก", 7.5]];
 const XS = [0, 4, 8], YS = [0, 3.5, 7.5];
 const exBeams = [...YS.flatMap((y) => XS.slice(1).map((x, i) => [[XS[i], y], [x, y]])), ...XS.flatMap((x) => YS.slice(1).map((y, i) => [[x, YS[i]], [x, y]]))]
   .map(([a, b]) => ({ a, b, type: null, wall: { h: (a[0] === b[0] && (a[0] === 0 || a[0] === 8)) || (a[1] === b[1] && (a[1] === 0 || a[1] === 7.5)) ? 2.8 : 0, kind: "brick" } }));
@@ -216,6 +218,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
+  const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
+  const coverBar = (keys) => <div className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]"><span className="pb-2 text-xs font-medium text-gray-500">คอนกรีตหุ้ม</span>{coverFields.filter((_, i) => keys.includes(COVERS[i][0]))}</div>;
   const slabRows = step === "design" && sub === "slabs" ? designSlabs(an, fl, frame.mat) : [];
   const page = step === "project" ? (
     <div className="grid max-w-4xl gap-4 md:grid-cols-2">
@@ -223,7 +227,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <div className="grid grid-cols-2 gap-3">
             <Field label="f'c" unit="ksc"><NumberInput value={frame.mat.fcPrime} step="10" onChange={(v) => setMat("fcPrime", v)} /></Field>
             <Field label="เหล็กยืน"><Select value={frame.mat.fy} onChange={(v) => setMat("fy", Number(v))} options={Object.entries(GRADES).map(([k, g]) => [k, g])} /></Field>
-            <Field label="คอนกรีตหุ้ม" unit="cm"><NumberInput value={frame.mat.cover} step="0.5" onChange={(v) => setMat("cover", v)} /></Field>
+          </div>
+          <div className="mt-3 text-xs font-medium text-gray-500">ระยะคอนกรีตหุ้มเหล็ก (ถึงผิวเหล็กปลอก / เหล็กนอกสุด)</div>
+          <div className="mt-1 grid grid-cols-4 gap-3">
+            {coverFields}
           </div>
         </Card>
       <LateralChoice frame={frame} set={set} />
@@ -235,11 +242,12 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         </div>
       </Card>
     </div>
-  ) : step === "design" && sub === "types" ? <div><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
-    : step === "design" && sub === "ctypes" ? <div><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
-    : step === "design" && sub === "foot" ? <FootingTypes frame={frame} set={set} res={res} />
+  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"])}<TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+    : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol"])}<ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
+    : step === "design" && sub === "foot" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (
       <div className="space-y-3">
+      {coverBar(["coverSlab"])}
       <table className="w-full border-collapse text-[12px]"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "หนา (ม.)", "ขนาดเหล็ก", "เหล็กเสริม", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
         <tbody>{slabRows.map((x) => <tr key={x.name} className="border-b border-gray-100 tabular-nums"><td className="px-1 py-1">{x.name}</td><td className="px-1">{x.way ?? x.kind}</td><td className="px-1">{x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-"}</td>
           <td className="px-1">{x.cont ?? "-"}</td>

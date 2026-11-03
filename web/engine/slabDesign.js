@@ -19,7 +19,7 @@ function continuous(pn, e, panels) {
 }
 
 export function designSlabs(an, floor, mat, sm = {}) {
-  const base = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: sm.fy ?? 2400, cover: sm.cover ?? 2, unitWeight: 2400 };
+  const base = { fcPrime: mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: sm.fy ?? 2400, cover: sm.cover ?? mat.coverSlab ?? 2, unitWeight: 2400 };
   const bar = sm.bar ?? "RB 9", out = [], pbar = (pn) => floor.panels?.[pn.key]?.bar ?? bar; // bar size chosen per panel in step 8
   an.panels.forEach((pn, k) => {
     const name = `P${k + 1}`;

@@ -1,7 +1,15 @@
 // Usage: node footing.mjs '<input JSON>'          (spread footing)
-//        node footing.mjs pilecap '<input JSON>'  (pile cap)  → key=value lines for differential testing.
+//        node footing.mjs pilecap '<input JSON>'  (pile cap)
+//        node footing.mjs wall '<input JSON>'     (wall footing) → key=value lines for differential testing.
 import { spreadFooting, pileCap, FOOTING_KEYS, PILECAP_KEYS } from "../web/engine/footing.js";
 import { formatValue } from "../web/engine/beam.js";
+import { wallFooting, WALLFOOTING_KEYS } from "../web/engine/wallFooting.js";
+
+if (process.argv[2] === "wall") {
+  const r = wallFooting(JSON.parse(process.argv[3]));
+  process.stdout.write(WALLFOOTING_KEYS.map((k) => `${k}=${formatValue(r[k])}`).join("\n") + "\n");
+  process.exit(0);
+}
 
 const cap = process.argv[2] === "pilecap";
 const inp = JSON.parse(process.argv[cap ? 3 : 2]);
