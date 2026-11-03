@@ -23,7 +23,7 @@ export function designSlabs(an, floor, mat, sm = {}) {
   const bar = sm.bar ?? "RB 9", out = [];
   an.panels.forEach((pn, k) => {
     const name = `P${k + 1}`;
-    if (pn.open || pn.stairWell) return;
+    if (pn.open || pn.stairWell || !(pn.t > 0)) return; // no slab here (a floor of ground / roof beams has thickness 0)
     if (pn.st !== "S") { out.push({ name, kind: pn.st, note: pn.st === "PS" ? "พื้นสำเร็จ — ใช้ตามตารางผู้ผลิต (ช่วงพาด / น้ำหนักบรรทุก)" : "พื้นวางบนดิน — เสริมเหล็กกันร้าวตามแบบ" }); return; }
     const cont = pn.P.map((_, e) => continuous(pn, e, an.panels)), extra = pn.g.SDL + pn.g.WALL + (pn.g.SP ?? 0), inp = { ...base, t: pn.t, extra, live: pn.g.LL };
     try {

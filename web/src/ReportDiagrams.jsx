@@ -134,7 +134,7 @@ export function SlabStrip({ row }) {
 
 // isometric view of the 3D frame model (members by kind, supports)
 export function FrameIso({ f3 }) {
-  if (!f3?.input) return null;
+  if (!f3?.input?.nodes?.length) return null; // empty project: nothing to draw
   const { nodes } = f3.input, mem = f3.members, c = Math.cos(Math.PI / 6), s = Math.sin(Math.PI / 6);
   const pr = (p) => [(p.x - p.y) * c, -(p.x + p.y) * s - p.z];
   const P = nodes.map(pr), xs = P.map((p) => p[0]), ys = P.map((p) => p[1]);

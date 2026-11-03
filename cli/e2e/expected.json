@@ -1,0 +1,20 @@
+{
+ "yasothon": {
+  "beams": "36/36",
+  "columns": "27/27",
+  "footings": "9/9",
+  "base_t": 116.0
+ },
+ "_ole": {
+  "beams": "36/36",
+  "columns": "27/27",
+  "footings": "9/9",
+  "base_t": 116.0
+ },
+ "new": {
+  "beams": "34/34",
+  "columns": "36/36",
+  "footings": "12/12",
+  "base_t": 97.5
+ }
+}

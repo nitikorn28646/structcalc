@@ -199,5 +199,10 @@ steps 7–9 (warnings tab everywhere); roof DrawBoard lost its own undo/redo + C
 "แรงภายในคาน" (plan + big loads/V/M diagram of the selected line, line dropdown, default = largest moment), "แรงในเสา" (ColumnChart + table
 with governing combination), "เทียบ 2 วิธี / ตั้งค่า"; step 8 "พื้น / บันได" shows slab moment strips. Dev-only note: Vite HMR logs
 "Failed to reload /@fs/D:\…" after files are written from outside — a page reload fixes it.
+TESTING 2026-11-03: browser E2E `cli/e2e/run.py` (Playwright + installed Edge, expected values cli/e2e/expected.json, summary appended
+to rea-lab/results/history.jsonl) — run it before hand tests; findings in docs/test-log.md; test houses in the git-ignored folder
+เเบบสำหรับทดสอบ/ (e.g. คุณโอเล่/model.mjs → web/public/projects/_ole.json, also git-ignored). Snapshots: 5 latest works kept in
+localStorage `structcalc.snapshots` before New/Open, header "กู้คืน". Roof from structure (step 5 "ใช้แปลนจากโครงสร้าง", src/roofLink.js
+roofFromFrame + App splitAtColumns). RB 9 added to BARS (GB 2-RB9); unreadable bar strings in a beam type → warning.
 Next agreed: C = 3D rigid-joint frame analysis + P-Delta (gravity first, compare with the current results), then B = wind / seismic / WSD
 combinations (slot ready: step 6 tab "ลม / แผ่นดินไหว / Combination"). Ideas not done: Q4 curved beams (true arc + torsion).

@@ -38,6 +38,7 @@ procedure and the non-negotiables. When this file and a request conflict, ask th
    Gate before any commit:
    ```
    node cli/contbeam-check.mjs && node cli/floor-check.mjs && node cli/floor-loads-check.mjs && node cli/frame-check.mjs && node cli/frame3d-check.mjs && node cli/lateral-check.mjs && node cli/arc-check.mjs && node cli/regress-yasothon.mjs
+   D:\REAea-lab\.venv\Scripts\python.exe -X utf8 cli/e2e/run.py   # browser E2E (dev server running), must print N/N passed
    cd web && npx vite build
    ```
 4. **Browser check** (dev server `structcalc-web`, http://localhost:5180): open

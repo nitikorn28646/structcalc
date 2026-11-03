@@ -5,6 +5,14 @@ description: Hands-on test of the StructCalc web app the way an engineer uses it
 
 # StructCalc — hands-on UI test (any AI / any account)
 
+**Cheapest first (user: save tokens):** run the automated browser test before any hand test —
+`D:\REAea-lab\.venv\Scripts\python.exe -X utf8 cli/e2e/run.py` (dev server on :5180; Playwright drives the installed Edge, ~2 min,
+prints one summary line + only the failures; screenshots in rea-lab/results/e2e-*/; `--save` after an intended result change).
+It covers every step of each test project (1920 light + 1366 dark: error box, NaN/undefined/Infinity, horizontal overflow, console,
+HTTP errors, status numbers vs cli/e2e/expected.json) and a new project built through the UI (grid, auto columns/beams, copy floor,
+roof from structure, diagrams, report, save → new → open, restore). Use the hand test below only for what a script cannot judge
+(is it confusing? is something missing?) — small screenshots, batched actions.
+
 Read `CLAUDE.md` and `.claude/skills/structcalc-dev/SKILL.md` first. This skill is the **test procedure**; the release plan is
 `docs/release-plan.md`; every finding goes into `docs/test-log.md` (append, newest on top, never delete).
 
