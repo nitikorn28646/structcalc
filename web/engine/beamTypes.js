@@ -1,7 +1,7 @@
 // Automatic beam types, one more per press (user 2026-11-03: "like the spread-footing auto types", economy first):
 // every span gets the cheapest section that passes all its checks with its design forces; spans are sorted by that cost and
 // split into k groups of about equal count; each group's type = the cheapest section passing every span of the group.
-// Names B1, B2, … from the cheapest. Cantilever spans are not a group of their own: they use the type whose support bars suffice,
+// Names B1, B2, … by size (b × h, then steel); types no span uses are dropped. Cantilever spans are not a group of their own: they use the type whose support bars suffice,
 // shown as <name>A (B1A = B1 with its top bars run the whole cantilever — floor.js span.detail).
 // Limits (user): b ≥ 0.20 m, h ≤ 0.80 m, sizes in whole 10 cm, at most 2 bar layers. Cost per metre: concrete 2,500 ฿/m³, steel 28 ฿/kg,
 // formwork 350 ฿/m² (b + 2h) — only the ranking matters.
@@ -182,5 +182,13 @@ export function generateBeamTypes(frame, k, g = BEAM_GEN) {
     const s = score(r);
     if (s.ok >= best.s.ok) best = { ...best, types, s };
   }
-  return best ? { beamTypes: best.types, floors: f.floors, ...best.s, unmatched: best.unmatched } : null;
+  if (!best) return null;
+  // types no span uses are dropped; the rest named by size (user 2026-11-03): b × h, then depth, then steel → B1, B2, …
+  // (all beams are "auto": the analysis picks by section and steel, so the order and the names do not change the result)
+  f = { ...f, beamTypes: best.types }; r = analyzeFrame(f);
+  const used = new Set(r.floors.flatMap((a) => a.spans).map((sp) => sp.typeIdx));
+  const area = (x) => { const b = parseBars(x); return b ? b.n * BARS[b.bar].A : 0; }, steel = (t) => area(t.top) + area(t.bot) + area(t.topX) + area(t.botX);
+  const types = best.types.filter((_, i) => used.has(i)).sort((a, b) => a.b * a.h - b.b * b.h || a.h - b.h || steel(a) - steel(b) || beamCost(a, g) - beamCost(b, g))
+    .map((t, i) => ({ ...t, name: `B${i + 1}` }));
+  return { beamTypes: types, floors: f.floors, ...best.s, unmatched: best.unmatched, asked: k };
 }

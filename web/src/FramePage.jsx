@@ -86,24 +86,26 @@ const Handle = () => <PanelResizeHandle className="group relative w-1.5 bg-trans
 // editable beam-type table (B1, B2, …)
 // automatic beam types, one more per press (like the spread-footing types): engine/beamTypes.js generateBeamTypes
 function AutoBeamTypes({ frame, set, res }) {
-  const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null), k0 = frame.beamAutoK ?? 0;
+  const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null), k0 = frame.beamAutoK ?? 0, [want, setWant] = useState(Math.max(1, k0 || 3));
   const cost = res.floors.flatMap((a) => a.spans).reduce((s, x) => s + beamCost(x.type) * x.len, 0);
   const run = (k) => { setBusy(true); setMsg(null); setTimeout(() => { // let "working…" paint first: a big house takes seconds
     try {
       const g = generateBeamTypes(frame, k);
       if (!g) { setMsg({ ok: false, text: "ยังไม่มีคานให้จัด type" }); return; }
       set("beamTypes", g.beamTypes); set("floors", g.floors); set("beamAutoK", k);
-      setMsg({ ok: g.ok === g.n, text: `${g.beamTypes.length} type · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})${g.unmatched.length ? ` · ไม่มีหน้าตัดในกรอบ (กว้าง ≥ 0.20, ลึก ≤ 0.80 ม., เหล็ก ≤ 2 ชั้น) สำหรับช่วง ${g.unmatched.join(", ")} — เพิ่ม type เอง` : ""}` });
+      setMsg({ ok: g.ok === g.n, text: `${g.beamTypes.length} type${g.beamTypes.length < k ? ` (ขอ ${k} — ที่เหลือไม่มีคานใช้ จึงตัดออก)` : ""} · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})${g.unmatched.length ? ` · ไม่มีหน้าตัดในกรอบ (กว้าง ≥ 0.20, ลึก ≤ 0.80 ม., เหล็ก ≤ 2 ชั้น) สำหรับช่วง ${g.unmatched.join(", ")} — เพิ่ม type เอง` : ""}` });
     } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(false); }
   }, 30); };
   return (
     <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-white/[0.03]">
       <div className="flex flex-wrap items-center gap-2">
         <button disabled={busy} onClick={() => run(k0 + 1)} className="rounded-lg bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600 disabled:opacity-60">{busy ? "กำลังจัด type…" : `เพิ่ม type คานอัตโนมัติ (+1 → ${k0 + 1} type)`}</button>
+        <span className="flex items-center gap-1 text-[12px] text-gray-600">หรือกำหนด<input type="number" min={1} max={20} value={want} onChange={(e) => setWant(Math.max(1, Math.min(20, Math.round(Number(e.target.value) || 1))))} className="h-8 w-14 rounded border border-gray-300 bg-transparent px-1 text-right" />type
+          <button disabled={busy} onClick={() => run(want)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50 disabled:opacity-60">จัด {want} type</button></span>
         {k0 > 0 && <button disabled={busy} onClick={() => run(k0)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50 disabled:opacity-60">↻ จัดใหม่ ({k0} type)</button>}
         <span className="text-[12px] text-gray-500">ค่าคานตอนนี้ ≈ {Math.round(cost).toLocaleString()} บาท</span>
       </div>
-      <p className="mt-1.5 text-[11px] text-gray-500">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ถูกที่สุดที่ผ่าน (กว้าง 0.20 / 0.30 ม. ลึก 0.30–0.80 ม. ทีละ 10 ซม. เหล็ก ≤ 2 ชั้น) เรียงตามราคาแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดถูกที่สุดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2, … จากถูกไปแพง · คานยื่นใช้ type ที่เหล็กหัวเสาพอ ชื่อ B1A (เหล็กบนยาวตลอด) · แทนที่ type คานทั้งหมดและตั้งทุกคานเป็นอัตโนมัติ (ย้อนกลับได้ Ctrl+Z) · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p>
+      <p className="mt-1.5 text-[11px] text-gray-500">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ถูกที่สุดที่ผ่าน (กว้าง 0.20 / 0.30 ม. ลึก 0.30–0.80 ม. ทีละ 10 ซม. เหล็ก ≤ 2 ชั้น) เรียงตามราคาแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดถูกที่สุดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2, … เรียงตามขนาดคาน (ตัด type ที่ไม่มีคานใช้) · คานยื่นใช้ type ที่เหล็กหัวเสาพอ ชื่อ B1A (เหล็กบนยาวตลอด) · แทนที่ type คานทั้งหมดและตั้งทุกคานเป็นอัตโนมัติ (ย้อนกลับได้ Ctrl+Z) · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p>
       {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
     </div>
   );
