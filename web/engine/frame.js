@@ -151,8 +151,9 @@ function gravity(frame, minTypes) {
   // a column whose top has no beam is a cantilever from the last level below that has one (user's Yasothon: posts above the last
   // beam level; a porch column with no beam at two levels): effective length 2·Lc, Lc = from that level up to the free tip.
   // tiedColumn (diff-tested) applies k = 1 in its axial mode whatever the frame case, so the effective length is passed as L
-  // frame.freeTop "braced": the engineer states that the roof framing holds those tops (k = 1 on the clear height, as before)
-  if (frame.freeTop !== "braced") for (const key of new Set(cols.map((c) => c.stack))) {
+  // frame.freeTop (user 2026-11-03: default "braced" = the roof framing holds those tops, k = 1 on the clear height; selectable):
+  // "cantilever" = checked as above (2·Lc)
+  if (frame.freeTop === "cantilever") for (const key of new Set(cols.map((c) => c.stack))) {
     const st = cols.filter((c) => c.stack === key).sort((a, b) => a.floor - b.floor);
     st.forEach((c, i) => {
       if (!c.free) return;
@@ -160,7 +161,7 @@ function gravity(frame, minTypes) {
       while (lo > 0 && st[lo - 1].free && st[lo - 1].floor === st[lo].floor - 1) lo--;
       while (hi + 1 < st.length && st[hi + 1].free && st[hi + 1].floor === st[hi].floor + 1) hi++;
       c.Lc = st.slice(lo, hi + 1).reduce((s, x) => s + x.L, 0); c.Leff = 2 * c.Lc;
-      if (i === hi) warnings.push(`เสา ${key} ไม่มีคานยึดปลายบน${hi > lo ? ` ${hi - lo + 1} ชั้นติดกัน` : ""} — ตรวจเป็นเสายื่นยาว ${c.Lc.toFixed(2)} ม. (ความยาวประสิทธิผล 2·L = ${c.Leff.toFixed(2)} ม.) · ถ้ามีคาน/โครงหลังคายึดหัวเสา ให้วาดคานที่หัวเสา หรือเลือก "หัวเสายึดด้วยโครงหลังคา" ในเกณฑ์การออกแบบ (ขั้น 0)`);
+      if (i === hi) warnings.push(`เสา ${key} ไม่มีคานยึดปลายบน${hi > lo ? ` ${hi - lo + 1} ชั้นติดกัน` : ""} — ตรวจเป็นเสายื่นยาว ${c.Lc.toFixed(2)} ม. (ความยาวประสิทธิผล 2·L = ${c.Leff.toFixed(2)} ม.) · ถ้ามีคาน/โครงหลังคายึดหัวเสา ให้วาดคานที่หัวเสา หรือเลือก "ยึดด้วยโครงหลังคา k = 1" ในเกณฑ์การออกแบบ (ขั้น 0)`);
     });
   }
   return { an, cols, warnings };

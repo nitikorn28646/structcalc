@@ -309,8 +309,8 @@ REVIEW FIXES (2026-11-03, cloud session, branch feature/review-fixes; findings i
   ตุ๊กตา load was lost (10.94 → 14.83 t). plateSupport "beam" now delivers w·L (was w·anchor spacing). carrierPlates() + button
   "เพิ่มอะเสรับ" (tab อะเส) adds interior plates through loose posts (Yasothon: 16 short plates, all pass).
 - Columns: top with no beam = cantilever from the last braced level, L passed = 2·Lc (tiedColumn axial mode always uses k = 1),
-  frame.freeTop "cantilever" (default) | "braced" (step 0). checkColumn: klu/r > 100 or R ≤ 0 = NG (a negative R passed before).
-  Yasothon: porch column (14,0) = 6.2 m cantilever → NG; roof-level stacks now C3. Columns in tension (3D, D+L) warned.
+  frame.freeTop "braced" (default, user decision 2026-11-03: k = 1, the roof framing holds the tops) | "cantilever" (step 0). checkColumn: klu/r > 100 or R ≤ 0 = NG (a negative R passed before).
+  With "cantilever" Yasothon's porch column (14,0) = 6.2 m cantilever → NG and roof-level stacks need C3; default "braced" keeps 43/43. Columns in tension (3D, D+L) warned.
 - Continuous-beam supports with a negative reaction (end pulled down) warned (Yasothon −9.5 t at (6.00,2.40)).
 - Shear at d (mat.shearAt "d" default | "max" = Excel): floor.js shearRange/vAtD from the |V| envelope (span.Vx, endCol, Pat):
   only ends on a column without a point load within d; spans < 2d keep the largest V; frame3d spans give Vd; report labels it.
