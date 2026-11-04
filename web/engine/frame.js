@@ -356,7 +356,7 @@ export function analyzeFrame(frame) {
         if (Math.max(Bx, By) / Math.min(Bx, By) > 3) break; // a strip, not a footing any more
         const tt = { name: f.type, t: f.inp.t, Df: f.inp.Df, bar: f.inp.longBar, barS: f.inp.shortBar, s: f.inp.sLong, sS: f.inp.sShort, Bx, By };
         const r = designSpread(tt, f.inp.P, { Bx: f.inp.bx * 100, By: f.inp.by * 100, mainBar: f.inp.dowelBar, n: f.inp.dowelN }, mat, foS, f.inp.Mx ?? 0, f.inp.My ?? 0);
-        const cand = { ...f, ...r, p: f.p, stack: f.stack, P: f.P, Mx: f.Mx, My: f.My, combo: f.combo, minP: f.minP, reshaped: true };
+        const cand = { ...f, ...r, p: f.p, stack: f.stack, P: f.P, Mx: f.Mx, My: f.My, combo: f.combo, minP: f.minP, reshaped: true, type: null, typeFrom: f.type ?? null }; // not the type's size any more → its own mark on the plan
         if (r.ok && clear(cand, i)) { footings[i] = cand; return true; }
       }
       return false;

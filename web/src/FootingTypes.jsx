@@ -137,7 +137,7 @@ export function FootingTypes({ frame, set, res }) {
             <td className={td}>{f.stack}</td>
             <td className={td} onClick={(e) => e.stopPropagation()}><select value={pick[f.stack] ?? ""} onChange={(e) => set("footPick", { ...pick, [f.stack]: e.target.value === "" ? undefined : Number(e.target.value) })} className={box}>
               <option value="">อัตโนมัติ</option>{types.map((t, i) => <option key={i} value={i}>{t.name}</option>)}</select></td>
-            <td className={td}>{f.type ?? "-"}</td>
+            <td className={td}>{f.reshaped ? <span title={`ปรับจาก ${f.typeFrom ?? "อัตโนมัติ"} เป็นผืนผ้าเพราะชิดฐานข้างเคียง`}>{marks.mark(f)} (ผืนผ้า)</span> : f.type ?? "-"}</td>
             <td className={td}>{fmt(f.P / 1000, 2)}</td><td className={td}>{fmt(f.Mx ?? 0, 0)} / {fmt(f.My ?? 0, 0)}</td><td className={td}>{f.combo ?? "D+L"}</td>
             <td className={td}>{f.kind === "spread" ? "ฐานแผ่" : `${f.n} × ${f.pile}`}</td><td className={td}>{f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp?.t ?? 0.4, 2)}` : "-"}</td>
             <td className={td}>{!f.r ? "-" : f.kind === "spread" ? `q ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`}</td>

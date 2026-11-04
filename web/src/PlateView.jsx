@@ -1,4 +1,5 @@
 ﻿// Wall-plate (อะเส) tab: plan with every span coloured by its section, span table with own sizes, per-wall column count.
+import { useEffect, useRef, useState } from "react";
 import { Columns3, Plus, Ruler, Trash2, Wand2 } from "lucide-react";
 import { Badge, Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
@@ -120,9 +121,17 @@ export function PlateInputs({ d, setD, g, plates, sizes, setInner, onAutoInner, 
 export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, setHover, dark }) {
   const xs = g.eave.map((p) => p[0]), ys = g.eave.map((p) => p[1]), pad = 1.2;
   const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad, w = Math.max(...xs) - x0 + pad, h = Math.max(...ys) - y0 + pad;
-  const Y = (y) => y0 + h - (y - y0), sc = Math.max(w, h) / 60, ring = (P) => P.map(([x, y]) => `${x},${Y(y)}`).join(" ");
+  // zoom (wheel, about the pointer) and pan (drag); double-click = fit (user 2026-11-04: the plan was too small to read)
+  const [vb, setVb] = useState(null), [drag, setDrag] = useState(null), ref = useRef(null), V = vb ?? [x0, y0, w, h];
+  const Y = (y) => y0 + h - (y - y0), sc = (Math.max(w, h) / 48) * Math.max(0.35, Math.min(1, V[2] / w)), ring = (P) => P.map(([x, y]) => `${x},${Y(y)}`).join(" ");
+  const toSvg = (e) => { const r = ref.current.getBoundingClientRect(), k = Math.max(V[2] / r.width, V[3] / r.height); return [V[0] + (e.clientX - r.left - (r.width - V[2] / k) / 2) * k, V[1] + (e.clientY - r.top - (r.height - V[3] / k) / 2) * k, k]; };
+  useEffect(() => { const el = ref.current; if (!el) return; const f = (e) => { e.preventDefault(); const [mx, my] = toSvg(e), z = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+    setVb([mx - (mx - V[0]) * z, my - (my - V[1]) * z, V[2] * z, V[3] * z]); }; el.addEventListener("wheel", f, { passive: false }); return () => el.removeEventListener("wheel", f); });
   return (
-    <svg viewBox={`${x0} ${y0} ${w} ${h}`} className="h-full w-full select-none">
+    <svg ref={ref} viewBox={V.join(" ")} className={`h-full w-full select-none ${drag ? "cursor-grabbing" : ""}`}
+      onPointerDown={(e) => { if (e.button === 0 || e.button === 1) setDrag({ x: e.clientX, y: e.clientY, V, k: toSvg(e)[2] }); }}
+      onPointerMove={(e) => { if (drag) setVb([drag.V[0] - (e.clientX - drag.x) * drag.k, drag.V[1] - (e.clientY - drag.y) * drag.k, drag.V[2], drag.V[3]]); }}
+      onPointerUp={() => setDrag(null)} onPointerLeave={() => setDrag(null)} onDoubleClick={() => setVb(null)}>
       <polygon points={ring(g.eave)} fill={dark ? "#7b8cff10" : "#465fff08"} stroke="#8b8d98" strokeWidth={sc * 0.08} strokeDasharray={`${sc * 0.5} ${sc * 0.3}`} />
       {plates.map((m) => {
         const L = Math.hypot(m.q[0] - m.p[0], m.q[1] - m.p[1]), nx = (m.q[1] - m.p[1]) / L, ny = -(m.q[0] - m.p[0]) / L;
@@ -132,7 +141,7 @@ export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, s
             <line x1={m.p[0]} y1={Y(m.p[1])} x2={m.q[0]} y2={Y(m.q[1])} stroke="transparent" strokeWidth={sc * 2} />
             <line x1={m.p[0]} y1={Y(m.p[1])} x2={m.q[0]} y2={Y(m.q[1])} stroke={m.color} strokeWidth={sc * (on ? 0.75 : 0.45)} strokeLinecap="butt" />
             <text x={mx} y={Y(my)} fontSize={sc * 0.72} textAnchor="middle" fill={m.r.ok ? (dark ? "#e3e6f0" : "#344054") : "#f04438"}
-              transform={vert ? `rotate(-90 ${mx} ${Y(my)})` : undefined} fontWeight={on ? 700 : 500}>
+              transform={vert ? `rotate(-90 ${mx} ${Y(my)})` : undefined} fontWeight={on ? 700 : 500} stroke={dark ? "#0f1222" : "#f9fafb"} strokeWidth={sc * 0.22} paintOrder="stroke" strokeLinejoin="round">
               <tspan x={mx} dy={-sc * 0.15} fontWeight={700} fill={m.color}>{m.tag}{m.typeName ? ` · ${m.typeName}` : ""}</tspan>
               <tspan x={mx} dy={sc * 0.85}>{plateText({ count: m.count, type: m.r.section.type, name: m.r.section.name })}</tspan>
             </text>
