@@ -36,7 +36,7 @@ export const corners = (P) => P.filter((q, i) => { const a = P[(i + P.length - 1
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null, stairsAbove = null, aboveName = "", belowName = "", onStairUp = null, onPickAbove = null }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -118,7 +118,11 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     if (tool === "stair") {
       if (Math.abs(p[0] - start[0]) < 0.3 || Math.abs(p[1] - start[1]) < 0.3) return;
       const up = Math.abs(p[0] - start[0]) >= Math.abs(p[1] - start[1]) ? "+x" : "+y";
-      commit({ stairs: [...stairs, { a: start, b: p, up, kind: "long", t: 0.12, riser: 0.17, tread: 0.25, finish: 100, live: 300, landingL: 1.2, side: 1 }] });
+      const ns = { a: start, b: p, up, kind: "long", t: 0.12, riser: 0.17, tread: 0.25, finish: 100, live: 300, landingL: 1.2, side: 1 };
+      // a stair drawn on a floor goes UP from it (user 2026-11-04: drawn on คานคอดิน it went down to the footings): it is stored on
+      // the floor above (the analysis keeps stairs on the floor they reach — foot on this floor, head on the floor above)
+      if (onStairUp) { onStairUp({ ...ns, drawnBelow: true }); setStart(null); return; }
+      commit({ stairs: [...stairs, ns] });
       setSel({ kind: "stair", i: stairs.length }); setStart(null); return;
     }
     if (tool === "line") { const it = libItem?.kind === "line" ? libItem : null; commit({ lineLoads: [...lineLoads, { a: start, b: p, q: it?.v ?? 100, name: it?.name ?? "ราวกันตก" }] }); setStart(p); return; }
@@ -383,6 +387,14 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               </g>
             );
           })}
+          {(stairsAbove ?? []).map((st, i) => { // stairs that start on this floor (stored on the floor above): dashed, click → that floor
+            const x0 = Math.min(st.a[0], st.b[0]), x1 = Math.max(st.a[0], st.b[0]), y0 = Math.min(st.a[1], st.b[1]), y1 = Math.max(st.a[1], st.b[1]);
+            return (
+              <g key={`su${i}`} onClick={onPickAbove ? (e) => { e.stopPropagation(); onPickAbove(i); } : undefined} style={{ cursor: onPickAbove ? "pointer" : undefined }}>
+                <rect x={x0} y={-y1} width={x1 - x0} height={y1 - y0} fill={dark ? "#0e938433" : "#0e938422"} stroke={ST_C} strokeWidth={1.5 * k} strokeDasharray={`${8 * k} ${5 * k}`} />
+                {txt([(x0 + x1) / 2, (y0 + y1) / 2], `บันได ${i + 1} ↑ ขึ้นไป ${aboveName}`, ST_C, 11, "middle", 600)}
+              </g>);
+          })}
           {stairs.map((st, i) => { // stair: outline, step lines across the run, arrow up, label
             const x0 = Math.min(st.a[0], st.b[0]), x1 = Math.max(st.a[0], st.b[0]), y0 = Math.min(st.a[1], st.b[1]), y1 = Math.max(st.a[1], st.b[1]), ax = st.up?.[1] ?? "x", sg = st.up?.[0] === "-" ? -1 : 1;
             const Lr = ax === "x" ? x1 - x0 : y1 - y0, n = Math.max(2, Math.min(200, Math.round(Lr / stairRT(st).T))), c = [(x0 + x1) / 2, (y0 + y1) / 2], on = isSel("stair", i);
@@ -391,7 +403,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
                 <rect x={x0} y={-y1} width={x1 - x0} height={y1 - y0} fill={on ? "#f7900933" : dark ? "#0e938422" : "#0e938414"} stroke={ST_C} strokeWidth={1.5 * k} />
                 {Array.from({ length: n - 1 }, (_, j) => { const t = (Lr * (j + 1)) / n; return ax === "x" ? <line key={j} x1={x0 + t} x2={x0 + t} y1={-y0} y2={-y1} stroke={ST_C} strokeWidth={0.6 * k} /> : <line key={j} y1={-(y0 + t)} y2={-(y0 + t)} x1={x0} x2={x1} stroke={ST_C} strokeWidth={0.6 * k} />; })}
                 <line x1={ax === "x" ? c[0] - (sg * Lr) / 3 : c[0]} y1={-(ax === "y" ? c[1] - (sg * Lr) / 3 : c[1])} x2={ax === "x" ? c[0] + (sg * Lr) / 3 : c[0]} y2={-(ax === "y" ? c[1] + (sg * Lr) / 3 : c[1])} stroke={ST_C} strokeWidth={2.5 * k} markerEnd="url(#arrS)" />
-                {txt([c[0], c[1] + 14 * k], `บันได ${i + 1} · ${STAIR_KINDS[st.kind ?? "long"]?.split(" ")[0] ?? ""} · ขึ้น`, ST_C, 11, "middle", 600)}
+                {txt([c[0], c[1] + 14 * k], `บันได ${i + 1} · ${STAIR_KINDS[st.kind ?? "long"]?.split(" ")[0] ?? ""} · ขึ้นจาก ${belowName || "ชั้นล่าง"}`, ST_C, 11, "middle", 600)}
               </g>
             );
           })}
