@@ -408,6 +408,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
                 {isSel("column", i) && <circle cx={c[0]} cy={-c[1]} r={15 * k} fill="none" stroke="#f79009" strokeWidth={3 * k} />}
                 {(() => { const sz = colSize(i) ?? [0.2, 0.2], hx = Math.max(sz[0] / 2, 3 * k), hy = Math.max(sz[1] / 2, 3 * k); // true size (m), never under 6 px
                   return <rect x={c[0] - hx} y={-c[1] - hy} width={2 * hx} height={2 * hy} fill={ci ? (ci.ok ? ci.color : "#f04438") : dark ? "#f2f4fa" : "#1d2939"} stroke={dark ? "#0f1222" : "#fff"} strokeWidth={1.5 * k} />; })()}
+                {!ci && step !== "slab" && step !== "wall" && (() => { const sz = colSize(i); return sz?.[2] ? txt([c[0] + Math.max(sz[0] / 2, 3 * k) + 3 * k, c[1] + Math.max(sz[1] / 2, 3 * k) + 4 * k], sz[2], dark ? "#98a2b3" : "#475467", 9, "start", 500) : null; })()}
                 {ci && txt([c[0] + 9 * k, c[1] - 12 * k], ci.text, ci.ok ? ci.color : "#f04438", 10, "start", 600)}
                 {result && R > 0 && txt([c[0] + 9 * k, c[1] - 12 * k], `${fmt(R / 1000, 1)} ตัน`, ink, 10, "start")}
               </g>
