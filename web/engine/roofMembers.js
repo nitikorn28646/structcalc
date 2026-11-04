@@ -364,9 +364,9 @@ export function designRoof(g, fr, roof, d) {
   // section is used). Each span is checked with its own M+ (mid) / M− (over the columns), the true deflection (L/360 or L/240,
   // cantilever end 2L) and gives its end shears as the loads on the columns. Lines with fewer than 2 supports fall back to plateRun.
   const lim = d.plateDefl === 240 ? 240 : 360, wR = ra.Rwall / D;
-  const prof = (res) => res.el.map((el) => { // deflection along each element ×EI (EI = 1 in the solve): v'' = −M, matched to the node values
+  const prof = (res) => res.el.map((el) => { // deflection along each element ×EI (EI = 1 in the solve): v'' = +M (v up, sagging M > 0; was −M = bent the wrong way, verification 2026-11-04), matched to the node values
     const n = 40, h = el.L / n, I1 = [0], I2 = [0];
-    for (let i = 1; i <= n; i++) { const k0 = -el.M((i - 1) * h), k1 = -el.M(i * h); I1.push(I1[i - 1] + ((k0 + k1) / 2) * h); I2.push(I2[i - 1] + ((I1[i - 1] + I1[i]) / 2) * h); }
+    for (let i = 1; i <= n; i++) { const k0 = el.M((i - 1) * h), k1 = el.M(i * h); I1.push(I1[i - 1] + ((k0 + k1) / 2) * h); I2.push(I2[i - 1] + ((I1[i - 1] + I1[i]) / 2) * h); }
     const [d0, d1] = el.d, c1 = (d1 - d0 - I2[n]) / el.L;
     return { M: Array.from({ length: n + 1 }, (_, i) => el.M(i * h)), v: I2.map((v, i) => v + d0 + c1 * i * h), V0: el.V(0), V1: el.V(el.L - 1e-9) };
   });

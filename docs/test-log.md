@@ -1,6 +1,19 @@
 # Test log (newest on top)
 Format: date · step · action · result · expected · severity (บล็อก / สำคัญ / เล็ก) · status (open / fixed in <commit>)
 
+## 2026-11-04 · verification campaign (cloud) — `node cli/verify20.mjs 40` (40 generated houses, independent checks), report books scanned in Chromium
+Checks per house: ΣRz of the 3D frame = all applied loads (slabs, walls, cantilever slabs, stairs, line / point loads, beam + column self weight);
+accumulated column loads ≥ the weight (≤ +25 %); simple spans: M+, V by statics, deflection (3·δD + δL, δL) by virtual work with the program's EI;
+singly reinforced As = M/(fs·j·d); Pbot = Ptop + W, Ptop = R + column above; piles n·Pt ≥ P, Pt ≤ safe; spread q = (P + Wf + Ws)/A, q corner ≥ q;
+wind / EQ: every combination ΣRx, ΣRy = −ΣF, top-floor wind p by hand, ΣF = V = Cs·W, W ≈ dead weight; slabs with a wall use the ×2 equivalent; no NaN.
+Variants 21–40: L-shape, column standing on a beam, cantilever beams + edge beam. Hand checks: doubly reinforced support As (span 14-2: 5.26 cm²), column Pa, Vc.
+- วิเคราะห์ · beam deflection inside an element integrated with v'' = −M/EI (v up) → bent the wrong way; max δ 3–10 % LOW on spans with point loads / several elements (floating column 9 m span: 155 vs 163 mm) · ไม่ปลอดภัย · fixed (v'' = +M/EI; checked = 5wL⁴/384EI exactly); same bug in the continuous wall plates (roofMembers prof) fixed
+- วิเคราะห์ · wind / earthquake switched on with method "คานต่อเนื่อง" → lateral silently not analysed, project could show ผ่าน · สำคัญ · fixed (warning + status INCOMPLETE "แรงด้านข้าง", drift rows in the status chapter)
+- พื้น · wall / point load on a slab spread evenly over the panel for the slab moments (half of qS/4 for a line across the middle) · ไม่ปลอดภัย · fixed (slab moments use ×2 equivalent, mat.slabLineFactor; beams keep the real total; report note)
+- พื้นยื่น · the full cantilever-slab moment wL²/2 goes into the edge beam as torsion even when an interior slab continues behind the beam (conservative; 20×50 edge beams fail on stirrups) · ตัดสินใจ · open (ask the user)
+- generator note: overlapping beams are warned ("คานซ้อนกัน — น้ำหนักคิดซ้ำ") and the 3D weight counts both — correct warning
+Result: 40/40 houses pass all independent checks after the fixes; 20 report books: no NaN / undefined / error box / console error.
+
 ## 2026-11-04 · hand test (cloud, Playwright clicking, new project 2 × 2 bays, 1366 × 768) — console clean, E2E 47/47 before
 - 0 โครงการใหม่ · the header kept the sample name "บ้านพักอาศัย คสล. 2 ชั้น" · expected an empty project · เล็ก · fixed (name "โครงการใหม่", engineer/licence kept, today's date)
 - 4 หลังคา → all later steps · the green notice ("นำเข้าเสา 0 ต้น …") stayed in the header through every step, squeezing it at 1366 · expected to fade · สำคัญ · fixed (fades after 10 s, click closes, 2 lines max)

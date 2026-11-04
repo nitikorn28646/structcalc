@@ -39,11 +39,23 @@ function house(n) {
     baseFixity: rnd() < 0.3 ? "fixed" : "pinned", soil: { qa: 10000, gamma: 1800 } };
   if (n % 3 === 0) { fr.analysis = "envelope"; fr.lateral = { asked: true, wind: { on: true, V50: 25, terrain: "A", Iw: 1, Cg: 2, Cpw: 0.8, Cpl: null, roofH: 1.5 }, seismic: { on: n % 2 === 0, Ss: 0.3, S1: 0.1, site: "D", I: 1, R: 3, Cd: 2.5, Ct: 0.02 } }; }
   if (rnd() < 0.4) fr.footTypes = [{ name: "F1", kind: "spread", t: 0.3, Df: 1.2, bar: "DB 12", s: 0.15, barS: "DB 12", sS: 0.15 }];
-  return { fr, desc: `${nx}×${ny} ช่อง ${dx.join("/")} × ${dy.join("/")} · ${storeys + 1} ระดับ · t ${t} · LL ${live} · ${fr.analysis} · ฐาน${fr.baseFixity === "fixed" ? "ยึดแน่น" : "หมุน"}${fr.footTypes ? " · ฐานแผ่" : ""}${fr.lateral ? (fr.lateral.seismic.on ? " · ลม+EQ" : " · ลม") : ""}` };
+  // harder variants (n > 20): L-shape, a column standing on a beam (no column under it), cantilever beams with an edge beam
+  const tags = [];
+  if (n > 20) {
+    const same = (p, q) => Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9, on = (p, ...pts) => pts.some((q) => same(p, q));
+    if (nx >= 2 && ny >= 2 && n % 2 === 0) { const c = [X[nx], Y[ny]], c1 = [X[nx - 1], Y[ny]], c2 = [X[nx], Y[ny - 1]]; tags.push("รูป L");
+      for (const fl of floors) { fl.columns = fl.columns.filter((p) => !same(p, c)); fl.beams = fl.beams.filter((b) => !((on(b.a, c) || on(b.b, c)))); fl.cants = []; fl.walls = fl.walls.filter((w) => !(w.a[0] > X[nx - 1] - 1e-9 && w.a[1] > Y[ny - 1] - 1e-9) && !(Math.abs(w.a[0] - X[nx]) < 1e-9 && Math.abs(w.b[0] - X[nx]) < 1e-9));
+        fl.stairs = fl.stairs.filter(() => !(nx === 2 && ny === 2 && false)); void c1; void c2; } }
+    if (nx >= 2 && n % 3 !== 1) { const c = [X[1], Y[0]]; tags.push("เสาลอย"); for (const fl of floors.slice(0, 2)) fl.columns = fl.columns.filter((p) => !same(p, c)); }
+    if (n % 4 < 2) { const L = 1.2; tags.push("คานยื่น"); const fl = floors[1], yt = Y[ny] + L;
+      fl.beams.push({ a: [X[0], Y[ny]], b: [X[0], yt], type: null }, { a: [X[nx], Y[ny]], b: [X[nx], yt], type: null }, { a: [X[0], yt], b: [X[nx], yt], type: null });
+      fl.cants = []; if (nx >= 2 && n % 2 === 0) { fl.beams = fl.beams.filter((b) => !(b.a[0] === X[nx] && b.b[1] === yt)); fl.beams.find((b) => b.a[1] === yt && b.b[1] === yt).b = [X[nx - 1], yt]; fl.beams.push({ a: [X[nx - 1], Y[ny]], b: [X[nx - 1], yt], type: null }); } }
+  }
+  return { fr, desc: (tags.length ? `[${tags.join(", ")}] ` : "") + `${nx}×${ny} ช่อง ${dx.join("/")} × ${dy.join("/")} · ${storeys + 1} ระดับ · t ${t} · LL ${live} · ${fr.analysis} · ฐาน${fr.baseFixity === "fixed" ? "ยึดแน่น" : "หมุน"}${fr.footTypes ? " · ฐานแผ่" : ""}${fr.lateral ? (fr.lateral.seismic.on ? " · ลม+EQ" : " · ลม") : ""}` };
 }
 const scanNaN = (o, path = "", out = [], d = 0) => { if (d > 6 || out.length > 3) return out; if (typeof o === "number") { if (!Number.isFinite(o) && !/util|sMax|Infinity/i.test(path)) out.push(path); return out; }
   if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) { if (typeof v === "function" || ["input", "beamIn", "res", "env", "Vx", "curve"].includes(k)) continue; scanNaN(v, `${path}.${k}`, out, d + 1); } return out; };
-const N = Number(process.argv[2] && !process.argv[2].startsWith('-') ? process.argv[2] : 20), ONLY = process.argv[3] && !process.argv[3].startsWith('-') ? Number(process.argv[3]) : 0; let fails = 0, nWallSlab = 0;
+const N = Number(process.argv[2] && !process.argv[2].startsWith('-') ? process.argv[2] : 20), ONLY = process.argv[3] && !process.argv[3].startsWith('-') ? Number(process.argv[3]) : 0; let fails = 0, nWallSlab = 0, nCant = 0;
 for (let n = 1; n <= N; n++) {
   if (ONLY && n !== ONLY) continue;
   const { fr, desc } = house(n), r = analyzeFrame(fr), issues = [];
@@ -68,6 +80,7 @@ for (let n = 1; n <= N; n++) {
   let nSimple = 0;
   for (const an of r.floors) for (const sp of an.spans.filter((s) => s.kind === "simple")) {
     const ln = an.lines.find((l) => l.id === sp.line); if (!ln?.loads || ln.lvl) continue;
+    if (sp.x0 > 1e-6 || sp.x1 < ln.L - 1e-6) continue; // a cantilever past an end support: the span is not a free simple beam
     const L = sp.len, M = (x) => { let Mx = 0, R = 0; const ld = ln.loads;
       for (const l of ld) { if (l.P !== undefined) { if (l.at > sp.x0 - 1e-9 && l.at < sp.x1 + 1e-9) R += l.P * (sp.x1 - l.at) / L; continue; } const a = Math.max(l.a, sp.x0), b = Math.min(l.b, sp.x1); if (b <= a) continue; const w = (u) => l.wa + ((l.wb - l.wa) * (u - l.a)) / ((l.b - l.a) || 1);
         const W = ((w(a) + w(b)) / 2) * (b - a), xc = a + ((b - a) * (w(a) + 2 * w(b))) / (3 * (w(a) + w(b)) || 1); R += (W * (sp.x1 - xc)) / L; }
@@ -89,6 +102,15 @@ for (let n = 1; n <= N; n++) {
     nSimple++;
     if (Math.abs(Mmax - mine) > Math.max(5, 0.01 * Mmax)) issues.push(`ช่วง ${sp.id}: M+ สถิตยศาสตร์ ${Mmax.toFixed(0)} ≠ โปรแกรม ${mine.toFixed(0)}`);
   }
+  // (2b) cantilever spans: M at the support ≥ statics of the loads on the cantilever (all loads, full live), V ≥ their sum
+  for (const an of r.floors) for (const sp of an.spans.filter((s) => s.kind === "cantilever")) { const ln = an.lines.find((l) => l.id === sp.line); if (!ln?.loads) continue;
+    const root = sp.fixedAt === "start" ? sp.x0 : sp.x1; let M = 0, V = 0;
+    for (const l of ln.loads) { if (l.P !== undefined) { if (l.at >= sp.x0 - 1e-9 && l.at <= sp.x1 + 1e-9 && Math.abs(l.at - root) > 1e-6) { M += l.P * Math.abs(l.at - root); V += l.P; } continue; }
+      const a = Math.max(l.a, sp.x0), b = Math.min(l.b, sp.x1); if (b <= a) continue; const w = (u) => l.wa + ((l.wb - l.wa) * (u - l.a)) / ((l.b - l.a) || 1), n = 50;
+      for (let i = 0; i < n; i++) { const u = a + ((b - a) * (i + 0.5)) / n, f = (w(u) * (b - a)) / n; M += f * Math.abs(u - root); V += f; } }
+    nCant++;
+    if ((sp.cont?.Mneg ?? sp.Mneg) < M * 0.995 - 5) issues.push(`คานยื่น ${sp.id}: M− ${(sp.cont?.Mneg ?? sp.Mneg).toFixed(0)} < สถิตยศาสตร์ ${M.toFixed(0)}`);
+    if ((sp.cont?.V ?? sp.V) < V * 0.995 - 5) issues.push(`คานยื่น ${sp.id}: V ${(sp.cont?.V ?? sp.V).toFixed(0)} < ${V.toFixed(0)}`); }
   // (3) As = M/(fs j d) on singly reinforced sections
   let nAs = 0;
   for (const an of r.floors) for (const sp of an.spans) for (const [face, M] of [["mid", sp.Mpos], ["sup", sp.Mneg]]) {
@@ -137,5 +159,5 @@ for (let n = 1; n <= N; n++) {
     for (const s of sp.filter((s) => !s.ok).slice(0, 6)) console.log("  คาน", s.id, s.typeName, s.len, spanReasons(s.check).join(" | "));
     console.log("  As checks", nAs); }
 }
-console.log(`${N - fails}/${N} ok · panels with a wall on them ${nWallSlab}`);
+console.log(`${N - fails}/${N} ok · panels with a wall on them ${nWallSlab} · cantilever spans ${nCant}`);
 process.exit(fails ? 1 : 0);

@@ -450,3 +450,9 @@ points at the rafter spacing (dz.bearDirect → roofLink); design.autoSupports f
 members' self weight now 2 × one C in the wrappers (hip/ridge/support/plates; the frozen sheet formulas unchanged): Yasothon roof
 +449 kg, E2E new house 101.1 → 101.3 t. Roof levels: roofFromFrame H = top elevation; Frame3D datum = −baseLevel; RoofLinkCard
 warns plate level ≠ linked floor (Yasothon: +7.25 vs +6.60, button to align). Tests: cli/roof-levels.cjs (20/20).
+VERIFY 2026-11-04 (user: "test 20 projects, we work with people's lives"): `node cli/verify20.mjs [n] [only] [--write]` — n generated houses
+(seeded; > 20 = L-shape / column on a beam / cantilever beams), independent checks (3D ΣRz = applied, statics M/V, virtual-work deflection,
+As, column stacking, piles / spread q, wind+EQ combo equilibrium, slab wall factor, NaN); `--write` → web/public/projects/_v<n>.json (git-ignored)
+for browser report scans. Fixed: element deflection sign (floor.js elementDeflections + roofMembers prof: v'' = +M/EI, was −M → δ 3–10 % low),
+lateral on + "continuous" warned / INCOMPLETE, wall / point loads on slabs ×2 for slab moments (mat.slabLineFactor). Open: cantilever-slab torsion
+taken in full by the edge beam even with a back slab (conservative — ask the user).

@@ -730,12 +730,12 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   return { ...result, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
 }
 
-// largest |deflection| (m) of each element: v'' = −M/EI integrated twice, matched to the nodal deflections
+// largest |deflection| (m) of each element: v'' = M/EI integrated twice, matched to the nodal deflections
 function elementDeflections(res, EI) {
   return res.el.map((el, e) => {
     const n = 40, h = el.L / n, I1 = [0], I2 = [0];
     for (let i = 1; i <= n; i++) {
-      const k0 = -el.M((i - 1) * h) / EI[e], k1 = -el.M(i * h) / EI[e];
+      const k0 = el.M((i - 1) * h) / EI[e], k1 = el.M(i * h) / EI[e]; // v up positive (nodal d < 0 under gravity): sagging M > 0 → v'' = +M/EI (verification 2026-11-04: −M/EI bent each element the wrong way, max δ 3–10 % low)
       I1.push(I1[i - 1] + ((k0 + k1) / 2) * h); I2.push(I2[i - 1] + ((I1[i - 1] + I1[i]) / 2) * h);
     }
     const [d0, d1] = el.d, c1 = (d1 - d0 - I2[n]) / el.L;
