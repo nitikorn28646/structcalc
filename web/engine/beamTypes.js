@@ -30,7 +30,9 @@ export function beamCost(t, g = BEAM_GEN) {
 const bars = (n, bar) => (n > 0 ? `${n}-${bar.replace(" ", "")}` : "");
 const fitsLayers = (t, mat, g) => {
   const lay = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x)), used = (L) => L.filter((l) => l.main || l.special).length;
-  return used(lay(t.top, t.topX)) <= g.maxLayers && used(lay(t.bot, t.botX)) <= g.maxLayers;
+  const T = lay(t.top, t.topX), B = lay(t.bot, t.botX), Tm = lay(t.top), Bm = lay(t.bot, t.botX ? null : undefined);
+  // never a single bar alone in an upper layer (cannot be tied): such a bar count is skipped (user 2026-11-04)
+  return used(T) <= g.maxLayers && used(B) <= g.maxLayers && !T.odd && !B.odd && !Tm.odd && !lay(t.bot).odd;
 };
 
 // cheapest type of one b × h × bar size that passes every span in `sps` (null if none): bars and stirrups grown from the minimum

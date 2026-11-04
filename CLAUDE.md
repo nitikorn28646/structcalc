@@ -427,5 +427,6 @@ footer with revision + time via string rp-stamp, and in chapter 1 "การค�
 ProjectDialog; cover shows doc no + revision; chapter 1 revision table. Status tables and schedules link to the check sheets (CalcLink /
 PageRef with page numbers). Step 9 ReportQA card (stamp, revision, input checks). Fixes: column section 2D/3D drew faceBars per face
 (8 bars → 20 dots) — faceBars counts both opposite faces, per face = half (calc was always right); beam sheets show support + mid-span sections.
-PENDING (user 2026-11-04, confirm asked): second-layer bars only in pairs at the stirrup legs (4 → 2+2, 5 → 3+2), in barLayers (d), drawings,
-auto beam types, and a warning for typed types like 3+1.
+BAR LAYERS (user 2026-11-04): floor.js barLayers — first layer up to the width (clear max(barClear, db), largest bar of the face),
+an upper layer never holds ONE bar alone (4 → 2+2, 5 → 3+2, 6 → 3+3, 7 → 3+2+2); unpairable (narrow 2+1) → L.odd → warning per type,
+beamTypes fitsLayers rejects it. Used by checkSpan (d), Details / 3D cages, report. Yasothon: floor-2 span 14-1 B2 → B4 (baseline re-saved).

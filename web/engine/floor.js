@@ -280,24 +280,31 @@ export const stLabel = (t) => `${(t.stSets ?? 1) > 1 ? `${t.stSets}×` : ""}${t.
 // clear spacing between bars of one layer (cm): user standard 3.5 (2026-11-03; was 2.5); per project mat.barClear
 export const DEFAULT_BAR_CLEAR = 3.5;
 export function barLayers(b, mat, st, main, special) {
-  const ds = BARS[st]?.d ?? 0.6, L = [{}, {}, {}], used = (l) => (l.main?.n ?? 0) + (l.special?.n ?? 0);
+  const ds = BARS[st]?.d ?? 0.6, L = [{}, {}, {}];
   const cap = (db) => { const s = Math.max(mat.barClear ?? DEFAULT_BAR_CLEAR, db); return Math.max(2, Math.floor((b * 100 - 2 * (mat.cover ?? 3) - 2 * ds + s) / (db + s) + 1e-9)); };
-  let i = 0;
-  for (const g of [main, special]) {
-    if (!g?.n) continue;
-    let n = g.n;
-    const db = BARS[g.bar]?.d ?? 1.2;
-    while (n > 0) {
-      const l = L[i], room = i === 2 ? n : cap(db) - used(l);
-      if (room <= 0) { i++; continue; }
-      const k = Math.min(n, room);
-      if (!l.main) l.main = { n: k, bar: g.bar };
-      else if (l.main.bar === g.bar && !l.special) l.main = { n: l.main.n + k, bar: g.bar };
-      else if (!l.special || l.special.bar === g.bar) l.special = { n: (l.special?.n ?? 0) + k, bar: g.bar };
-      else { i++; continue; }
-      n -= k;
-    }
+  const groups = [main, special].filter((g) => g?.n > 0), N = groups.reduce((t, g) => t + g.n, 0);
+  if (!N) return L;
+  // bars per layer: the first layer up to what fits across the width (clear spacing max(barClear, db), largest bar of the face);
+  // a layer above never holds ONE bar alone (user 2026-11-04: it floats in the middle — nothing to tie it to): its bars start as a
+  // pair against the stirrup legs (more bars between them tie to a spacer bar). 4 → 2 + 2, 5 → 3 + 2, 6 → 3 + 3, 7 → 3 + 2 + 2
+  // (width for 3). The third layer takes the rest. A single bar that cannot be paired (narrow beam: 2 + 1) → L.odd (warning,
+  // auto types avoid it).
+  const C = cap(Math.max(...groups.map((g) => BARS[g.bar]?.d ?? 1.2))), cnt = [Math.min(N, C)];
+  let r = N - cnt[0];
+  while (r > 0) { const k = cnt.length === 2 ? r : Math.min(r, C); cnt.push(k); r -= k; }
+  for (let k = cnt.length - 1; k >= 1; k--) if (cnt[k] === 1) {
+    if (cnt[k - 1] - 1 >= 2) { cnt[k - 1]--; cnt[k]++; } else if (k >= 2 && cnt[0] - 1 >= 2) { cnt[0]--; cnt[k]++; } else L.odd = true;
   }
+  // the bars, main group first, fill the layers in order (a layer holds at most two groups: main + special)
+  let gi = 0, left = groups[0].n;
+  cnt.forEach((c, k) => {
+    while (c > 0 && gi < groups.length) {
+      const g = groups[gi], take = Math.min(c, left), l = L[k];
+      if (!l.main) l.main = { n: take, bar: g.bar }; else if (l.main.bar === g.bar && !l.special) l.main = { n: l.main.n + take, bar: g.bar }; else l.special = { n: (l.special?.n ?? 0) + take, bar: g.bar };
+      c -= take; left -= take;
+      if (!left) { gi++; left = groups[gi]?.n ?? 0; }
+    }
+  });
   return L;
 }
 // "lighter" type: smaller concrete section first, then less steel
@@ -708,6 +715,12 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     if (sp?.type && hp?.type && sp.type.h > hp.type.h + 1e-6) deeper.push(`แนว ${ln.id + 1} (${sp.typeName ?? sp.type.name} ลึก ${Math.round(sp.type.h * 100)}) บนแนว ${host.id + 1} (${hp.typeName ?? hp.type.name} ลึก ${Math.round(hp.type.h * 100)}) ที่ (${(ln.A[0] + ln.u[0] * c.t).toFixed(2)}, ${(ln.A[1] + ln.u[1] * c.t).toFixed(2)})`);
   }
   if (deeper.length) warnings.push(`คานซอยลึกกว่าคานหลักที่รับ ${deeper.length} จุด: ${deeper.slice(0, 3).join(" · ")}${deeper.length > 3 ? " …" : ""} — ตามหลักปฏิบัติคานหลักควรลึก ≥ คานซอย: เลือก type ของคานหลักให้ลึกเท่าหรือมากกว่า (ขั้น 7 / แผงคาน)`);
+  // a type whose bars leave one bar alone in an upper layer (too narrow to make a pair): cannot be tied — say which (user 2026-11-04)
+  for (const ti of new Set(result.spans.map((sp) => sp.typeIdx))) {
+    const t = types[ti]; if (!t) continue;
+    const L = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x)), bad = [["บน", L(t.top, t.topX)], ["ล่าง", L(t.bot, t.botX)]].filter(([, l]) => l.odd).map(([w]) => w);
+    if (bad.length) warnings.push(`Type ${t.name}: เหล็ก${bad.join(" / ")}ชั้นบนเหลือเส้นเดียว (คานกว้าง ${Math.round(t.b * 100)} ซม. วางชั้นแรกได้แค่ 2 เส้น) — ผูกเหล็กลอยกลางคานไม่ได้: เพิ่มเป็นคู่ ใช้เหล็กเส้นใหญ่ขึ้น หรือขยายความกว้างคาน`);
+  }
   const groups = { DL: 0, SDL: 0, WALL: 0, LL: 0, SP: pointLoads.reduce((s, pl) => s + (pl.on === "column" ? pl.P : 0), 0) };
   for (const ln of lines) {
     for (const l of ln.slab) groups[l.g ?? "DL"] += ((l.wa + l.wb) / 2) * (l.b - l.a);
