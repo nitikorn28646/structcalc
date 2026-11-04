@@ -38,7 +38,7 @@ export function Grid({ rows, columns, onChange, onSelect, dark, height = "100%",
   };
   const onKey = (e) => {
     const ev = e.event;
-    if (!(ev.ctrlKey || ev.metaKey) || ev.key.toLowerCase() !== "d") return;
+    if (!(ev.ctrlKey || ev.metaKey) || (ev.code !== "KeyD" && ev.key.toLowerCase() !== "d")) return;
     ev.preventDefault();
     const api = e.api, field = e.colDef.field, sel = api.getSelectedNodes().sort((a, b) => a.rowIndex - b.rowIndex);
     if (sel.length < 2 || !editableCols(api).some((c) => c.getColDef().field === field)) return;

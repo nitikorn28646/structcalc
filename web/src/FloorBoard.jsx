@@ -22,14 +22,15 @@ const SEL = ["select", "เลือก/ย้าย", MousePointer2, "คลิ
 const TOOLS = {
   frame: [SEL, ["column", "เสา", Columns3, "คลิกวางเสา · กรอบประ = เสาชั้นล่าง · ชี้บนคานแล้วพิมพ์ระยะ + Enter = วางห่างปลายคาน"],
     ["beam", "คาน", Ruler, "คลิกต้น → ปลาย ต่อเนื่องได้ · พิมพ์ความยาว + Enter · Esc จบ · ปลายบนคานอื่น = คานซอย · ปลายลอย = คานยื่น"],
-    ["erase", "ลบ", Eraser, "คลิกเสาหรือคานที่จะลบ"]],
+    ["cant", "พื้นยื่น", PanelTop, "คลิกบนคานด้านที่จะยื่น → สร้างพื้นยื่นตลอดคานเส้นนั้น (แก้ความยาวยื่นได้ทางซ้าย)"],
+    ["erase", "ลบ", Eraser, "คลิกเสา คาน หรือพื้นยื่นที่จะลบ"]],
   slab: [SEL, ["cant", "พื้นยื่น", PanelTop, "คลิกบนคานด้านที่จะยื่น → สร้างพื้นยื่นตลอดคานเส้นนั้น (แก้ความยาวยื่นได้ทางซ้าย)"], ["erase", "ลบ", Eraser, "คลิกพื้นยื่นที่จะลบ"]],
   wall: [SEL, ["wall", "ผนัง", Ruler, "คลิกต้น → ปลาย ต่อเนื่องได้ · วางบนคาน = ลงคาน · วางกลางพื้น = กระจายลงแผ่นพื้น · วาดซ้อนได้"], ["erase", "ลบ", Eraser, "คลิกผนังที่จะลบ"]],
   stair: [SEL, ["stair", "บันได", Footprints, "คลิกมุมหนึ่ง → มุมตรงข้ามของช่องบันได (ดูดเข้าเสา/คาน) · เลือกแบบ ทิศขึ้น ที่แผงซ้าย"], ["erase", "ลบ", Eraser, "คลิกบันไดที่จะลบ"]],
   other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["area", "เพิ่มบนพื้น", PanelTop, "คลิกแผ่นพื้นเพื่อเพิ่มน้ำหนักต่อพื้นที่จากคลัง เช่น ห้องน้ำ / ฝ้า"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
   result: [SEL], cols: [SEL], grid: [SEL], assign: [["select", "เลือก", MousePointer2, "Load Cases: คลิกคาน / เสา / แผ่นพื้น · Ctrl หรือ Shift + คลิก = เพิ่ม · ลากกรอบ (ซ้าย→ขวา ทั้งชิ้น · ขวา→ซ้าย แตะ) · Ctrl+A ทั้งหมด · Esc ล้าง · แล้วกด Assign ทางขวา"]],
 };
-const BOXABLE = { assign: ["beam", "column", "panel"], frame: ["column", "beam"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
+const BOXABLE = { assign: ["beam", "column", "panel"], frame: ["column", "beam", "cant"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
 // polygon corners: vertices where the outline turns (a column / beam end on an edge adds a straight-through vertex)
 export const corners = (P) => P.filter((q, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length], u = [q[0] - a[0], q[1] - a[1]], v = [b[0] - q[0], b[1] - q[1]], L = Math.hypot(...u) * Math.hypot(...v); return L > 0 && Math.abs(u[0] * v[1] - u[1] * v[0]) / L > 0.05; }); // turns of more than ~3°
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
@@ -100,6 +101,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     if (ci >= 0 && step !== "slab" && step !== "wall") return { kind: "column", i: ci };
     const bi = beams.findIndex((b) => segDist(raw, b.a, b.b).d < r);
     if (bi >= 0 && step !== "slab") return { kind: "beam", i: bi };
+    if (step === "frame") { const ci = an?.cants.findIndex((c) => inside(c.P, raw)) ?? -1; if (ci >= 0) return { kind: "cant", i: ci }; } // after columns / beams: a cantilever slab starts on its beam
     const pn = an?.panels.find((p) => inside(p.P, raw));
     return pn ? { kind: "panel", key: pn.key } : null;
   };
@@ -217,8 +219,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   useEffect(() => {
     const h = (e) => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
-      if (e.key === "Escape") { setStart(null); setTyped(""); setMulti([]); setMenu(null); }
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && BOXABLE[step]) { e.preventDefault(); setTool("select"); setMulti(BOXABLE[step].flatMap((kind) => listOf(kind).map((_, i) => ({ kind, i })))); }
+      if (e.key === "Escape") { if (!start && !typed && tool !== "select" && tools.some((x) => x[0] === "select")) setTool("select"); setStart(null); setTyped(""); setMulti([]); setMenu(null); } // Esc: end the line being drawn, a second Esc (or nothing drawn) = back to the select tool
+      else if ((e.ctrlKey || e.metaKey) && (e.code === "KeyA" || e.key.toLowerCase() === "a") && BOXABLE[step]) { e.preventDefault(); setTool("select"); setMulti(BOXABLE[step].flatMap((kind) => listOf(kind).map((_, i) => ({ kind, i })))); }
       else if ((e.key === "Delete" || (e.key === "Backspace" && !typed)) && (multi.length || sel)) { e.preventDefault(); delItems(multi.length ? multi : [sel]); }
       else if ((tool === "column" || (lineTool && tool !== "stair")) && /^[0-9.]$/.test(e.key)) setTyped((t) => t + e.key);
       else if (typed && e.key === "Backspace") setTyped((t) => t.slice(0, -1));
@@ -308,8 +310,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             return (
               <g key={p.key}>
                 <polygon points={p.P.map((q) => `${q[0]},${-q[1]}`).join(" ")} fill={on ? "#f7900933" : p.st === "GS" ? "url(#gs-hatch)" : p.open ? "none" : p.st === "PS" ? (dark ? "#30a46c1a" : "#30a46c12") : dark ? "#465fff14" : "#465fff0d"} stroke="none" />
-                {/* two-way slab: dashed diagonals corner to corner (drafting convention); arrows are only for PS (laying direction) */}
-                {p.st === "S" && !p.open && !p.stairWell && p.kind === "twoway" && corners(p.P).length === 4 && [[0, 2], [1, 3]].map(([a, b]) => { const C = corners(p.P); return <line key={`x${a}`} x1={C[a][0]} y1={-C[a][1]} x2={C[b][0]} y2={-C[b][1]} stroke={dark ? "#7b8cff" : "#465fff"} strokeOpacity={0.55} strokeWidth={1.1 * k} strokeDasharray={`${9 * k} ${5 * k}`} pointerEvents="none" />; })}
+                {/* S slab (cast in place, one- or two-way): dashed diagonals corner to corner as on the drawings; PS gets its laying symbol */}
+                {p.st === "S" && !p.open && !p.stairWell && corners(p.P).length === 4 && [[0, 2], [1, 3]].map(([a, b]) => { const C = corners(p.P); return <line key={`x${a}`} x1={C[a][0]} y1={-C[a][1]} x2={C[b][0]} y2={-C[b][1]} stroke={dark ? "#7b8cff" : "#465fff"} strokeOpacity={0.55} strokeWidth={1.1 * k} strokeDasharray={`${9 * k} ${5 * k}`} pointerEvents="none" />; })}
                 {p.st === "PS" && (() => { // drafting symbol (user 2026-11-04): circle "PS" on a line along the laying direction, hatch ticks at both ends
                   const xs = p.P.map((q) => q[0]), ys = p.P.map((q) => q[1]), v = p.dir === "x" ? [1, 0] : [0, 1], n = [-v[1], v[0]], ext = p.dir === "x" ? Math.max(...xs) - Math.min(...xs) : Math.max(...ys) - Math.min(...ys);
                   const r = 15 * k, L = Math.max(r * 3, Math.min(1.1, 0.4 * ext)), col = dark ? "#4ade80" : "#30a46c", P = (t, o = 0) => [c[0] + v[0] * t + n[0] * o, -(c[1] + v[1] * t + n[1] * o)];
@@ -418,6 +420,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
           {box && <rect x={Math.min(box.p0[0], box.p1[0])} y={-Math.max(box.p0[1], box.p1[1])} width={Math.abs(box.p1[0] - box.p0[0])} height={Math.abs(box.p1[1] - box.p0[1])}
             fill={box.p1[0] >= box.p0[0] ? "#465fff14" : "#12b76a14"} stroke={box.p1[0] >= box.p0[0] ? "#465fff" : "#12b76a"} strokeWidth={1.2 * k} strokeDasharray={box.p1[0] >= box.p0[0] ? "none" : `${5 * k} ${3 * k}`} />}
           {hl && (hl.floor === undefined || hl.floor === floorIdx) && <g pointerEvents="none">
+            {(hl.polys ?? []).map((P, j) => <polygon key={`hpg${j}`} points={P.map((q) => `${q[0]},${-q[1]}`).join(" ")} fill={hl.bad === false ? "#12b76a" : "#d92d20"} stroke="none"><animate attributeName="fill-opacity" values="0.45;0.08;0.45" dur="0.9s" repeatCount="indefinite" /></polygon>)}
             {(hl.segs ?? []).map(([a, b], j) => <line key={`hs${j}`} x1={a[0]} y1={-a[1]} x2={b[0]} y2={-b[1]} stroke="#d92d20" strokeWidth={10 * k} strokeLinecap="round"><animate attributeName="stroke-opacity" values="0.85;0.15;0.85" dur="0.8s" repeatCount="indefinite" /></line>)}
             {(hl.pts ?? []).slice(1).map((q, j) => <circle key={`hp${j}`} cx={q[0]} cy={-q[1]} r={12 * k} fill="none" stroke="#d92d20" strokeWidth={3 * k}><animate attributeName="r" values={`${8 * k};${18 * k};${8 * k}`} dur="0.8s" repeatCount="indefinite" /></circle>)}
             {hl.p && hl.to && <line x1={hl.p[0]} y1={-hl.p[1]} x2={hl.to[0]} y2={-hl.to[1]} stroke="#d92d20" strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />}

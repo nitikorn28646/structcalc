@@ -280,7 +280,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const boardStep = { frame: "frame", grid: "grid", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "cases" ? "assign" : sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
   const tablePage = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || step === "footing" || (step === "loads" && ["groups", "lateral"].includes(sub));
   // bulk tables: slab panels (step 3) and beam walls / line loads (step 6 walls)
-  const bulkTab = step === "slab" ? ["panels", `แผ่นพื้นทั้งชั้น (${an.panels.length})`] : step === "loads" && sub === "wall" ? ["bwalls", `ผนัง / น้ำหนักบนคาน (${fl.beams.length})`] : null;
+  const bulkTab = step === "slab" || step === "frame" ? ["panels", `แผ่นพื้นทั้งชั้น (${an.panels.length})`] : step === "loads" && sub === "cases" ? ["panelsL", `น้ำหนักแผ่นพื้นทั้งชั้น (${an.panels.length})`] : step === "loads" && sub === "wall" ? ["bwalls", `ผนัง / น้ำหนักบนคาน (${fl.beams.length})`] : null;
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
@@ -302,7 +302,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         <div className="space-y-2 text-[13px] text-gray-600">
           <p>ชื่อโครงการ เจ้าของ ที่ตั้ง วิศวกร — แก้ที่ <button onClick={onProjectInfo} className="font-medium text-brand-500">ข้อมูลโครงการ</button></p>
           <p>มาตรฐาน: วิธีหน่วยแรงใช้งาน (WSD) ว.ส.ท. / ACI 318 · กฎกระทรวง พ.ศ. 2566 (fc ≤ 65 ksc) · โครงหลังคาเหล็ก ASD (AISC / ว.ส.ท.)</p>
-          <p>ลำดับงาน: สร้างจากล่างขึ้นบน (ขั้น 1–6) · คำนวณจากบนลงล่าง (ขั้น 7–9) · ทุกการแก้ไขย้อนกลับได้ด้วยปุ่ม ↶ ↷ หรือ Ctrl+Z / Ctrl+Y</p>
+          <p>ลำดับงาน: สร้างจากล่างขึ้นบน (ขั้น 1–5) · คำนวณจากบนลงล่าง (ขั้น 6–8) · ทุกการแก้ไขย้อนกลับได้ด้วยปุ่ม ↶ ↷ หรือ Ctrl+Z / Ctrl+Y</p>
         </div>
       </Card>
       </div>
@@ -454,7 +454,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 <button key={lab} onClick={() => setBeam({ arc: sg ? { s: sg * quarterSagitta(Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1])) } : undefined })} className="rounded-md px-2 py-1 ring-1 ring-gray-300 hover:bg-gray-50">{lab}</button>))}</div></>)}
               {beam.arc?.s ? <p className="col-span-2 text-[11px] text-gray-500">R = {fmt(arcGeom(beam.a, beam.b, beam.arc.s).R, 2)} ม. · มุม {fmt((arcGeom(beam.a, beam.b, beam.arc.s).th * 180) / Math.PI, 0)}° · โครง 3 มิติแบ่ง 12 ชิ้นตามส่วนโค้ง (มีแรงบิดจากความโค้ง) · คานต่อเนื่องใช้ช่วงตามคอร์ด</p> : null}
               {(() => { const on = line ? an.walls.filter((w) => w.on.some((o) => o.line === line.id)) : []; return (
-                <div className="col-span-2 text-[12px] text-gray-600">ผนังบนแนวคานนี้: {on.length ? on.map((w) => `ผนัง ${w.i + 1} ${fmt(w.q, 0)}`).join(" · ") + ` กก./ม. (รวม ${fmt(on.reduce((s, w) => s + w.q, 0), 0)})` : "ไม่มี"} — แก้ที่ขั้น 6 น้ำหนักบรรทุก</div>); })()}
+                <div className="col-span-2 text-[12px] text-gray-600">ผนังบนแนวคานนี้: {on.length ? on.map((w) => `ผนัง ${w.i + 1} ${fmt(w.q, 0)}`).join(" · ") + ` กก./ม. (รวม ${fmt(on.reduce((s, w) => s + w.q, 0), 0)})` : "ไม่มี"} — แก้ที่ขั้น 5 น้ำหนักบรรทุก</div>); })()}
               {(step === "analysis" || step === "design") && (() => { const sps = an.spans.filter((s) => (s.members ?? [s.member]).includes(sel.i)); return sps.length ? (
                 <div className="col-span-2 space-y-1.5 text-[12px]">{sps.map((s) => { const why = spanReasons(s.check); return (
                   <div key={s.id} className={`rounded-md px-2 py-1.5 ring-1 ${s.ok ? "ring-gray-200" : "bg-red-50 ring-red-200 dark:bg-red-500/10"}`}>
@@ -473,9 +473,11 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <Field label="ชนิดพื้น"><Select value={panel.st} onChange={(v) => setPanel({ kind: v })} options={Object.entries(SLAB_KINDS)} /></Field>
               {panel.st === "PS" ? <Field label="ทิศวางแผ่น (ช่วงพาด)"><Select value={panel.dir} onChange={(v) => setPanel({ dir: v })} options={[["x", "แนว X ↔"], ["y", "แนว Y ↕"]]} /></Field> : <div />}
               <Field label="หนา" unit="m"><NumberInput value={panel.t} step="0.01" onChange={(v) => setPanel({ t: v })} /></Field>
+              {step === "loads" ? <>
               <Field label="ปูผิว" unit="kg/m²"><NumberInput value={panel.finish} step="10" onChange={(v) => setPanel({ finish: v })} /></Field>
               <Field label="จร" unit="kg/m²"><NumberInput value={panel.live} step="50" onChange={(v) => setPanel({ live: v })} /></Field>
-              <Field label="ฝ้า/งานระบบเพิ่ม" unit="kg/m²"><NumberInput value={panel.extraSDL ?? 0} step="10" onChange={(v) => setPanel({ extra: v })} /></Field>
+              <Field label="ฝ้า/งานระบบเพิ่ม" unit="kg/m²"><NumberInput value={panel.extraSDL ?? 0} step="10" onChange={(v) => setPanel({ extra: v })} /></Field></>
+              : <p className="col-span-2 self-end text-[11px] text-gray-500">น้ำหนักบนแผ่น (ปูผิว {fmt(panel.finish, 0)} · จร {fmt(panel.live, 0)} กก./ม.²) ใส่ที่ขั้น "น้ำหนักบรรทุก" → Load Cases</p>}
               <Field label="ช่องเปิด"><Select value={panel.open ? "1" : ""} onChange={(v) => setPanel({ open: !!v })} options={[["", "มีพื้น"], ["1", "ช่องเปิด (ไม่มีพื้น)"]]} /></Field>
               <p className="col-span-2 text-[12px] text-gray-500">{panel.st === "GS" ? "พื้นวางบนดิน — ไม่ส่งน้ำหนักลงคาน" : panel.st === "PS" ? `แผ่นพาด ${fmt(panel.span ?? 0, 2)} ม. → ลงคาน 2 ด้านที่รับปลายแผ่น` : panel.kind === "twoway" ? `พื้นสองทาง S/L = ${fmt(panel.m, 2)} → สามเหลี่ยม/คางหมู` : panel.kind === "oneway" ? "พื้นทางเดียว (L/S > 2) → ลงคานด้านยาว wS/2" : "รูปไม่ใช่สี่เหลี่ยม → แบ่งตามพื้นที่ (โดยประมาณ)"} · {fmt(panel.area, 2)} ม² · {["DL", "SDL", "WALL", "LL"].map((g) => `${g === "WALL" ? "ผนัง" : g} ${fmt(panel.g[g], 0)}`).join(" · ")} = {fmt(panel.w, 0)} กก./ม²</p>
               <button onClick={() => setFloor({ panels: Object.fromEntries(Object.entries(fl.panels ?? {}).filter(([k]) => k !== panel.key)) })} className="col-span-2 text-left text-[12px] text-brand-500">ใช้ค่าของชั้น</button>
@@ -564,13 +566,13 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   </>  ) : step === "project" ? (
     <Card title="ภาพรวมโครงการ" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums text-gray-600">
       {[...frame.floors.keys()].reverse().map((k) => <p key={k} className="flex justify-between border-b border-gray-100 py-0.5"><span>{frame.floors[k].name}</span><span>{frame.floors[k].columns.length} เสา · {frame.floors[k].beams.length} คาน</span></p>)}
-      <p className="pt-1 text-[11px] text-gray-400">ระดับและความสูงชั้นแก้ในขั้น 1 · น้ำหนักพื้นแก้ในขั้น 3 / ตาราง "แผ่นพื้นทั้งชั้น"</p>
+      <p className="pt-1 text-[11px] text-gray-400">ระดับและความสูงชั้นแก้ในขั้น 1 · น้ำหนักพื้นแก้ในขั้น 5 น้ำหนักบรรทุก / ตาราง "แผ่นพื้นทั้งชั้น"</p>
     </div></Card>
   ) : <Card title={`ชั้น ${fl.name}`} icon={Layers}>
           <div className="grid grid-cols-2 gap-3">
-            {fv("t", "พื้นหนา", "m", "0.01")}{fv("finish", "วัสดุปูผิว", "kg/m²", "10")}{fv("live", "น้ำหนักจร", "kg/m²", "50")}
+            {fv("t", "พื้นหนา (ค่าเริ่มต้น)", "m", "0.01")}
           </div>
-          <p className="mt-1 text-[11px] text-gray-400">ค่าเริ่มต้นของแผ่นพื้นในชั้นนี้ · ระดับ / ความสูงชั้นแก้ในขั้น 1</p>
+          <p className="mt-1 text-[11px] text-gray-400">{step === "frame" ? "วาดเสา คาน แล้วคลิกแผ่นพื้นที่เกิดจากคานล้อมรอบเพื่อเลือกชนิด S / PS / GS ความหนา ช่องเปิด · เครื่องมือ \"พื้นยื่น\" คลิกบนคานด้านที่จะยื่น · ตารางแผ่นพื้นทั้งชั้นอยู่แถบขวา · " : ""}น้ำหนักปูผิว / จร ใส่ที่ขั้น "น้ำหนักบรรทุก" · ระดับ / ความสูงชั้นแก้ในขั้น 1</p>
         </Card>;
   const [drawer, setDrawer] = useState(null), resultStep = ["analysis", "design", "footing"].includes(step);
   // side panels (tables / warnings) on the right, opened on demand from the tab rail
@@ -610,24 +612,35 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,2fr)_3fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>{lineDiagram}</div>
     : step === "footing" ? view3d
     : view === "3d" ? view3d : view === "split" ? <div className="grid min-h-0 flex-1 grid-cols-2 gap-3"><div className="min-h-0">{boardEl}</div>{view3d}</div> : boardEl;
+  const warnList = res.warnings.length ? res.warnings.map((w) => { const at = locateWarning(w, frame, res); return (
+                  <p key={w} onMouseEnter={() => at && highlight(at)} onMouseLeave={() => pinW !== w && highlight(pinW ? locateWarning(pinW, frame, res) : null)} onClick={() => { if (!at) return; const off = pinW === w; setPinW(off ? null : w); highlight(off ? null : at); if (!off && at.floor !== undefined && at.floor !== cur) goFloor(at.floor); }}
+                    className={`rounded px-1 py-0.5 text-[12px] text-red-600 ${at ? "cursor-pointer hover:bg-red-50" : ""} ${pinW === w ? "bg-red-50 ring-1 ring-red-300" : ""}`} title={at ? "ชี้ = กระพริบบนแปลน / 3D · คลิก = ค้างไว้ (และไปชั้นนั้น) · คลิกซ้ำ = เลิก" : ""}>{at?.p || at?.segs?.length ? "⌖ " : ""}{w}</p>); }) : <p className="text-[12px] text-gray-400">ไม่มีคำเตือน</p>;
   return (
     <main className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1">
-        <PanelGroup direction="horizontal" autoSaveId={`structcalc.panels.${dTab ? "3" : "2"}`} className="min-w-0 flex-1">
+        <PanelGroup direction="horizontal" autoSaveId={`structcalc.panels.${dTab && dTab !== "warn" ? "3" : "2"}`} className="min-w-0 flex-1">
         <Panel id="centre" order={1} minSize={30} className="flex min-w-0 flex-col">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-2">
             {subs && <Tabs value={sub} onValueChange={(k) => { setSubState(k); setSel(null); }}><TabsList>{subs.map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
             {!page && step !== "footing" && <Tabs value={view} onValueChange={setView} className="ml-auto"><TabsList>{[["2d", "แปลน 2D"], ["3d", "3D"], ["split", "2D + 3D"]].map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-3">{overlapBar}{center}</div>
+          <div className="relative flex min-h-0 flex-1 flex-col p-3">{overlapBar}{center}
+            {dTab === "warn" && ( // warnings float over the plan (user 2026-11-04: the side panel made the plan smaller)
+              <div className="absolute right-4 top-4 z-30 flex max-h-[60%] w-[min(460px,60%)] flex-col rounded-xl border border-gray-200 bg-white/95 shadow-lg backdrop-blur dark:border-gray-700 dark:bg-gray-900/95">
+                <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-1.5 text-[13px] font-semibold text-gray-800 dark:border-gray-700 dark:text-gray-100">⚠ คำเตือน ({res.warnings.length})
+                  <span className="text-[11px] font-normal text-gray-400">ชี้ = กระพริบบนแปลน · คลิก = ค้างไว้</span>
+                  <button onClick={() => { setDrawer(null); setPinW(null); highlight(null); }} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">ปิด ✕</button></div>
+                <div className="min-h-0 flex-1 overflow-auto p-2">{warnList}</div>
+              </div>)}
+          </div>
         </section>
         </Panel>
-        {dTab && <><Handle /><Panel id="side" order={2} defaultSize={34} minSize={20} className="flex min-w-0 flex-col border-l border-gray-200 bg-white">
+        {dTab && dTab !== "warn" && <><Handle /><Panel id="side" order={2} defaultSize={34} minSize={20} className="flex min-w-0 flex-col border-l border-gray-200 bg-white">
           <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2 text-sm font-semibold text-gray-800">{tabsNow.find(([x]) => x === dTab)?.[1]}
             <button onClick={() => setDrawer(null)} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">ปิด ✕</button></div>
           <div className="min-h-0 flex-1 overflow-auto p-3">
-              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} dark={dark} /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} resolveW={resolveW} dark={dark} /> : dTab === "spans" ?             <div className="text-[12px]">
+              {dTab === "panels" ? <PanelTable an={an} fl={fl} setFloor={setFloor} dark={dark} mode="struct" /> : dTab === "panelsL" ? <PanelTable an={an} fl={fl} setFloor={setFloor} dark={dark} mode="load" /> : dTab === "bwalls" ? <BeamLoadTable fl={fl} setFloor={setFloor} wallTypes={wallTypes} resolveW={resolveW} dark={dark} /> : dTab === "spans" ?             <div className="text-[12px]">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 bg-white"><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["ช่วง", "ยาว", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "ใช้", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
                 <tbody>{an.spans.map((s) => (
@@ -659,9 +672,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             <p className="text-[11px] text-gray-400">ติ๊กเพื่อแสดงค่าบนแปลน · วิเคราะห์ทุกกลุ่มรวมกัน (WSD) · สร้างจากล่างขึ้นบน คำนวณจากบนลงล่าง</p>
           </div>
         </Card></div>
-                : res.warnings.length ? res.warnings.map((w) => { const at = locateWarning(w, frame, res); return (
-                  <p key={w} onMouseEnter={() => at && highlight(at)} onMouseLeave={() => pinW !== w && highlight(pinW ? locateWarning(pinW, frame, res) : null)} onClick={() => { if (!at) return; const off = pinW === w; setPinW(off ? null : w); highlight(off ? null : at); if (!off && at.floor !== undefined && at.floor !== cur) goFloor(at.floor); }}
-                    className={`rounded px-1 py-0.5 text-[12px] text-red-600 ${at ? "cursor-pointer hover:bg-red-50" : ""} ${pinW === w ? "bg-red-50 ring-1 ring-red-300" : ""}`} title={at ? "ชี้ = กระพริบบนแปลน / 3D · คลิก = ค้างไว้ (และไปชั้นนั้น) · คลิกซ้ำ = เลิก" : ""}>{at?.p || at?.segs?.length ? "⌖ " : ""}{w}</p>); }) : <p className="text-[12px] text-gray-400">ไม่มีคำเตือน</p>}
+                : warnList}
           </div>
         </Panel></>}
         <Handle />

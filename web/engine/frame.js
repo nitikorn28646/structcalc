@@ -136,7 +136,7 @@ function gravity(frame, minTypes) {
     // roof module reactions linked to this floor (frame.roofPoints, recomputed by the app whenever the roof changes)
     const fl0 = floors[k].walls?.some((w) => w.hAuto || w.gable || w.openings?.length) ? { ...floors[k], walls: floors[k].walls.map((w) => resolveWall(w, frame, k)) } : floors[k]; // auto height / doors / windows
     const fl = frame.roofLink?.on && frame.roofLink.floor === k ? { ...fl0, pointLoads: [...(fl0.pointLoads ?? []), ...(frame.roofPoints ?? [])] } : fl0;
-    if (frame.roofLink?.on && frame.roofLink.floor === k) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — แก้: ขั้น 5 / 6 การ์ด "หลังคา → เสา" → ตารางจุดถ่ายแรง กด "เพิ่มคานรับ" หรือ "เพิ่มเสา" (หรือวาดคาน / เสาผ่านจุดนั้นในขั้น 2)`);
+    if (frame.roofLink?.on && frame.roofLink.floor === k) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — แก้: ขั้น 4 / 5 การ์ด "หลังคา → เสา" → ตารางจุดถ่ายแรง กด "เพิ่มคานรับ" หรือ "เพิ่มเสา" (หรือวาดคาน / เสาผ่านจุดนั้นในขั้น 2)`);
     // columns of the floor above with no column right under them stand on this floor's beams
     const extra = above.filter((c) => !fl.columns.some((q) => near(q, c.p))).map((c) => ({ p: c.p, P: c.Pbot, from: `เสา ${c.stack} (${floors[k + 1].name})` }));
     an[k] = analyzeFloor(fl, beamTypes, mat, extra, frame.wallTypes ?? DEFAULT_WALL_TYPES, downLines, minTypes?.[k]);

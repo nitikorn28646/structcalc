@@ -246,8 +246,8 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
     const k = (e) => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
       const drawing = (lineTool && start) || (tool === "wall" && draft.length);
-      if (e.key === "Escape") { setStart(null); setDraft([]); setTyped(""); setMulti([]); setMenu(null); }
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") { e.preventDefault(); setTool("select"); setMulti(Object.entries(BOXL).flatMap(([key, [list]]) => list.map((_, i) => ({ key, i })))); }
+      if (e.key === "Escape") { if (!start && !draft.length && !typed && tool !== "select") setTool("select"); setStart(null); setDraft([]); setTyped(""); setMulti([]); setMenu(null); } // a second Esc = back to select
+      else if ((e.ctrlKey || e.metaKey) && (e.code === "KeyA" || e.key.toLowerCase() === "a")) { e.preventDefault(); setTool("select"); setMulti(Object.entries(BOXL).flatMap(([key, [list]]) => list.map((_, i) => ({ key, i })))); }
       else if (!drawing && (e.key === "Delete" || e.key === "Backspace") && (multi.length || pick)) { e.preventDefault(); delItems(multi.length ? multi : [pick]); }
       else if (drawing && /^[0-9.]$/.test(e.key)) setTyped((t) => t + e.key);
       else if (drawing && e.key === "Backspace") setTyped((t) => t.slice(0, -1));

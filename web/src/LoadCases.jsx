@@ -28,7 +28,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
   const group = (list, keyOf) => { const m = new Map(); list.forEach((x) => { const k = keyOf(x); m.set(k, [...(m.get(k) ?? []), x]); }); return [...m.entries()]; };
   const floorItems = (field) => group(panels.filter((p) => !p.open && !p.stairWell && p.st !== "GS"), (p) => p[field]).map(([v, ps]) => ({
     id: `f-${field}-${v}`, text: `FLOOR −${fmt(Number(v), 0)} kg/m²`, note: `${field === "finish" ? "ปูผิว/ฝ้า" : "จร"} · ${ps.length} แผ่น (${ps.map((p) => p.key).slice(0, 6).join(", ")}${ps.length > 6 ? " …" : ""})`,
-    v: Number(v), segs: ps.flatMap((p) => segsOf(p.P)), pick: ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })),
+    v: Number(v), polys: ps.map((p) => p.P), pick: ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })),
     set: (nv) => setFloor({ panels: { ...fl.panels, ...Object.fromEntries(ps.map((p) => [p.key, { ...(fl.panels?.[p.key] ?? {}), [field]: nv }])) } }),
   }));
   const lineItems = (pred) => group(lines.map((l, i) => ({ ...l, i })).filter(pred), (l) => `${l.g ?? "SP"}|${l.q}|${l.name ?? ""}`).map(([k, ls]) => ({
@@ -50,6 +50,16 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
       ...floorItems("finish"), ...lineItems((l) => l.g !== "LL"), ...wallItems, ...pointItems((q) => q.g !== "LL")],
     LL: [...floorItems("live"), ...lineItems((l) => l.g === "LL"), ...pointItems((q) => q.g === "LL")],
   };
+
+  // ---- check: slabs with no finish / no live load (user 2026-11-04: "which slab did I forget to load?") ----
+  const live = panels.filter((p) => !p.open && !p.stairWell && p.st !== "GS");
+  const noLive = live.filter((p) => !(p.live > 0)), noFin = live.filter((p) => !(p.finish > 0)), dflt = live.filter((p) => !fl.panels?.[p.key] || (fl.panels[p.key].finish === undefined && fl.panels[p.key].live === undefined));
+  const name = (p) => `P${panels.indexOf(p) + 1}`;
+  const checks = [
+    noLive.length && { bad: true, text: `ไม่มีน้ำหนักจร ${noLive.length} แผ่น: ${noLive.map(name).join(", ")}`, ps: noLive },
+    noFin.length && { bad: true, text: `ไม่มีปูผิว/ฝ้า ${noFin.length} แผ่น: ${noFin.map(name).join(", ")}`, ps: noFin },
+    dflt.length && { bad: false, text: `ใช้ค่าเริ่มต้นของชั้น (ยังไม่ได้ Assign) ${dflt.length} แผ่น: ${dflt.map(name).slice(0, 12).join(", ")}${dflt.length > 12 ? " …" : ""}`, ps: dflt },
+  ].filter(Boolean);
 
   // ---- assign ----
   const unit = KINDS.find((k) => k[0] === form.kind)[2];
@@ -78,6 +88,20 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
 
   return (<>
     <Card title={`Load Cases — ${fl.name}`}>
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md bg-gray-50 px-2 py-1.5 text-[11.5px] text-gray-600 dark:bg-white/5 dark:text-gray-300">
+        <span className="font-medium">ค่าเริ่มต้นทั้งชั้น</span>
+        <label className="flex items-center gap-1">ปูผิว/ฝ้า<input type="number" step="10" defaultValue={fl.finish} key={`f${cur}-${fl.finish}`} onBlur={(e) => Number(e.target.value) !== fl.finish && setFloor({ finish: Number(e.target.value) || 0 })} className="h-6 w-16 rounded border border-gray-200 bg-white px-1 text-right tabular-nums dark:border-gray-700 dark:bg-gray-900" /></label>
+        <label className="flex items-center gap-1">จร<input type="number" step="50" defaultValue={fl.live} key={`l${cur}-${fl.live}`} onBlur={(e) => Number(e.target.value) !== fl.live && setFloor({ live: Number(e.target.value) || 0 })} className="h-6 w-16 rounded border border-gray-200 bg-white px-1 text-right tabular-nums dark:border-gray-700 dark:bg-gray-900" /></label>
+        <span className="text-gray-400">กก./ม.² · ใช้กับแผ่นที่ไม่ได้ Assign เอง</span>
+      </div>
+      <div className="mb-2 space-y-0.5 text-[11.5px]">
+        {checks.length ? checks.map((c) => (
+          <div key={c.text} onMouseEnter={() => highlight({ floor: cur, polys: c.ps.map((p) => p.P), bad: c.bad })} onMouseLeave={() => highlight(null)}
+            className={`flex items-start gap-1.5 rounded px-1.5 py-0.5 ${c.bad ? "bg-red-50 text-red-700 dark:bg-red-500/10" : "bg-amber-50 text-[#b54708] dark:bg-amber-500/10"}`}>
+            <span>{c.bad ? "⚠" : "ⓘ"}</span><span className="flex-1">{c.text}</span>
+            <button onClick={() => setPickSet(c.ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })))} className="shrink-0 text-brand-500 hover:underline">เลือก</button></div>))
+          : <p className="rounded bg-green-50 px-1.5 py-0.5 text-green-700 dark:bg-green-500/10">✓ ทุกแผ่นมีน้ำหนักปูผิวและน้ำหนักจร และ Assign ครบแล้ว</p>}
+      </div>
       <div className="max-h-[46vh] space-y-0.5 overflow-auto pr-1">
         {CASES.map(([k, label]) => (<div key={k}><Head k={k} label={label} />
           {open[k] && <div className="ml-4 border-l border-gray-200 pl-1.5 dark:border-gray-700">{tree[k].length ? tree[k].map((it) => <Item key={it.id} it={it} cur={cur} setPickSet={setPickSet} />) : <p className="px-1 text-[11px] text-gray-400">ยังไม่มีรายการ</p>}</div>}</div>))}
@@ -110,7 +134,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
 function Item({ it, cur, setPickSet }) {
   const [v, setV] = useState(it.v);
   return (
-    <div onMouseEnter={() => highlight({ floor: cur, segs: it.segs ?? [], pts: it.pts ?? [], p: it.pts?.[0] ?? null, bad: false })} onMouseLeave={() => highlight(null)}
+    <div onMouseEnter={() => highlight({ floor: cur, segs: it.segs ?? [], polys: it.polys ?? [], pts: it.pts ?? [], p: it.pts?.[0] ?? null, bad: false })} onMouseLeave={() => highlight(null)}
       className="group flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-brand-50/60 dark:hover:bg-white/5">
       <span className="h-2 w-2 shrink-0 rounded-sm bg-[#12b76a]" />
       <div className="min-w-0 flex-1">

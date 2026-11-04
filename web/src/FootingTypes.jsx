@@ -84,7 +84,7 @@ export function FootingTypes({ frame, set, res }) {
           <select value={frame.baseFixity ?? "pinned"} onChange={(e) => set("baseFixity", e.target.value)} className={box}>
             <option value="fixed">ฐานเสายึดแน่น — โมเมนต์จากโครง 3 มิติลงฐานราก (ฐานแผ่ / เข็มกลุ่ม)</option>
             <option value="pinned">ฐานเสาเป็นหมุด — ไม่มีโมเมนต์ลงฐาน (เข็ม 1–2 ต้น)</option></select>
-          <span className="text-[11px] text-gray-400">ค่าเดียวกับขั้น 7 · ฐานตรวจแรงดันดิน / แรงต่อเข็มด้วย P + Mx + My ทั้งสองแกน และทุกชุดผสมแรงด้านข้างเมื่อเปิดใช้{frame.analysis === "continuous" ? " · ต้องใช้แรงออกแบบแบบค่ามากสุด (โครง 3 มิติ) ในขั้น 7 จึงมีโมเมนต์" : ""}</span>
+          <span className="text-[11px] text-gray-400">ค่าเดียวกับขั้น 6 · ฐานตรวจแรงดันดิน / แรงต่อเข็มด้วย P + Mx + My ทั้งสองแกน และทุกชุดผสมแรงด้านข้างเมื่อเปิดใช้{frame.analysis === "continuous" ? " · ต้องใช้แรงออกแบบแบบค่ามากสุด (โครง 3 มิติ) ในขั้น 7 จึงมีโมเมนต์" : ""}</span>
         </div>
         <p className="mb-1 text-sm font-semibold text-gray-800">1 · Type ฐานรากเสาเข็ม</p>
         <table className="w-full"><thead><tr>{["ชื่อ", "เข็ม (ต้น)", "ขนาดเข็ม", "หนาฐาน t (ม.)", "ลึก Df (ม.)", "ระยะเข็ม (× ขนาดเข็ม)", "กว้างฐาน (ม.) 1–2 ต้น", "เหล็กแนวยาว", "จำนวน (เส้น)", "@ (ม.)", "เหล็กแนวสั้น", "จำนวน (เส้น)", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>

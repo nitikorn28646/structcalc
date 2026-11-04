@@ -37,7 +37,7 @@ const BAR_OPTS = [["", "—"], ...Object.keys(BARS).map((k) => [k, k])];
 // single-member calculators (tools); the building itself is designed in the workflow
 const MODULES = [["beam", "คานเดี่ยว", RectangleHorizontal], ["slab", "พื้นเดี่ยว", Square], ["column", "เสาเดี่ยว", Columns3], ["stair", "บันไดเดี่ยว", Footprints], ["footing", "ฐานรากเดี่ยว", Landmark]];
 // one project = one workflow: model bottom up, analyse top down, design, report
-export const WORKFLOW = [["project", "ข้อมูลโครงการ"], ["grid", "กริด / ระดับชั้น"], ["frame", "โครงสร้าง (เสา-คาน)"], ["slab", "พื้น"], ["stair", "บันได"], ["roof", "หลังคา"],
+export const WORKFLOW = [["project", "ข้อมูลโครงการ"], ["grid", "กริด / ระดับชั้น"], ["frame", "เสา คาน พื้น"], ["stair", "บันได"], ["roof", "หลังคา"],
   ["loads", "น้ำหนักบรรทุก"], ["analysis", "วิเคราะห์"], ["design", "ออกแบบสมาชิก"], ["footing", "ฐานราก"], ["report", "รายการคำนวณ"]];
 const TITLES = { beam: ["ออกแบบคาน คสล.", "beamNo"], slab: ["ออกแบบพื้น คสล.", null], column: ["ออกแบบเสา คสล.", null], stair: ["ออกแบบบันได คสล.", null], footing: ["ออกแบบฐานรากแผ่", null], roof: ["ออกแบบโครงหลังคาเหล็ก", null], frame: ["ออกแบบคาน-เสาจากแปลน", null], work: ["โครงการ", null] };
 const GRADE_OPTS = Object.entries(GRADES).map(([k, g]) => [k, `${g} (${k})`]);
@@ -289,10 +289,15 @@ export default function App() {
   }, [roof, frame.roofLink?.on, frame.roofLink?.floor, frame.floors[frame.roofLink?.floor ?? frame.floors.length - 1]?.beams, frame.floors[frame.roofLink?.floor ?? frame.floors.length - 1]?.columns]); // eslint-disable-line react-hooks/exhaustive-deps // the whole building, shared by every workflow step
   useEffect(() => {
     const k = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); (e.shiftKey ? saveAs : saveProject)(); return; } // also while typing
-      if (mod !== "work" || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); restore(e.shiftKey ? "redo" : "undo", e.shiftKey ? "undo" : "redo"); }
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); restore("redo", "undo"); }
+      // physical keys (e.code): with the Thai keyboard layout Ctrl+Z sends e.key "ผ" (user 2026-11-04: Ctrl+Z did nothing)
+      const key = /^Key[A-Z]$/.test(e.code ?? "") ? e.code.slice(3).toLowerCase() : e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && key === "s") { e.preventDefault(); (e.shiftKey ? saveAs : saveProject)(); return; } // also while typing
+      if (mod !== "work") return;
+      // text being typed keeps the browser's own undo; number fields / selects commit on change → project undo (field left first)
+      const t = e.target, typing = t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && !["number", "checkbox", "radio", "range"].includes(t.type));
+      if (typing || !(e.ctrlKey || e.metaKey) || !["z", "y"].includes(key)) return;
+      e.preventDefault(); if (t.tagName === "INPUT" || t.tagName === "SELECT") t.blur();
+      if (key === "z") restore(e.shiftKey ? "redo" : "undo", e.shiftKey ? "undo" : "redo"); else restore("redo", "undo");
     };
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   });

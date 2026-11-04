@@ -17,7 +17,7 @@ export function LateralChoice({ frame, set }) {
         <label className="flex items-center gap-2"><input type="checkbox" checked={!!L.wind?.on} onChange={(e) => put("wind", e.target.checked)} /> คิดแรงลม (มยผ. 1311-50)</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={!!L.seismic?.on} onChange={(e) => put("seismic", e.target.checked)} /> คิดแรงแผ่นดินไหว (มยผ. 1301/1302-61)</label>
         {!L.asked && <button onClick={() => set("lateral", { ...L, asked: true })} className="rounded-lg px-3 py-1 text-[12px] font-medium ring-1 ring-gray-300 hover:bg-gray-50">ไม่คิดทั้งสองอย่าง (แรงในแนวดิ่งเท่านั้น)</button>}
-        <p className="text-[12px] text-gray-500">ใส่ค่าละเอียดและดูผลที่ขั้น 6 แท็บ "ลม / แผ่นดินไหว / Combination" · แรงด้านข้างใช้โครง 3 มิติ โดยพื้นทุกชั้นแข็งในแนวราบ</p>
+        <p className="text-[12px] text-gray-500">ใส่ค่าละเอียดและดูผลที่ขั้น 5 แท็บ "ลม / แผ่นดินไหว / Combination" · แรงด้านข้างใช้โครง 3 มิติ โดยพื้นทุกชั้นแข็งในแนวราบ</p>
       </div>
     </Card>
   );
@@ -31,7 +31,7 @@ export function LateralPanel({ frame, set, res }) {
   const num = (k, key, label, unit, step = "0.1") => <Field label={label} unit={unit}><NumberInput value={(k === "wind" ? w : s)[key]} step={step} onChange={(v) => put(k, key, v)} /></Field>;
   return (
     <div className="grid max-w-6xl gap-4 xl:grid-cols-2">
-      {needs3D && <p className="rounded-lg bg-[#fffaeb] p-2 text-[12px] text-[#b54708] xl:col-span-2">แรงด้านข้างต้องใช้โครง 3 มิติ — ตั้ง "แรงที่ใช้ออกแบบ" ที่ขั้น 7 เป็นค่ามากสุดของสองวิธี</p>}
+      {needs3D && <p className="rounded-lg bg-[#fffaeb] p-2 text-[12px] text-[#b54708] xl:col-span-2">แรงด้านข้างต้องใช้โครง 3 มิติ — ตั้ง "แรงที่ใช้ออกแบบ" ที่ขั้น 6 เป็นค่ามากสุดของสองวิธี</p>}
       <Card title="แรงลม — มยผ. 1311-50 (วิธีอย่างง่าย)" icon={Wind}>
         <label className="mb-2 flex items-center gap-2 text-[13px]"><input type="checkbox" checked={!!w.on} onChange={(e) => put("wind", "on", e.target.checked)} /> คิดแรงลม</label>
         {w.on && <>

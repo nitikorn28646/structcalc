@@ -22,6 +22,11 @@ function Blink({ children }) {
   useFrame(({ clock }) => { if (m.current) m.current.opacity = 0.35 + 0.5 * Math.abs(Math.sin(clock.elapsedTime * 3)); });
   return <mesh>{children}<meshStandardMaterial ref={m} color="#d92d20" emissive="#d92d20" emissiveIntensity={0.5} transparent depthWrite={false} /></mesh>;
 }
+// flashing slab outline area (a highlighted floor load): a thin plate on top of the slab
+function BlinkPoly({ P, z }) {
+  const geo = useMemo(() => new THREE.ExtrudeGeometry(new THREE.Shape(P.map(([x, y]) => new THREE.Vector2(x, y))), { depth: 0.03, bevelEnabled: false }), [P]);
+  return <group rotation={[-Math.PI / 2, 0, 0]} position={[0, z, 0]}><Blink><primitive object={geo} attach="geometry" /></Blink></group>;
+}
 // box from plan point p to q, width w (across), bottom z0, height h
 function Box({ p, q, w, z0, h, color, opacity = 1, edges }) {
   const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy);
@@ -136,6 +141,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
               const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 0.01, [bw, bh] = segSize(a, b);
               return (<group key={`hs${j}`} position={[(a[0] + b[0]) / 2, hz - bh / 2, -(a[1] + b[1]) / 2]} rotation={[0, Math.atan2(b[1] - a[1], b[0] - a[0]), 0]}>
                 <Blink><boxGeometry args={[L, bh + 0.03, bw + 0.03]} /></Blink></group>); })}
+            {(hl.polys ?? []).map((P, j) => <BlinkPoly key={`hpg${j}`} P={P} z={hz + 0.02} />)}
             {(hl.pts ?? []).slice(1).map((q, j) => <group key={`hp${j}`} position={[q[0], hz - 0.2, -q[1]]}><Blink><sphereGeometry args={[0.16, 20, 14]} /></Blink></group>)}
             {hl.p && (hl.floor !== undefined
               ? <group position={[hl.p[0], hz - 0.2, -hl.p[1]]}><Blink><sphereGeometry args={[0.18, 24, 16]} /></Blink></group>

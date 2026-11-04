@@ -24,7 +24,7 @@ LAB = Path(r"D:\REA\rea-lab\results")
 OUT = LAB / f"e2e-{datetime.now():%Y%m%d-%H%M%S}"
 EXPECTED = Path(__file__).with_name("expected.json")
 PROJECTS = [p for p in ["yasothon", "_ole"] if (ROOT / "web/public/projects" / f"{p}.json").exists()]
-STEPS = ["ข้อมูลโครงการ", "กริด / ระดับชั้น", "โครงสร้าง", "พื้น", "บันได", "หลังคา", "น้ำหนักบรรทุก", "วิเคราะห์", "ออกแบบสมาชิก", "ฐานราก", "รายการคำนวณ"]
+STEPS = ["ข้อมูลโครงการ", "กริด / ระดับชั้น", "เสา คาน พื้น", "บันได", "หลังคา", "น้ำหนักบรรทุก", "วิเคราะห์", "ออกแบบสมาชิก", "ฐานราก", "รายการคำนวณ"]
 results, console_errors = [], []
 
 
@@ -124,7 +124,7 @@ def test_new_project(browser, expected, save):
         box = page.locator(f"label:has-text('{label}') input")
         box.fill(val)
         box.press("Enter")
-    step(page, "โครงสร้าง")
+    step(page, "เสา คาน พื้น")
     floors = page.locator("header select option").all_inner_texts()
     sel = page.locator("header select")
     sel.select_option(index=0)
