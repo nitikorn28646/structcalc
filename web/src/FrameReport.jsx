@@ -29,7 +29,7 @@ const Table = ({ head, rows }) => (
   </table>
 );
 const pass = (ok) => (ok ? "ผ่าน" : "ไม่ผ่าน");
-const bars = (t) => [t.top, t.topX && `+ ${t.topX} (L/4)`].filter(Boolean).join(" ");
+const bars = (t) => [t.top, t.topX && `+ ${t.topX} (ระยะตามตารางตัดเหล็ก)`].filter(Boolean).join(" ");
 
 // one beam section check (mid-span or support) in steps
 function BeamSection({ title, r, M, V, tensionTop, atD = false }) {
@@ -262,7 +262,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
         </Sec>}
 
         {show("back", "schedules") && <Sec id="c-schedules" n={N("c-schedules")} th="ตารางหน้าตัดและเหล็กเสริม" en="Schedules" intro="ขนาดและเหล็กเสริมที่ใช้ ความยาวคานรวมวัดตามแนวศูนย์กลาง ยังไม่รวมระยะทาบและเศษเหล็ก">
-          <Table head={["Type", "b × h (ซม.)", "เหล็กบน (+ เสริมหัวเสา L/4 · คานยื่น: ยาวตลอด)", "เหล็กล่าง (+ เสริมกลางคาน 3L/5)", "ปลอก หัวเสา / กลาง", "จำนวน", "ยาวรวม (ม.)"]}
+          <Table head={["Type", "b × h (ซม.)", "เหล็กบน (+ เสริมหัวเสา ตามตารางตัดเหล็ก · คานยื่น: ยาวตลอด)", "เหล็กล่าง (+ เสริมกลางคาน ตามตารางตัดเหล็ก)", "ปลอก หัวเสา / กลาง", "จำนวน", "ยาวรวม (ม.)"]}
             rows={types.map((t, i) => { const l = spans.filter((s) => s.typeIdx === i && s.kind !== "cantilever"); return [spans.some((s) => s.typeIdx === i) ? <CalcLink id={`B-${t.name}`}>{t.name}</CalcLink> : t.name, `${fmt(t.b * 100, 0)} × ${fmt(t.h * 100, 0)}`, bars(t), [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" "),
               `${stLabel(t)} @${fmt(t.sSup, 2)} / @${fmt(t.sMid, 2)}`, `${l.length} ช่วง`, fmt(l.reduce((s, x) => s + x.len, 0), 2)]; }).flatMap((row, i) => {
                 // cantilever variant: same section and support bars, the top bars run the whole cantilever (B1A …)
@@ -283,6 +283,15 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             <Note>ld = 1.4 × max(0.06·Ab·fy/√f'c, 0.006·db·fy) (เหล็กบน, วิธีหน่วยแรงใช้งาน ว.ส.ท. / ACI 318) · ระยะฝาก = max(ความยาวคานยื่น, ld)</Note>
             <div className="grid grid-cols-2 gap-2">{[...new Map(cs.map(({ sp }) => [`${sp.type.name}|${fmt(sp.len, 2)}|${sp.detail.through}|${sp.detail.noBack}`, sp])).values()].map((sp) => (
               <Figure key={sp.id} caption={`คานยื่น ${sp.id} (${sp.typeName})`}><CantileverDetail d={sp.detail} t={sp.type} L={sp.len} id={sp.id} /></Figure>))}</div>
+          </>) : null; })()}
+          {/* bar cut-offs from the moment envelope (floor.js cutoffs, audit F4 2026-11-04, ACI 318-11 12.10–12.12, ld 12.2.2) */}
+          {(() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.cut && (sp.cut.bot?.len || sp.cut.top?.some((x) => x.len))).map((sp) => ({ sp, k }))); return cs.length ? (<>
+            <Sub>ระยะตัดเหล็กเสริมพิเศษ (จากโมเมนต์ envelope — ACI 318-11 ข้อ 12.10–12.12, ld ข้อ 12.2.2)</Sub>
+            <Note>จุดตัดทางทฤษฎี = ตำแหน่งที่โมเมนต์ลดลงจนเหล็กที่วิ่งตลอดรับได้เอง (โมเมนต์ที่ยอมให้ Ma ของหน้าตัดแตกร้าว) · ยืดเลยจุดนั้น max(d, 12db) และยาว ≥ ld จากจุดโมเมนต์สูงสุด / หน้าเสา · ตัดในเขตแรงดึงได้เมื่อ V ≤ ⅔(Vc + Vs) มิฉะนั้นยาวถึงหัวเสา · เหล็กบนเลยจุดดัดกลับ max(d, 12db, L/16) เมื่อเหล็กวิ่งตลอดน้อยกว่า 1/3 · ระยะวัดจากศูนย์กลางเสา</Note>
+            <Table head={["ชั้น / ช่วง", "Type", "ยาว (ม.)", "เหล็กล่างเสริม: จาก – ถึง (ม.)", "จุดตัดทฤษฎี", "ld ล่าง / บน", "เหล็กบนเสริม ซ้าย / ขวา (ม.)"]}
+              rows={cs.map(({ sp, k }) => { const b = sp.cut.bot, tp = sp.cut.top ?? [], tl = (x) => (!x || x.none ? "-" : fmt(x.len, 2));
+                return [`${floors[k].name} ${sp.id}`, sp.typeName, fmt(sp.len, 2), b?.len ? `${sp.type.botX}: ${fmt(b.start, 2)} – ${fmt(b.end, 2)}${b.full ? " (ตลอดช่วง)" : ""}${b.shear ? " · V > ⅔φVn" : ""}` : b?.notNeeded ? "ไม่ต้องการ (ใส่ตามแบบ)" : "-",
+                  b?.theo ? `${fmt(b.theo[0], 2)} – ${fmt(b.theo[1], 2)}` : "-", `${b?.ld ? fmt(b.ld, 2) : "-"} / ${tp.find((x) => x.ld)?.ld ? fmt(tp.find((x) => x.ld).ld, 2) : "-"}`, `${tl(tp[0])} / ${tl(tp[1])}${sp.cut.topFull ? " (ตลอดช่วง)" : ""}`]; })} />
           </>) : null; })()}
           {/* short spans hogging all along: extra top bars the whole span (floor.js sp.topFull, user 2026-11-04) */}
           {(() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.topFull).map((sp) => ({ sp, k }))); return cs.length ? (<>

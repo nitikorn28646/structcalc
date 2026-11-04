@@ -389,8 +389,9 @@ export function checkSpan(t, sp, mat) {
     // F8: torsion by the thin-walled tube of ACI 318-11 11.5.3.6 / 11.5.3.7 (θ = 45°), WSD stresses fv / fs instead of φ·fy:
     // At/s = T/(2·A0·fv) per leg, A0 = 0.85·Aoh; Al = (At/s)·ph·(fv/fs); minimum 11.5.5.2 (Av + 2At ≥ Av,min), 11.5.5.3 (Al,min), spacing 11.5.6.1 ≤ min(ph/8, 300 mm)
     if (torsionOn) { const At1 = (MtUse * 100) / (2 * A0 * r.fsv), AvS = typeof r.AvS === "number" ? r.AvS : 0, tot = AvS + 2 * At1;
-      const sReq = tot > 0 ? r.Aact / tot / 100 : Infinity, sTor = Math.min(ph / 8, 30) / 100, At1m = Math.max(At1, (1.78 * bcm) / r.fsv / 2);
-      const Al = At1 * ph * (r.fsv / fsL), AlMin = Math.max(0, (1.34 * sq * bcm * hcm) / fsL - At1m * ph * (r.fsv / fsL)), AlReq = Math.max(Al, AlMin);
+      // Al,min (eq. 11-24) and the At/s floor 0.175·bw/fyt (MPa) are ratios of the YIELD strengths fy / fyt (ksc: 1.34√f′c·Acp/fy, 1.78·bw/fyt)
+      const fyL = mat.fy ?? 4000, sReq = tot > 0 ? r.Aact / tot / 100 : Infinity, sTor = Math.min(ph / 8, 30) / 100, At1m = Math.max(At1, (1.78 * bcm) / fys / 2);
+      const Al = At1 * ph * (r.fsv / fsL), AlMin = Math.max(0, (1.34 * sq * bcm * hcm) / fyL - At1m * ph * (fys / fyL)), AlReq = Math.max(Al, AlMin);
       const extraFace = Math.max(0, AlReq / 2 - 2 * (r.Ast ?? 0)); // beam.js already adds 2·Ast to each face
       r.torsionAci = { At1, A0, Aoh, ph, sReq, sTor, Al, AlMin, extraFace };
       r.torsionAciOk = s <= Math.min(sReq, sTor) + 1e-9 && (typeof r.reqBot !== "number" || r.provBot >= r.reqBot + extraFace - 1e-9) && (typeof r.reqTop !== "number" || r.provTop >= r.reqTop + extraFace - 1e-9); }
@@ -431,6 +432,7 @@ export function spanReasons(c) {
     if (r.minShearOk === false) out.push(`${w}: เหล็กปลอกขั้นต่ำ (ACI 318-11 11.4.6: V > ½Vc) — Av ${r.minShear.Av.toFixed(2)} ≥ ${r.minShear.AvMin.toFixed(2)} ซม.² และ s ≤ ${r.minShear.sMax.toFixed(3)} ม.`);
     if (r.torsionAciOk === false) out.push(`${w}: แรงบิด (ACI 318-11 11.5 ท่อผนังบาง) — s ≤ ${Math.min(r.torsionAci.sReq, r.torsionAci.sTor).toFixed(3)} ม., เหล็กตามยาวเพิ่ม ${r.torsionAci.extraFace.toFixed(2)} ซม.²/ด้าน`);
   }
+  for (const w of c.cut?.reasons ?? []) out.push(w);
   if (c.defl && c.defl.ok === false) out.push(`ระยะแอ่น ${(c.defl.dT * 1000).toFixed(1)} มม. (ยอมให้ ${(c.defl.limT * 1000).toFixed(1)}) / จร ${(c.defl.dL * 1000).toFixed(1)} (ยอมให้ ${(c.defl.limL * 1000).toFixed(1)})`);
   return [...new Set(out)];
 }
@@ -713,6 +715,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     sp.member = sp.members.find((m) => typeOf.get(m) === ti) ?? sp.member;
     sp.typeIdx = ti; const c = checkSpan(t, sp, mat), d = sp.defl;
     sp.check = { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) };
+    { const cut = cutoffs(sp, result.lines.find((l) => l.id === sp.line), t, mat, { Mpos: sp.Mpos, Mneg: sp.Mneg }, sp.check); // audit F4 (frame.js repeats it with the envelope forces)
+      if (cut) { sp.cut = cut; sp.check.cut = cut; if (!cut.ok) sp.check.ok = false; } }
   }
   // a cantilever span is shown as its type + "A" (user 2026-11-03: B1A = B1's section and support bars, top bars the whole length)
   for (const sp of result.spans) Object.assign(sp, { type: types[sp.typeIdx], ok: sp.check.ok, typeName: `${types[sp.typeIdx]?.name ?? ""}${sp.kind === "cantilever" ? "A" : ""}` });
@@ -794,6 +798,89 @@ function elementDeflections(res, EI) {
     return Math.max(...I2.map((v, i) => Math.abs(v + d0 + c1 * i * h)));
   });
 }
+// deflection profiles (41 points per element, v up positive) — for the Branson deflections (difference D+L − D)
+function elementProfiles(res, EI) {
+  return res.el.map((el, e) => { const n = 40, h = el.L / n, I1 = [0], I2 = [0];
+    for (let i = 1; i <= n; i++) { const k0 = el.M((i - 1) * h) / EI[e], k1 = el.M(i * h) / EI[e]; I1.push(I1[i - 1] + ((k0 + k1) / 2) * h); I2.push(I2[i - 1] + ((I1[i - 1] + I1[i]) / 2) * h); }
+    const [d0, d1] = el.d, c1 = (d1 - d0 - I2[n]) / el.L; return I2.map((v, i) => v + d0 + c1 * i * h); });
+}
+// Branson effective moment of inertia (ACI 318-11 9.5.2.3, eq. 9-8; UNVERIFIED against วสท. — user decision 2026-11-04):
+// Ie = (Mcr/Ma)³·Ig + [1 − (Mcr/Ma)³]·Icr ≤ Ig, Mcr = fr·Ig/yt, fr = 7.5√f′c psi = 2.0√f′c ksc (9-9, 9-10); Icr of the cracked transformed
+// section (tension n·As, compression (n − 1)·As′). Section: b, h (m); tension / compression bar areas (cm²) at depths d, d′ (cm). Units cm⁴, kg-m.
+const faceDepth = (L, cover, ds) => { let A = 0, Ay = 0, y = cover + ds; for (const l of L) { const g = [l.main, l.special].filter(Boolean); if (!g.length) continue;
+  const db = Math.max(...g.map((x) => BARS[x.bar]?.d ?? 1.2)); for (const x of g) { const a = (BARS[x.bar]?.A ?? 0) * x.n; A += a; Ay += a * (y + (BARS[x.bar]?.d ?? 1.2) / 2); } y += db + 2.5; }
+  return { A, c: A ? Ay / A : cover + ds }; };
+export function bransonSection(t, mat, face) { // face "pos" (tension bottom) | "neg" (tension top)
+  const top = parseBars(t.top), bot = parseBars(t.bot), topX = parseBars(t.topX), botX = parseBars(t.botX), cover = mat.cover ?? 3, ds = BARS[t.st]?.d ?? 0.6;
+  const T = face === "pos" ? faceDepth(barLayers(t.b, mat, t.st, bot, botX), cover, ds) : faceDepth(barLayers(t.b, mat, t.st, top, topX), cover, ds);
+  const C = face === "pos" ? faceDepth(barLayers(t.b, mat, t.st, top), cover, ds) : faceDepth(barLayers(t.b, mat, t.st, bot), cover, ds);
+  const b = t.b * 100, h = t.h * 100, d = h - T.c, dp = C.c, fc = mat.fcBeam ?? mat.fcPrime, Ecc = 15100 * Math.sqrt(fc), n = (mat.Es ?? 2040000) / Ecc;
+  const a2 = b / 2, b2 = n * T.A + (n - 1) * C.A, c2 = -(n * T.A * d + (n - 1) * C.A * dp), kd = (-b2 + Math.sqrt(b2 * b2 - 4 * a2 * c2)) / (2 * a2);
+  const Ig = (b * h ** 3) / 12, Icr = (b * kd ** 3) / 3 + n * T.A * (d - kd) ** 2 + (n - 1) * C.A * Math.max(0, kd - dp) ** 2, Mcr = (2.0 * Math.sqrt(fc) * Ig) / (h / 2) / 100;
+  return { Ig, Icr, Mcr, d, rhoP: C.A / (b * d), As: T.A, Asp: C.A };
+}
+export const bransonIe = (S, Ma) => (Ma <= S.Mcr ? S.Ig : Math.max(S.Icr, Math.min(S.Ig, (S.Mcr / Ma) ** 3 * S.Ig + (1 - (S.Mcr / Ma) ** 3) * S.Icr)));
+// span Ie (9.5.2.4): simple span → mid-span section; cantilever → support; continuous → average of the positive section and the
+// continuous end(s); Ma = the largest moment under the load considered (D, or D + L)
+export function spanIe(t, mat, kind, Ma) { const P = bransonSection(t, mat, "pos"), N = bransonSection(t, mat, "neg");
+  const IeP = bransonIe(P, Ma.pos), IeN = Ma.negs.length ? Ma.negs.map((m) => bransonIe(N, m)).reduce((a, b) => a + b, 0) / Ma.negs.length : null;
+  const Ie = kind === "cantilever" ? bransonIe(N, Math.max(...Ma.negs, 0)) : kind === "simple" || IeN === null ? IeP : (IeP + IeN) / 2;
+  return { Ie, IeP, IeN, P, N, rhoP: kind === "cantilever" ? N.rhoP : P.rhoP }; }
+// ---- bar cut-offs (audit F4, user decision 2026-11-04: extend beyond the theoretical cut-off; ACI 318-11 ch. 12 — UNVERIFIED against วสท.) ----
+// ld (12.2.2, deformed bars, ksc): db ≤ 19 mm: 0.15·ψt·ψe·fy/(λ√f′c)·db, larger: 0.19 (clear spacing ≥ db, cover ≥ db, stirrups ≥ minimum);
+// otherwise ×1.5; ψt = 1.3 top bars; ≥ 30 cm (12.2.1). db in cm → ld in m.
+export const devLength = (db, mat, top = false, good = true) => Math.max(0.3, (((db <= 1.9 ? 0.15 : 0.19) * (top ? 1.3 : 1) * (mat.fy ?? 4000)) / Math.sqrt(mat.fcBeam ?? mat.fcPrime)) * db * (good ? 1 : 1.5) / 100);
+// allowable moment (WSD) of a face's bars: cracked transformed section, As′ with 2n − 1; fc ≤ 0.45f′c (≤ 65), fs ≤ allowable
+function wsdMa(t, mat, tens, comp) {
+  const cover = mat.cover ?? 3, ds = BARS[t.st]?.d ?? 0.6, T = faceDepth(barLayers(t.b, mat, t.st, ...tens), cover, ds), C = faceDepth(barLayers(t.b, mat, t.st, ...comp), cover, ds);
+  if (!T.A) return 0;
+  const fcp = mat.fcBeam ?? mat.fcPrime, fcA = mat.capFc !== false ? Math.min((mat.F ?? 0.45) * fcp, 65) : (mat.F ?? 0.45) * fcp, fsA = (mat.fy ?? 4000) >= 4000 ? 1700 : (mat.fy ?? 4000) >= 3000 ? 1500 : 1200;
+  const b = t.b * 100, d = t.h * 100 - T.c, dp = C.c, n = (mat.Es ?? 2040000) / (15100 * Math.sqrt(fcp)), a2 = b / 2, b2 = (2 * n - 1) * C.A + n * T.A, c2 = -((2 * n - 1) * C.A * dp + n * T.A * d);
+  const kd = (-b2 + Math.sqrt(b2 * b2 - 4 * a2 * c2)) / (2 * a2), I = (b * kd ** 3) / 3 + (2 * n - 1) * C.A * (kd - dp) ** 2 + n * T.A * (d - kd) ** 2;
+  return Math.min((fcA * I) / kd, (fsA * I) / (n * (d - kd))) / 100; // kg-m
+}
+// cut-off detail of one span: F = design forces (envelope), ln = its line (continuous envelope curve, scaled up to F), c = its check
+export function cutoffs(sp, ln, t, mat, F, c) {
+  if (sp.kind === "cantilever" || !ln?.env) return null;
+  const L = sp.len, els = ln.env.env.filter((e) => e.curve.x0 >= sp.x0 - 1e-6 && e.curve.x0 + e.curve.L <= sp.x1 + 1e-6);
+  const pts = els.flatMap((e) => e.curve.Mmax.map((m, i) => ({ x: e.curve.x0 - sp.x0 + (e.curve.L * i) / 40, Mp: m, Mn: e.curve.Mmin[i] }))).sort((a, b) => a.x - b.x);
+  if (!pts.length) return null;
+  const pk = Math.max(1, ...pts.map((p) => p.Mp)), nk = Math.max(1, ...pts.map((p) => -p.Mn)), sP = Math.max(1, (F.Mpos ?? 0) / pk), sN = Math.max(1, (F.Mneg ?? 0) / nk);
+  const top = parseBars(t.top), bot = parseBars(t.bot), topX = parseBars(t.topX), botX = parseBars(t.botX), A = (g) => (g ? g.n * BARS[g.bar].A : 0), db = (g) => (g ? BARS[g.bar].d : 1.2);
+  const d = t.h - ((mat.cover ?? 3) + (BARS[t.st]?.d ?? 0.6) + 1.0) / 100, good = c?.mid?.minShearOk !== false && c?.sup?.minShearOk !== false;
+  const Vcap = (x) => { const r = x < L / 4 || x > (3 * L) / 4 ? c?.sup : c?.mid, s = x < L / 4 || x > (3 * L) / 4 ? t.sSup : t.sMid; return r ? r.Vc + (r.Aact * r.fsv * r.d) / (s * 100) : Infinity; };
+  const Vat = (x) => { let v = 0; for (const [xx, vv] of sp.Vx ?? []) if (Math.abs(xx - x) <= L / 40 + 1e-6) v = Math.max(v, vv); return v || sp.V; };
+  const out = { reasons: [], ok: true }, round = (v) => Math.ceil(v * 20 - 1e-9) / 20;
+  // bottom: extra bars where M+ exceeds what the through bars carry
+  if (botX) {
+    const Ma = wsdMa(t, mat, [bot, null], [top, null]), need = pts.filter((p) => p.Mp * sP > Ma), ld = devLength(db(botX), mat, false, good), ext = Math.max(d, (12 * db(botX)) / 100);
+    if (need.length) { const xa = need[0].x, xb = need.at(-1).x, xp = pts.reduce((a, p) => (p.Mp > a.Mp ? p : a)).x;
+      let s0 = Math.min(xa - ext, xp - ld), s1 = Math.max(xb + ext, xp + ld), shear = [];
+      for (const xc of [s0, s1]) if (xc > 0.02 && xc < L - 0.02 && Vat(xc) > (2 / 3) * Vcap(xc)) shear.push(xc); // 12.10.5.1: cut in a tension zone only with V ≤ ⅔·φVn
+      if (shear.length) { s0 = 0; s1 = L; }
+      s0 = Math.max(0, s0); s1 = Math.min(L, s1);
+      out.bot = { Ma, theo: [xa, xb], start: round(s0) === 0 ? 0 : Math.floor(s0 * 20) / 20, end: Math.min(L, round(s1)), ld, ext, full: s0 <= 0.02 && s1 >= L - 0.02, shear: shear.length > 0 };
+      out.bot.len = out.bot.end - out.bot.start;
+    } else out.bot = { Ma, notNeeded: true };
+    // 12.11.1: at least 1/3 (simple) or 1/4 (continuous) of the positive steel runs into the support
+    const frac = sp.kind === "simple" ? 1 / 3 : 1 / 4; if (A(bot) < frac * (A(bot) + A(botX)) - 1e-9) { out.ok = false; out.reasons.push(`เหล็กล่างที่วิ่งเข้าหัวเสาน้อยกว่า ${sp.kind === "simple" ? "1/3" : "1/4"} ของเหล็กล่างทั้งหมด (ACI 318-11 12.11.1)`); }
+  }
+  // top: extra bars at each supported end with hogging
+  if (topX) {
+    const Ma = wsdMa(t, mat, [top, null], [bot, null]), ld = devLength(db(topX), mat, true, good), ext = Math.max(d, (12 * db(topX)) / 100), ln16 = L / 16;
+    const third = A(top) >= (A(top) + A(topX)) / 3 - 1e-9; // 12.12.3: ≥ 1/3 of the top steel past the inflection point — the through bars do it when they are 1/3
+    out.top = [["L", 0, 1], ["R", L, -1]].map(([side, x0, dir]) => {
+      const along = pts.map((p) => ({ u: Math.abs(p.x - x0), M: -p.Mn * sN })).sort((a, b) => a.u - b.u);
+      if (!(along[0]?.M > 1)) return { side, none: true };
+      const need = along.filter((p) => p.M > Ma), uc = need.length ? need.at(-1).u : 0, ip = (along.find((p) => p.M <= 0) ?? along.at(-1)).u;
+      let len = Math.max(uc + ext, ld, third ? 0 : ip + Math.max(d, (12 * db(topX)) / 100, ln16));
+      const xc = x0 + dir * len; if (xc > 0.02 && xc < L - 0.02 && Vat(xc) > (2 / 3) * Vcap(xc)) len = Math.max(len, ip + ext); // past the hogging zone (no longer a tension cut)
+      return { side, Ma, theo: uc, ip, ld, ext, len: Math.min(L, round(len)) };
+    });
+    const [l, r] = out.top; if (!l.none && !r.none && l.len + r.len >= L - 1e-6) out.topFull = true;
+  }
+  return out;
+}
 // Ec (kg/m²) as in the beam module: 4270·w^1.5·√f'c ksc
 const EcOf = (mat) => 2.323 ** 1.5 * 4270 * Math.sqrt(mat.fcBeam ?? mat.fcPrime) * 1e4;
 
@@ -866,6 +953,23 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
       const Renv = x.map((_, k) => dead.R[k] + liveBy.reduce((t, r) => t + Math.max(0, r.R[k]), 0));
       // deflections: dead (sustained, ×3 for creep and shrinkage) and full live load
       const live = solveBeam({ x, sup, EI, loads: loads.filter(isLL) }), dD = dead.error ? [] : elementDeflections(dead, EI), dL = live.error ? [] : elementDeflections(live, EI);
+      // F7 (audit 2026-11-04, ACI 318-11 9.5.2): deflections with Branson Ie per span (D and D + L each with its own Ma), live = (D + L) − D,
+      // long-term λΔ = ξ/(1 + 50ρ′), ξ = 2.0 (5 years +) on the sustained load (dead + mat.sustainedLive × live)
+      const brn = (() => { if ((mat.deflMethod ?? "branson") !== "branson" || dead.error || res.error) return null;
+        const sk2 = sup.map((v, k) => (v ? k : -1)).filter((k) => k >= 0), cuts = [...new Set([0, ...sk2, x.length - 1])].sort((a, b) => a - b), nIn2 = sk2.length - 1;
+        const spansB = cuts.slice(1).map((i1, k) => { const i0 = cuts[k], cant = !sup[i0] || !sup[i1], j = sk2.indexOf(i0), kind = cant ? "cantilever" : nIn2 === 1 ? "simple" : j === 0 || j === nIn2 - 1 ? "one_end" : "both_ends";
+          const mid = (x[i0] + x[i1]) / 2, pt = ln.parts.find((p) => mid >= p.t0 - 1e-6 && mid <= p.t1 + 1e-6), t = types[typeOf.get(pt?.i)] ?? types[0];
+          const Ma = (r) => { const els = r.el.slice(i0, i1), Ms = els.flatMap((el) => Array.from({ length: 21 }, (_, q) => el.M((el.L * q) / 20)));
+            const hog = (i) => { const el = i === i0 ? r.el[i0] : r.el[i1 - 1]; return Math.max(0, -(i === i0 ? el.M(0) : el.M(el.L))); }; // hogging at a supported end (continuous or with a cantilever beyond)
+            const negs = cant ? [Math.max(0, ...Ms.map((m) => -m))] : [i0, i1].filter((i) => sup[i]).map(hog).filter((m) => m > 1);
+            return { pos: Math.max(0, ...Ms), negs }; };
+          return { i0, i1, t, kind, D: spanIe(t, mat, kind, Ma(dead)), DL: spanIe(t, mat, kind, Ma(res)) }; });
+        const EIof = (key) => x.slice(1).map((_, e) => { const sB = spansB.find((q) => e >= q.i0 && e < q.i1) ?? spansB[0]; return (Ec * sB[key].Ie) / 1e8; });
+        const EID = EIof("D"), EIDL = EIof("DL"), dB = solveBeam({ x, sup, EI: EID, loads: loads.filter((l) => !isLL(l)) }), fB = solveBeam({ x, sup, EI: EIDL, loads });
+        if (dB.error || fB.error) return null;
+        const vD = elementProfiles(dB, EID), vF = elementProfiles(fB, EIDL), sus = mat.sustainedLive ?? 0;
+        return spansB.map((q) => { const els = Array.from({ length: q.i1 - q.i0 }, (_, e) => q.i0 + e), dDi = Math.max(0, ...els.flatMap((e) => vD[e].map(Math.abs))), dLi = Math.max(0, ...els.flatMap((e) => vF[e].map((v, i) => Math.abs(v - vD[e][i]))));
+          const lam = 2.0 / (1 + 50 * q.D.rhoP); return { ...q, dDi, dLi, lam, dLong: lam * (dDi + sus * dLi), dT: dDi + lam * (dDi + sus * dLi) + dLi }; }); })();
       ln.env = { env, Renv };
       const ReAt = (t) => { const k = x.findIndex((v) => Math.abs(v - t) < 1e-3); return k >= 0 ? Renv[k] : 0; };
       ln.cols.forEach((c) => { const Rc = Rat(c.t), R = Math.max(Rc, RsAt(c.t), ReAt(c.t)); cols[c.ci].R += R; cols[c.ci].from.push({ line: ln.id, R, Rc }); });
@@ -885,10 +989,14 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
           Vx: env.slice(i0, i1).flatMap((e) => e.Vabs).map(([xg, v]) => [xg - x[i0], v]),
           endCol: [i0, i1].map((i) => sup[i] && ln.cols.some((c) => Math.abs(c.t - x[i]) < 1e-3)),
           Pat: loads.filter((l) => l.P !== undefined && l.at > x[i0] - 1e-6 && l.at < x[i1] + 1e-6).map((l) => l.at - x[i0]),
-          defl: (() => { const Le = (cant ? 2 : 1) * (x[i1] - x[i0]), dl = Math.max(0, ...dL.slice(i0, i1)), dt = 3 * Math.max(0, ...dD.slice(i0, i1)) + dl;
-            // limits from the design criteria (mat.deflLive / mat.deflTotal, default L/360 and L/240)
+          defl: (() => { const Le = (cant ? 2 : 1) * (x[i1] - x[i0]), bq = brn?.find((q) => q.i0 === i0 && q.i1 === i1);
+            // Branson (default): live = immediate (D+L) − D; total = immediate dead + long-term λΔ·sustained + live — the immediate dead
+            // part is kept in the total (conservative, as before: assumes the partitions are built before the formwork is struck)
+            const dl = bq ? bq.dLi : Math.max(0, ...dL.slice(i0, i1)), dt = bq ? bq.dT : 3 * Math.max(0, ...dD.slice(i0, i1)) + dl;
+            // limits from the design criteria (mat.deflLive / mat.deflTotal, default L/360 and L/240; ACI 318-11 Table 9.5(b))
             const lL = Le / (mat.deflLive ?? 360), lT = Le / (mat.deflTotal ?? 240);
-            return { dL: dl, dT: dt, limL: lL, limT: lT, ok: dl <= lL + 1e-9 && dt <= lT + 1e-9, I: (els[0] && EI[i0]) || 0 }; })(),
+            return { dL: dl, dT: dt, limL: lL, limT: lT, ok: dl <= lL + 1e-9 && dt <= lT + 1e-9, I: (els[0] && EI[i0]) || 0,
+              ...(bq ? { method: "branson", dD: bq.dDi, lam: bq.lam, dLong: bq.dLong, IeD: bq.D.Ie, IeDL: bq.DL.Ie, Ig: bq.D.P.Ig, IcrP: bq.D.P.Icr, IcrN: bq.D.N.Icr, Mcr: bq.D.P.Mcr, MaD: null, kind: bq.kind } : { method: "0.5Ig" }) }; })(),
           Mt: ln.torsion.reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2),
           // equilibrium part (cantilever slabs with no slab behind the beam, loads hung on it); the rest is compatibility torsion
           MtEq: ln.torsion.filter((q) => !q.compat).reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2) });

@@ -464,5 +464,13 @@ F3 min stirrups where V > ½Vc (11.4.6, Av,min = max(0.2√f′c, 3.5)·b·s/fys
 (11.5.3.6/7, A0 = 0.85Aoh, Al·fv/fs, Al,min, s ≤ ph/8 ≤ 30 cm); option ข: cantilever-slab torsion is compatibility when a cast S panel is
 behind the beam (torsion item compat, span.MtEq; slab row back.len = top bars into the inner panel). beamTypes designBH grows on the new
 flags. Audit after: no span passes that the independent check fails (was 36). Yasothon 55/57 (2 torsion spans), baseline re-saved.
-OPEN: F7 Branson Ie + long-term λ (not built), F4 cut-off lengths / ld / 12.10.5 shear at cutoff (not built), beamtypes-check k = 1/3
-now 54/57 and 53/57 (torsion spans no type in the limits carries — gate red), E2E expected values not re-saved, F11 shear limits UNVERIFIED.
+THEN (same day, user "ทำก่อน"): F7 Branson (floor.js bransonSection / spanIe: Ie per span for D and D + L, continuous = mean of + and −
+sections, δL = δ(D+L) − δD, λΔ = 2/(1 + 50ρ′), total = δD + λΔ·δD + δL, mat.deflMethod "branson" default | "0.5Ig", mat.sustainedLive 0);
+F4 cut-offs (floor.js cutoffs + devLength + wsdMa: theoretical cut from the envelope (scaled to the design forces) where the through bars'
+allowable moment suffices, + max(d, 12db), ≥ ld from the peak / support face (ψt 1.3 top), V ≤ ⅔(Vc + Vs) at a cut else full length,
+12.11.1 ≥ 1/3 · 1/4 bottom into the support (NG), 12.12.3 past the inflection point; sp.cut, report table "ระยะตัดเหล็กเสริมพิเศษ";
+run in analyzeFloor and frame.js final checks); F9 wall plates EI per span (roofMembers two passes, plateEI); torsion Al,min uses fy / fyt
+(yield) — fixed; auto types: torsion growth separated from spacing, repair adds an own type (DB20 + big sections, last resort) for spans no
+type in their b × h carries → beamtypes-check 57/57 (k 1 and 3; test allows DB20). Audit after: 42/98 pass, 0 pass-but-independent-NG,
+0 cut-off violations, CRITICAL 0. verify20 40/40 (its 0.5Ig deflection check skips Branson spans — audit-beam checks those). E2E 47/47.
+Regress baseline re-saved. Still UNVERIFIED: F11 shear limits (0.795 / 1.32√f′c kept); every ACI 318-11 clause vs the วสท. text.

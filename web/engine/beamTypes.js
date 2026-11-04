@@ -63,10 +63,10 @@ export function designBH(sps, b, h, bar, mat, g, start = null) {
       if (s && (s.botOk === false || (s.doublyCheck && s.doublyCheck !== "OK") || s.AsMinOk === false)) { xT++; grew = true; }
       if (s && s.topOk === false) { nB++; grew = true; }
       if ([m, s].some((r) => r && (r.compBarsOk === false || r.barsFit === false))) return null; // needs another b × h (audit F1 / F5)
-      for (const r of [m, s]) if (r?.torsionAciOk === false && r.torsionAci.extraFace > 0) { if (r === m) { xB++; nT++; } else { xT++; nB++; } grew = true; } // torsion longitudinal bars
+      for (const r of [m, s]) if (r?.torsionAciOk === false && r.torsionAci.extraFace > 0 && (typeof r.reqBot !== "number" || r.provBot < r.reqBot + r.torsionAci.extraFace || r.provTop < r.reqTop + r.torsionAci.extraFace)) { if (r === m) { xB++; nT++; } else { xT++; nB++; } grew = true; } // torsion longitudinal bars
       if (m?.stressOk === false) { xB++; grew = true; }
       if (s?.stressOk === false) { xT++; grew = true; }
-      for (const [r, k] of [[s, "sSup"], [m, "sMid"]]) if (r && (r.stirrup === "CHECK_SPACING" || r.AminOk === false || r.vOk === false || r.minShearOk === false || r.torsionAciOk === false)) {
+      for (const [r, k] of [[s, "sSup"], [m, "sMid"]]) if (r && (r.stirrup === "CHECK_SPACING" || r.AminOk === false || r.vOk === false || r.minShearOk === false || (r.torsionAciOk === false && t[k] > Math.min(r.torsionAci.sReq, r.torsionAci.sTor) + 1e-9))) {
         if (r.vOk === false || r.VpOk === false) return null; // shear / torsion stress beyond the section: deeper or wider
         if (t[k] - g.ds >= g.sMin - 1e-9) t[k] = +(t[k] - g.ds).toFixed(3); else if (si + 1 < g.stirrups.length) { si++; t.sSup = t.sMid = g.sMax; } else return null;
         grew = true;
@@ -178,6 +178,9 @@ export function generateBeamTypes(frame, k, g = BEAM_GEN) {
       for (const [ti, sps] of [...new Set(fail.map((sp) => sp.typeIdx))].map((ti) => [ti, fail.filter((sp) => sp.typeIdx === ti)])) {
         const t = types[ti], bar = parseBars(t.top)?.bar ?? "DB 12", grown = designBH(sps.map((sp) => ({ ...sp, vDone: true })), t.b, t.h, bar, f.mat, g, t);
         if (grown) types[ti] = { ...t, ...grown, name: t.name };
+        else { const gR = { ...g, bars: [...g.bars, "DB 20"], sections: [...g.sections, ...(g.bigSections ?? [])] }; // last resort only: DB20 (user habit DB12 → DB16 → DB20) and the big sections
+          for (const d of [designGroup(sps.map((sp) => ({ ...sp, vDone: true })), f.mat, gR)].concat(sps.map((sp) => designGroup([{ ...sp, vDone: true }], f.mat, gR))).filter(Boolean).slice(0, 1 + sps.length))
+            if (!types.some((x) => JSON.stringify({ ...x, name: "", auto: true }) === JSON.stringify({ ...d.t, name: "", auto: true }))) types.push({ ...d.t, name: `B${types.length + 1}`, auto: true }); } // nothing in this b × h: an own type for these spans (auto beams take it)
       }
     }
     f = { ...f, beamTypes: types }; r = analyzeFrame(f);

@@ -93,7 +93,7 @@ for (let n = 1; n <= N; n++) {
     const Rl = (M(sp.x0 + 1e-4) - 0) / 1e-4, Rr = -(M(sp.x1) - M(sp.x1 - 1e-4)) / 1e-4, Vmine = sp.cont?.V ?? sp.V;
     if (Math.abs(Math.max(Math.abs(Rl), Math.abs(Rr)) - Vmine) > Math.max(5, 0.01 * Vmine)) issues.push(`ช่วง ${sp.id}: V สถิตยศาสตร์ ${Math.max(Rl, Rr).toFixed(0)} ≠ โปรแกรม ${Vmine.toFixed(0)}`);
     // deflection by virtual work with the program's EI (dead ×3 + live, max over the span)
-    if (sp.defl && ln.beamIn) { const EIat = (u) => { const k = ln.beamIn.x.findIndex((v, i) => i > 0 && u <= v + 1e-9); return ln.beamIn.EI[Math.max(0, k - 1)]; };
+    if (sp.defl && ln.beamIn && sp.defl.method !== "branson") { // Branson deflections are checked independently in cli/audit-beam.mjs (37 cases) const EIat = (u) => { const k = ln.beamIn.x.findIndex((v, i) => i > 0 && u <= v + 1e-9); return ln.beamIn.EI[Math.max(0, k - 1)]; };
       const Mof = (pred) => { const keep = ln.loads; ln.loads = keep.filter(pred); const f = (u) => M(u); const out = Array.from({ length: 401 }, (_, i) => f(sp.x0 + (L * i) / 400)); ln.loads = keep; return out; };
       const MD = Mof((l) => l.g !== "LL"), ML = Mof((l) => l.g === "LL");
       const defl = (Ms) => Math.max(...Array.from({ length: 21 }, (_, j) => { const xi = (L * j) / 20; let d = 0; for (let i = 0; i < 400; i++) { const u = (L * (i + 0.5)) / 400, m = u < xi ? (1 - xi / L) * u : xi * (1 - u / L); d += (((Ms[i] + Ms[i + 1]) / 2) * m * (L / 400)) / EIat(sp.x0 + u); } return d; }));

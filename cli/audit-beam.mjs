@@ -134,6 +134,21 @@ for (const { ci, cs: cs0, mode } of runs) {
   const Vof = (M) => M.map((_, k) => (k < N ? (M[k + 1] - M[k]) / h : (M[k] - M[k - 1]) / h));
   const VD = Vof(fmD.M), VLs = liveBy.map((f) => Vof(f.M)), Vabs = VD.map((v, k) => Math.max(Math.abs(v + VLs.reduce((s, x) => s + Math.max(0, x[k]), 0)), Math.abs(v + VLs.reduce((s, x) => s + Math.min(0, x[k]), 0))));
   // deflections: dead (×3) + live, both by double integration and moment-area (between supports), 0.5 Ig
+  // Branson (independent, ACI 318-11 9.5.2.3/9.5.2.4/9.5.2.5): Ie per span from my own cracked section (n·As, (n−1)·As′), Ma of D and of
+  // D + L, continuous spans = average of the mid-span and continuous-end values, live = (D + L) − D, λ = 2/(1 + 50ρ′)
+  const nB = nMod(mat), fcB = mat.fcPrime;
+  const secB = (t, face) => { const tg = face === "pos" ? [pb(t.bot), pb(t.botX)] : [pb(t.top), pb(t.topX)], cg = face === "pos" ? [pb(t.top)] : [pb(t.bot)];
+    const LT = myLayers(t.b, t.st, tg, mat), LC = myLayers(t.b, t.st, cg, mat), T0 = faceProps(LT, mat.cover, LT.ds), C0 = faceProps(LC, mat.cover, LC.ds), b = t.b * 100, hh = t.h * 100, d = hh - T0.c, dp = C0.c;
+    const a2 = b / 2, b2 = nB * T0.A + (nB - 1) * C0.A, c2 = -(nB * T0.A * d + (nB - 1) * C0.A * dp), kd = (-b2 + Math.sqrt(b2 * b2 - 4 * a2 * c2)) / (2 * a2);
+    return { Ig: (b * hh ** 3) / 12, Icr: (b * kd ** 3) / 3 + nB * T0.A * (d - kd) ** 2 + (nB - 1) * C0.A * Math.max(0, kd - dp) ** 2, Mcr: (2 * Math.sqrt(fcB) * (b * hh ** 3) / 12) / (hh / 2) / 100, rho: C0.A / (b * d) }; };
+  const IeB = (S, Ma) => (Ma <= S.Mcr ? S.Ig : Math.max(S.Icr, (S.Mcr / Ma) ** 3 * S.Ig + (1 - (S.Mcr / Ma) ** 3) * S.Icr));
+  const spanIeB = (fm) => seg.map(([a, b, i]) => { const t = types[i], k0 = Math.round(a / fm.h), k1 = Math.round(b / fm.h), Ms = fm.M.slice(k0, k1 + 1), P = secB(t, "pos"), N = secB(t, "neg");
+    const cantS = !xs.some((x) => Math.abs(x - a) < 1e-6) || !xs.some((x) => Math.abs(x - b) < 1e-6); if (cantS) return { Ie: IeB(N, Math.max(0, ...Ms.map((m) => -m))), rho: N.rho };
+    const negs = [Ms[0], Ms.at(-1)].map((m) => -m).filter((m) => m > 1), IeP = IeB(P, Math.max(0, ...Ms));
+    return { Ie: negs.length && cs.spans.length > 1 ? (IeP + negs.reduce((s2, m) => s2 + IeB(N, m), 0) / negs.length) / 2 : IeP, rho: P.rho }; });
+  const fmDL0 = forceMethod(Ltot, xs, EIat, [...deadL, ...liveW(0, Ltot).map((l) => l)]), IeD = spanIeB(fmD), IeDL = spanIeB(fmDL0);
+  const EIofB = (arr) => (x) => { const k = seg.findIndex(([a, b]) => x >= a - 1e-9 && x <= b + 1e-9); return Ec(mat) * 1e4 * arr[Math.max(0, k)].Ie / 1e8; };
+  const fmDb = forceMethod(Ltot, xs, EIofB(IeD), deadL), fmDLb = forceMethod(Ltot, xs, EIofB(IeDL), [...deadL, ...liveW(0, Ltot)]), vDb = doubleInt(fmDb, xs), vDLb = doubleInt(fmDLb, xs);
   const vD = doubleInt(fmD, xs), vL = fmLall ? doubleInt(fmLall, xs) : vD.map(() => 0);
   for (const sp of spans) {
     const si = seg.findIndex(([a, b]) => Math.abs(a - sp.x0) < 1e-6 && Math.abs(b - sp.x1) < 1e-6), t = types[seg[si]?.[2] ?? 0], cant = sp.kind === "cantilever";
@@ -146,7 +161,10 @@ for (const { ci, cs: cs0, mode } of runs) {
     const kv0 = Math.round((sp.x0 + a0) / h), kv1 = Math.round((sp.x1 - a1) / h), myV = Math.max(...Vabs.slice(cant ? k0 : kv0, (cant ? k1 : kv1) + 1).slice(0, -1).concat(Vabs[cant ? k0 : kv0]));
     const myVmax = Math.max(...Vabs.slice(k0, k1));
     // deflection: double integration and moment-area (mid of the span), program's δ total = 3 δD + δL
-    const dInt = cant ? Math.abs(vD[k1 === Math.round(Ltot / h) ? k1 : k0]) * 3 + Math.abs(vL[k1]) : Math.max(...rng(vD).map((v, i) => 3 * v + (rng(vL)[i] ?? 0)));
+    const si2 = seg.findIndex(([a, b]) => Math.abs(a - sp.x0) < 1e-6 && Math.abs(b - sp.x1) < 1e-6), lamB = 2 / (1 + 50 * IeD[Math.max(0, si2)].rho);
+    const dDb = Math.max(...rng(vDb).map(Math.abs)), dLb = Math.max(...rng(vDLb).map((v, i) => Math.abs(v - rng(vDb)[i]))), dBr = dDb + lamB * dDb + dLb;
+    const dInt0 = cant ? Math.abs(vD[k1 === Math.round(Ltot / h) ? k1 : k0]) * 3 + Math.abs(vL[k1]) : Math.max(...rng(vD).map((v, i) => 3 * v + (rng(vL)[i] ?? 0)));
+    const dInt = dBr; void dInt0;
     const dMA = cant ? null : 3 * momentArea(fmD, sp.x0, sp.x1, (sp.x0 + sp.x1) / 2) + (fmLall ? momentArea(fmLall, sp.x0, sp.x1, (sp.x0 + sp.x1) / 2) : 0);
     const pD = sp.defl?.dT ?? NaN;
     // section with the program's bar layout rules re-done independently
@@ -175,8 +193,9 @@ for (const { ci, cs: cs0, mode } of runs) {
     // bottom bars over the middle 3L/5 → in the end fifths M+ ≤ allowable of the through bottom bars
     let cutTop = null, cutBot = null;
     if (!cant) { const L = sp.len, full = !!sp.topFull, MaT = Mallow(bcm, hcm - pTopT.c, pTopT.A, pBotT.c, pBotT.A, n, fc, fs), MaB = Mallow(bcm, hcm - pBotT.c, pBotT.A, pTopT.c, pTopT.A, n, fc, fs);
-      for (let k = k0; k <= k1; k++) { const x = k * h - sp.x0; if (topX && !full && x > L / 4 + 1e-9 && x < (3 * L) / 4 - 1e-9 && -Mmin[k] > MaT) cutTop = Math.max(cutTop ?? 0, -Mmin[k] / MaT);
-        if (botX && (x < L / 5 - 1e-9 || x > (4 * L) / 5 + 1e-9) && Mmax[k] > MaB) cutBot = Math.max(cutBot ?? 0, Mmax[k] / MaB); } }
+      for (let k = k0; k <= k1; k++) { const x = k * h - sp.x0; const tl = sp.cut?.top?.[0]?.len ?? L / 4, tr = sp.cut?.top?.[1]?.len ?? L / 4, b0 = sp.cut?.bot?.start ?? L / 5, b1 = sp.cut?.bot?.end ?? (4 * L) / 5, bAll = sp.cut?.bot?.full || sp.cut?.bot?.notNeeded;
+        if (topX && !full && !sp.cut?.topFull && x > tl + 1e-9 && x < L - tr - 1e-9 && -Mmin[k] > MaT) cutTop = Math.max(cutTop ?? 0, -Mmin[k] / MaT);
+        if (botX && !bAll && (x < b0 - 1e-9 || x > b1 + 1e-9) && Mmax[k] > MaB) cutBot = Math.max(cutBot ?? 0, Mmax[k] / MaB); } }
     // Branson Ie (independent, ACI 9.5.2.3): Mcr = fr·Ig/yt, fr = 2√f'c (ksc), Ie = (Mcr/Ma)³Ig + (1−(Mcr/Ma)³)Icr ≥ Icr
     const Ig = (bcm * hcm ** 3) / 12, Mcr = (2 * Math.sqrt(mat.fcPrime) * Ig) / (hcm / 2) / 100, Ma = cant ? myMneg : Math.max(myMpos, 1), stCr = cant ? stS : stM;
     const Icr = stCr?.I ?? Ig, Ie = Math.max(Icr, Math.min(Ig, (Mcr / Ma) ** 3 * Ig + (1 - (Mcr / Ma) ** 3) * Icr)), bransonRatio = (0.5 * Ig) / Ie; // > 1 → the program's 0.5 Ig deflection is low by this factor

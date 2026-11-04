@@ -2,7 +2,7 @@
 // a column with nothing under it becomes a point load on the beams of the floor below. Columns are checked with engine/column.js.
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
 import { borePileRebar } from "./borePile.js";
-import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
+import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, cutoffs, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
 import { BARS } from "./tables.js";
 import { frame3dModel } from "./frame3d.js";
 import { tiedColumn } from "./column.js";
@@ -323,7 +323,11 @@ export function analyzeFrame(frame) {
       const vc = vAtD(sp, sp.type.h, mat), src = (k) => (sp.gov?.[k] ? "LAT" : F[k] > (k === "V" ? vc : sp[k]) + 1e-6 ? "3D" : "ต่อเนื่อง"); // LAT = a combination with wind / earthquake governs
       sp.src = { Mpos: src("Mpos"), Mneg: src("Mneg"), V: src("V") };
       Object.assign(sp, F, { vDone: true, vAtD: F.V < sp.Vmax - 1e-6 });
-      sp.check = checkEnv(sp.type, sp, mat); sp.ok = sp.check.ok;
+      sp.check = checkEnv(sp.type, sp, mat);
+      // bar cut-offs and development (audit F4): lengths of the extra bars from the envelope, NG on the minimum continuous steel
+      const cut = cutoffs(sp, an.lines.find((l) => l.id === sp.line), sp.type, mat, F, sp.check);
+      if (cut) { sp.cut = cut; sp.check.cut = cut; if (!cut.ok) sp.check.ok = false; if (cut.topFull && !sp.topFull) sp.topFull = { bars: [sp.type.top, sp.type.topX].filter(Boolean).join(" + "), cut: true }; }
+      sp.ok = sp.check.ok;
     }
     an.ok = an.spans.every((x) => x.ok) && !an.lines.some((l) => l.error);
   }

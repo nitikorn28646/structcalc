@@ -364,9 +364,9 @@ export function designRoof(g, fr, roof, d) {
   // section is used). Each span is checked with its own M+ (mid) / M− (over the columns), the true deflection (L/360 or L/240,
   // cantilever end 2L) and gives its end shears as the loads on the columns. Lines with fewer than 2 supports fall back to plateRun.
   const lim = d.plateDefl === 240 ? 240 : 360, wR = ra.Rwall / D;
-  const prof = (res) => res.el.map((el) => { // deflection along each element ×EI (EI = 1 in the solve): v'' = +M (v up, sagging M > 0; was −M = bent the wrong way, verification 2026-11-04), matched to the node values
-    const n = 40, h = el.L / n, I1 = [0], I2 = [0];
-    for (let i = 1; i <= n; i++) { const k0 = el.M((i - 1) * h), k1 = el.M(i * h); I1.push(I1[i - 1] + ((k0 + k1) / 2) * h); I2.push(I2[i - 1] + ((I1[i - 1] + I1[i]) / 2) * h); }
+  const prof = (res, EIs = null) => res.el.map((el, e) => { // deflection along each element (×EI when EIs is null, EI = 1): v'' = +M/EI (v up, sagging M > 0; was −M = bent the wrong way, verification 2026-11-04), matched to the node values
+    const n = 40, h = el.L / n, I1 = [0], I2 = [0], E = EIs ? EIs[e] : 1;
+    for (let i = 1; i <= n; i++) { const k0 = el.M((i - 1) * h) / E, k1 = el.M(i * h) / E; I1.push(I1[i - 1] + ((k0 + k1) / 2) * h); I2.push(I2[i - 1] + ((I1[i - 1] + I1[i]) / 2) * h); }
     const [d0, d1] = el.d, c1 = (d1 - d0 - I2[n]) / el.L;
     return { M: Array.from({ length: n + 1 }, (_, i) => el.M(i * h)), v: I2.map((v, i) => v + d0 + c1 * i * h), V0: el.V(0), V1: el.V(el.L - 1e-9) };
   });
@@ -396,15 +396,20 @@ export function designRoof(g, fr, roof, d) {
       const pts = sps.flatMap((sp, j) => sp.loads.filter((l) => l.P > 0).map((l) => ({ at: x[j] + (flip[j] ? sp.L - l.a : l.a), P: l.P, from: l.from })));
       const L = x[x.length - 1], lo = solveBeam({ x, sup, loads: [{ a: 0, b: L, wa: wR, wb: wR }, ...pts] }), un = solveBeam({ x, sup, loads: [{ a: 0, b: L, wa: 1, wb: 1 }] });
       if (lo.error || un.error) continue;
-      const line0 = { x, sup, pts, w: wR, label: sps[0].label.replace(/ ช่วง .*$/, ""), lo: prof(lo), un: prof(un) };
+      const line0 = { x, sup, pts, w: wR, label: sps[0].label.replace(/ ช่วง .*$/, ""), lo: prof(lo), un: prof(un), cache: new Map() };
       ks.forEach((k, j) => contLines.set(k, { ...line0, ks, j, flip: flip[j] }));
     }
   }
   const contRun = (cl, section, count) => {
-    const j = cl.j, sw = section.w * count, a = cl.lo[j], u = cl.un[j], Ls = cl.x[j + 1] - cl.x[j], cant = !cl.sup[j] || !cl.sup[j + 1];
+    // EI of each span (audit F9, 2026-11-04): this span's candidate section, the others the section chosen for them in the first pass
+    // (plateEI; same as the candidate before that) — the moments and deflections follow the real stiffness ratios along the line
+    const EIc = (d.E * section.Ix * count) / 1e4, EIs = cl.ks.map((kk, jj) => (jj === cl.j ? EIc : plateEI.get(kk) ?? EIc)), key = EIs.map((v) => v.toFixed(0)).join(",");
+    if (!cl.cache.has(key)) { const L = cl.x[cl.x.length - 1], lo = solveBeam({ x: cl.x, sup: cl.sup, EI: EIs, loads: [{ a: 0, b: L, wa: cl.w, wb: cl.w }, ...cl.pts] }), un = solveBeam({ x: cl.x, sup: cl.sup, EI: EIs, loads: [{ a: 0, b: L, wa: 1, wb: 1 }] });
+      cl.cache.set(key, lo.error || un.error ? null : { lo: prof(lo, EIs), un: prof(un, EIs) }); }
+    const pr = cl.cache.get(key), j = cl.j, sw = section.w * count, a = (pr ?? cl).lo[j], u = (pr ?? cl).un[j], Ls = cl.x[j + 1] - cl.x[j], cant = !cl.sup[j] || !cl.sup[j + 1];
     const s0 = simpleBeam({ ...base, section, selfW: section.w * count, transfer: cl.w, L: Ls, count }); // Fb and the section as the frozen sheet gives them
     const Ms = a.M.map((m, i) => m + sw * u.M[i]), Mpos = Math.max(0, ...Ms), Mneg = Math.max(0, ...Ms.map((m) => -m)), Mx = Math.max(Mpos, Mneg);
-    const EI = (d.E * s0.section.Ix * count) / 1e4, dd = (Math.max(...a.v.map((v, i) => Math.abs(v + sw * u.v[i]))) / EI) * 100;
+    const EI = (d.E * s0.section.Ix * count) / 1e4, dd = (Math.max(...a.v.map((v, i) => Math.abs(v + sw * u.v[i]))) / (pr ? 1 : EI)) * 100;
     const dAllow = ((cant ? 2 : 1) * Ls * 100) / lim, fb = (Mx * 100) / (count * s0.section.Sx);
     const R0 = a.V0 + sw * u.V0, R1 = -(a.V1 + sw * u.V1), [Rl, Rr] = cl.flip ? [R1, R0] : [R0, R1]; // Rl at the span's p, Rr at its q
     return { ...s0, w: cl.w + sw, Mx, Mpos, Mneg, SxReq: (Mx * 100) / s0.Fb, fb, d: dd, dAllow, Ld: Ls, mode: "cont", Rl, Rr, R: cant ? (cl.sup[j] ? R0 : R1) : Math.max(Rl, Rr),
@@ -420,6 +425,11 @@ export function designRoof(g, fr, roof, d) {
       for (const l of sp.loads.filter((x) => x.P > 0)) bearDirect.push({ p: lerp(sp.p, sp.q, l.a / sp.L).slice(0, 2), P: l.P, from: l.from });
     }
   }
+  const plateEI = new Map(), plate0 = members.length;
+  for (let pass = 0; pass < (contLines.size ? 2 : 1); pass++) {
+  if (pass === 1) { // second pass with the sections chosen in the first (F9)
+    members.slice(plate0).forEach((m) => { const kk = aSpans.findIndex((sp) => sp.id === m.id); if (kk >= 0 && m.r?.section) plateEI.set(kk, (d.E * m.r.section.Ix * (m.r.count ?? m.count ?? 1)) / 1e4); });
+    members.splice(plate0); }
   for (const [k, sp] of (d.plateSupport ?? "cont") === "rc" ? [] : aSpans.entries()) {
     const pl = sp.loads.filter((l) => l.P > 0), cl = contLines.get(k);
     addMember("plate", "plate", "plate", sp.id, sp.label, sp.p, sp.q, sp.L,
@@ -432,6 +442,7 @@ export function designRoof(g, fr, roof, d) {
     } else if (m.r.cont) m.bear = m.r.cant ? [{ p: (m.r.fixedEnd === "p" ? sp.p : sp.q).slice(0, 2), P: m.r.R }] : [{ p: sp.p.slice(0, 2), P: m.r.Rl }, { p: sp.q.slice(0, 2), P: m.r.Rr }];
     else if (sp.free) m.bear = [{ p: (sp.free === "p" ? sp.q : sp.p).slice(0, 2), P: m.r.R }];
     else m.bear = [{ p: sp.p.slice(0, 2), P: m.r.Rl ?? m.r.R }, { p: sp.q.slice(0, 2), P: m.r.Rr ?? m.r.R }];
+  }
   }
   members.filter((x) => x.group === "plate" && !x.inner).forEach((x, k) => { x.tag = `A${k + 1}`; x.edge = Number(x.id.split("-")[1]); });
   members.push(...inner); // interior plates listed after the wall plates (B1, B2, …)
