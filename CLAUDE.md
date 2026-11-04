@@ -435,3 +435,4 @@ clickable notice once caught an E2E click on a button with the same words), util
 put columns on that floor with "เฉพาะเสา"), one "ไม่มีอะเสรับ" label for ดั้ง close together, header buttons nowrap.
 Stair landing: user chose ก (landing beam on the OUTER edge of the landing) = current model — no change needed.
 The user sent a project .json (Yasothon-like, saved 2026-11-04 08:42) at the end of the session — client data, not committed; ask again.
+PLANS 2026-11-04: report plans coloured (drawings.js Draw.fill → SVG polygons under the lines; SLAB_FILL by slab kind, COLTYPE_FILL by column type, footings gray) + legends; empty beam / column plans skipped. Stair convention change (draw on the lower floor = goes up) proposed, not built (user to decide).

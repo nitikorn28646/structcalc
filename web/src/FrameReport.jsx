@@ -142,10 +142,10 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             const fts = res.footings.map((f) => ({ p: f.p, name: fName(f), Bx: f.r?.Bx, By: f.r?.By, text: f.kind === "spread" ? `${fmt(f.r?.Bx ?? 0, 2)}x${fmt(f.r?.By ?? 0, 2)}` : `เข็ม ${f.n}x${f.pile}` }));
             return <Figure caption={`แปลนฐานราก (ใต้ ${base.name}) — ${fNames.size} แบบ: ${[...fNames.values()].join(", ")}`}>
               <FootingPlan floor={base} footings={res.footings} columns={cols0} colTypes={colTypes} marks={FM} print className="mx-auto h-[118mm] w-full" /><FootingLegend footings={res.footings} marks={FM} /></Figure>; })()}
-          {floors.map((f, k) => (
-            <Figure key={`c${k}`} caption={`แปลนเสา — เสาใต้ ${f.name} (type และขนาด ซม.)`}>
+          {floors.map((f, k) => (f.columns ?? []).length > 0 && (
+            <Figure key={`c${k}`} caption={`แปลนเสา — เสาใต้ ${f.name} (สีตาม type · ขนาด ซม. · ✕ = ไม่ผ่าน)`}>
               <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k), { mode: "columns", colTypes })} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
-          {floors.map((f, k) => (
+          {floors.map((f, k) => (f.beams ?? []).length > 0 && (
             <Figure key={`b${k}`} caption={`แปลนคาน ${f.name} — สีตาม type คาน`}>
               <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k))} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
           {floors.map((f, k) => res.floors[k].panels.length > 0 && (

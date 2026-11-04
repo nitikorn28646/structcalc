@@ -9,6 +9,9 @@ const { paths, models } = makerjs;
 
 // one colour per wall-plate section size (plan, legend and 3D share it)
 export const PLATE_COLORS = ["#e5484d", "#3e63dd", "#30a46c", "#f76b15", "#8e4ec6", "#0e9384"];
+// report plans (user 2026-11-04: plans without colour) — slab kinds and column types as light fills
+export const SLAB_FILL = { S2: "#cfe0f5", S1: "#e3eefb", PS: "#d9f0e1", GS: "#eceff3", OPEN: "#ffffff", STAIR: "#fdebd3" };
+export const COLTYPE_FILL = ["#1f3a5f", "#b54708", "#067647", "#6941c6", "#c11574", "#0e9384", "#475467"];
 
 export const LAYERS = {
   OUTLINE: { stroke: "#475467", dxf: 8 },
@@ -112,6 +115,8 @@ class Draw {
   line(a, b, layer) { this.path(new paths.Line(a, b), layer); }
   poly(pts, layer) { for (let k = 1; k < pts.length; k++) this.line(pts[k - 1], pts[k], layer); }
   circle(c, r, layer) { this.path(new paths.Circle(c, r), layer); }
+  // filled polygon under the lines (SVG only; colours for slab kinds / column types in the report plans)
+  fill(pts, color, opacity = 1) { (this.model.fills ??= []).push({ pts, color, opacity }); }
   rect(x, y, w, h, layer, radius = 0) {
     const m = radius ? new models.RoundRectangle(w, h, radius) : new models.Rectangle(w, h);
     makerjs.model.move(m, [x, y]);
@@ -511,7 +516,13 @@ export function toSvg(model, fontSize = 11, targetWidth = 520) {
     scale, strokeWidth: "1.3px", fontSize: `${fontSize}px`, layerOptions, useSvgPathOnly: false,
     svgAttrs: { preserveAspectRatio: "xMidYMid meet" },
   });
-  return svg.replace(/<svg ([^>]*?)width="[^"]*" height="[^"]*"/, '<svg $1');
+  let out = svg.replace(/<svg ([^>]*?)width="[^"]*" height="[^"]*"/, '<svg $1');
+  if (model.fills?.length && ext) { // Maker.js maps x → (x − low)·scale, y → (high − y)·scale
+    const P = (p) => `${((p[0] - ext.low[0]) * scale).toFixed(2)},${((ext.high[1] - p[1]) * scale).toFixed(2)}`;
+    const polys = model.fills.map((f) => `<polygon points="${f.pts.map(P).join(" ")}" fill="${f.color}" fill-opacity="${f.opacity}" stroke="none"/>`).join("");
+    out = out.replace(/(<g id="svgGroup"[^>]*>)/, `$1${polys}`);
+  }
+  return out;
 }
 
 export function toDxf(model) {
@@ -591,6 +602,8 @@ export function framePlanModel(floor, an, beamTypes, cols = [], opts = {}) {
   GY.slice(1).forEach((y, i) => d.dim(GY[i] * 100, y * 100, x0 - 40, `${num(y - GY[i], 2)}`, true, 10));
   if (mode === "slabs") an?.panels.forEach((p, i) => {
     const m = p.P.reduce((s, q) => [s[0] + (q[0] * 100) / p.P.length, s[1] + (q[1] * 100) / p.P.length], [0, 0]);
+    d.fill(p.P.map(c), p.open ? SLAB_FILL.OPEN : p.stairWell ? SLAB_FILL.STAIR : p.st === "GS" ? SLAB_FILL.GS : p.st === "PS" ? SLAB_FILL.PS : p.kind === "twoway" ? SLAB_FILL.S2 : SLAB_FILL.S1);
+    if (p.open || p.stairWell) { const xs = p.P.map((q) => q[0] * 100), ys = p.P.map((q) => q[1] * 100); d.line([Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)], "DIM"); d.line([Math.min(...xs), Math.max(...ys)], [Math.max(...xs), Math.min(...ys)], "DIM"); }
     const kind = p.open ? "ช่องเปิด" : p.stairWell ? "ช่องบันได" : p.st === "GS" ? "GS บนดิน" : p.st === "PS" ? `PS ${p.dir === "x" ? "↔" : "↕"}` : p.kind === "twoway" ? "S 2 ทาง" : p.kind === "oneway" ? "S 1 ทาง" : "S";
     if (p.st === "S" && !p.open && !p.stairWell) { const C = p.P.filter((q, j) => { const a = p.P[(j + p.P.length - 1) % p.P.length], b = p.P[(j + 1) % p.P.length]; const u = [q[0] - a[0], q[1] - a[1]], w = [b[0] - q[0], b[1] - q[1]], L = Math.hypot(...u) * Math.hypot(...w); return L > 0 && Math.abs(u[0] * w[1] - u[1] * w[0]) / L > 0.05; }); if (C.length === 4) [[0, 2], [1, 3]].forEach(([a, b]) => d.line([C[a][0] * 100, C[a][1] * 100], [C[b][0] * 100, C[b][1] * 100], "DIM")); } // two-way: diagonals
     d.text(`P${i + 1}`, m[0], m[1] + 14); d.text(`${kind}${p.open || p.stairWell ? "" : ` t=${num(p.t * 100, 0)}`}`, m[0], m[1] - 14);
@@ -610,13 +623,20 @@ export function framePlanModel(floor, an, beamTypes, cols = [], opts = {}) {
   // footings first (under the columns)
   if (mode === "footings") for (const f of opts.footings ?? []) {
     const q = c(f.p), B = (f.Bx ?? 0.6) * 100, D = (f.By ?? 0.6) * 100;
+    d.fill([[q[0] - B / 2, q[1] - D / 2], [q[0] + B / 2, q[1] - D / 2], [q[0] + B / 2, q[1] + D / 2], [q[0] - B / 2, q[1] + D / 2]], "#e4e7ec");
     d.rect(q[0] - B / 2, q[1] - D / 2, B, D, "OUTLINE");
     d.text(f.name, q[0], q[1] - D / 2 - 16); if (f.text) d.text(f.text, q[0], q[1] - D / 2 - 40);
   }
   floor.columns.forEach((p, i) => {
     const col = cols.find((x) => x.i === i), B = col?.lv?.Bx ?? 20, D = col?.lv?.By ?? 20, q = c(p);
+    const rc = [[q[0] - B / 2, q[1] - D / 2], [q[0] + B / 2, q[1] - D / 2], [q[0] + B / 2, q[1] + D / 2], [q[0] - B / 2, q[1] + D / 2]];
+    d.fill(rc, mode === "columns" && col ? COLTYPE_FILL[col.typeIdx % COLTYPE_FILL.length] : "#344054");
     d.rect(q[0] - B / 2, q[1] - D / 2, B, D, "COLUMN");
-    if (mode === "columns" && col) d.text(`${opts.colTypes?.[col.typeIdx]?.name ?? ""} ${B}x${D}`, q[0], q[1] + D / 2 + 18);
+    if (mode === "columns" && col) d.text(`${opts.colTypes?.[col.typeIdx]?.name ?? ""} ${B}x${D}${col.ok === false ? " ✕" : ""}`, q[0], q[1] + D / 2 + 18);
   });
+  // legend under the plan: slab kinds / column types with their colours
+  const lg = mode === "slabs" ? [["S2", "S หล่อในที่ 2 ทาง"], ["S1", "S หล่อในที่ 1 ทาง"], ["PS", "PS พื้นสำเร็จ"], ["GS", "GS พื้นบนดิน"], ["STAIR", "ช่องบันได"], ["OPEN", "ช่องเปิด"]].map(([k, t]) => [SLAB_FILL[k], t])
+    : mode === "columns" ? [...new Map(cols.map((x) => [x.typeIdx, x])).values()].sort((a, b) => a.typeIdx - b.typeIdx).map((x) => [COLTYPE_FILL[x.typeIdx % COLTYPE_FILL.length], `${opts.colTypes?.[x.typeIdx]?.name ?? ""} ${x.lv?.Bx ?? ""}x${x.lv?.By ?? ""} · ${cols.filter((y) => y.typeIdx === x.typeIdx).length} ต้น`]) : [];
+  lg.forEach(([col, t], i) => { const lx = x0 + (i % 3) * ((x1 - x0) / 3), ly = y0 - 150 - Math.floor(i / 3) * 46; d.fill([[lx, ly - 14], [lx + 28, ly - 14], [lx + 28, ly + 14], [lx, ly + 14]], col); d.rect(lx, ly - 14, 28, 28, "DIM"); d.textAt(t, lx + 40, ly, 1); });
   return d.framed(60);
 }
