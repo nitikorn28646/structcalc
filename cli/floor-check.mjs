@@ -35,6 +35,10 @@ const rx1 = run("X crossing", x1), rx2 = run("X crossing drawn in pieces", x2);
 check("crossing: same result however drawn", Mof(rx1) === Mof(rx2), Mof(rx1));
 check("crossing: shorter (5 m) run is the main beam", rx1.lines.some((l) => Math.abs(l.L - 5) < 1e-6 && l.carriers.length === 2) && rx1.lines.filter((l) => Math.abs(l.L - 3) < 1e-6 && l.carriers.length === 2).length === 2, "");
 check("crossing: guess is warned", rx1.warnings.some((w) => w.startsWith("คานตัดกัน")), "");
+// secondary past an edge beam (user 2026-11-04): the stub beyond the main beam is a cantilever of the secondary, not a loose piece
+const st = room(); st.beams.push({ a: [3, 0], b: [3, 6.2], type: null }); // crosses the y = 5 edge beam, 1.2 m stub
+const rst = run("secondary with a stub past the edge beam", st), stub = rst.spans.find((s) => s.kind === "cantilever");
+check("stub: cantilever span with forces", !!stub && Math.abs(stub.len - 1.2) < 1e-6 && stub.Mneg > 0 && !rst.lines.some((l) => l.error), stub ? `L ${stub.len.toFixed(2)} M- ${Math.round(stub.Mneg)} ${stub.typeName}` : "none");
 const x3 = room(); x3.beams.push({ a: [3, 0], b: [3, 5], type: null }, { a: [0, 2.5], b: [6, 2.5], type: null, role: "main" });
 const rx3 = run("X crossing, role main on the long beam", x3);
 check("crossing: role main wins", rx3.lines.some((l) => Math.abs(l.L - 6) < 1e-6 && l.carriers.length === 2) && rx3.lines.filter((l) => Math.abs(l.L - 2.5) < 1e-6 && l.carriers.length === 2).length === 2 && !rx3.warnings.some((w) => w.startsWith("คานตัดกัน")), "");

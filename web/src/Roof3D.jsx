@@ -38,7 +38,10 @@ const FC = { purlin: "#98a2b3", rafter: "#b54708", support: "#7a5af8", post: "#0
 
 // steel roof framing (purlins, rafters, supports, ridge / hip / valley, wall plates, posts) — also drawn in the whole-building 3D
 // (Frame3D, user 2026-11-04: "ดูภาพ 3D โครงสร้างและโครงหลังคาพร้อมกัน"); Z0 lifts it to the building's height datum
-export function RoofFrameMembers({ g, fr, plates, Z0 = 0, onPick = null }) {
+// posts (ดั้ง / ตุ๊กตา) stand on the plate top = H − 0.155 (the rafter soffit, user 2026-11-04: posts looked floating above the plates);
+// a post with no plate under it (designRoof dz.loose) is red: it needs an interior plate (tab อะเส → "เพิ่มอะเสรับ")
+export function RoofFrameMembers({ g, fr, plates, Z0 = 0, onPick = null, loose = [] }) {
+  const isLoose = (p) => loose.some((q) => Math.hypot(q[0] - p.x, q[1] - p.y) < 0.05);
   return (<>
               {fr.purlins.map((m, i) => <Member key={`p${i}`} {...m} w={0.05} h={0.1} dz={Z0 + 0.04} color={FC.purlin} />)}
               {fr.rafters.map((m, i) => <Member key={`r${i}`} {...m} w={0.05} h={0.15} dz={Z0 - 0.08} color={FC.rafter} />)}
@@ -49,11 +52,11 @@ export function RoofFrameMembers({ g, fr, plates, Z0 = 0, onPick = null }) {
                 const [dmm, bmm] = m.r ? m.r.section.name.split("x").map(Number) : [150, 50], dep = dmm / 1000, wid = (bmm / 1000) * (m.count ?? 2);
                 return <Member key={`w${i}`} p={m.p} q={m.q} w={wid} h={dep} dz={Z0 - 0.155 - dep / 2} color={m.color ?? FC.plate} onClick={onPick && m.tag ? () => onPick(m) : undefined} />;
               })}
-              {fr.posts.map((p, i) => <Member key={`t${i}`} p={[p.x, p.y, g.H]} q={[p.x, p.y, p.top - (p.kind === "ดั้ง" ? 0.22 : 0.32)]} w={0.1} h={0.1} dz={Z0} color={FC.post} />)}
+              {fr.posts.map((p, i) => <Member key={`t${i}`} p={[p.x, p.y, g.H - 0.155]} q={[p.x, p.y, p.top - (p.kind === "ดั้ง" ? 0.22 : 0.32)]} w={0.1} h={0.1} dz={Z0} color={isLoose(p) ? "#f04438" : FC.post} />)}
   </>);
 }
 
-export default function Roof3D({ g, fr, hover, plates, dark = false, className = "", onPick = null }) {
+export default function Roof3D({ g, fr, hover, plates, dark = false, className = "", onPick = null, loose = [] }) {
   const geo = useMemo(() => {
     const walls = new THREE.Shape(g.pts.map(([x, y]) => new THREE.Vector2(x, y)));
     return { faces: g.faces.map((f) => ({ gable: f.gable, geom: faceGeometry(f) })), walls };
@@ -80,7 +83,7 @@ export default function Roof3D({ g, fr, hover, plates, dark = false, className =
                   color={f.gable ? (dark ? "#8a93b8" : "#d0d5dd") : dark ? "#7b8cff" : "#8fa3ff"} transparent opacity={fr ? 0.14 : f.gable ? 0.55 : 0.8} depthWrite={!fr} />
               </mesh>
             ))}
-            {fr && <RoofFrameMembers g={g} fr={fr} plates={plates} onPick={onPick} />}
+            {fr && <RoofFrameMembers g={g} fr={fr} plates={plates} onPick={onPick} loose={loose} />}
             {hover && <Member p={hover.p} q={hover.q} w={0.4} h={0.4} dz={hover.group === "plate" ? -0.25 : -0.12} color="#f59e0b" xray />}
             {!fr && g.lines.map((l, i) => <Line key={i} points={[to3(l.p), to3(l.q)]} color={LINE_COLORS[l.type]} lineWidth={l.type === "eave" ? 1.5 : 3} />)}
           </group>

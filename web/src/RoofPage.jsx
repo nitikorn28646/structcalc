@@ -453,7 +453,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
           ) : mode === "design" ? <MemberTable dz={dz} d={roof.design} setD={setD} setHover={setHover} /> : <div className="h-full rounded-xl bg-gray-50 p-2"><PlanEditor roof={roof} set={set} g={g} fr={fr} mode={mode} sel={sel} setSel={setSel} dark={dark} /></div>
         )}
   </div>);
-  const roof3d = g && <Roof3D onPick={mode === "plate" || mode === "design" ? (m) => setHover(m) : null} g={g} fr={mode !== "shape" ? fr : null} hover={mode === "design" || mode === "plate" ? hover : null} plates={mode === "design" || mode === "plate" ? pl.plates : null} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
+  const roof3d = g && <Roof3D loose={dz?.loose ?? []} onPick={mode === "plate" || mode === "design" ? (m) => setHover(m) : null} g={g} fr={mode !== "shape" ? fr : null} hover={mode === "design" || mode === "plate" ? hover : null} plates={mode === "design" || mode === "plate" ? pl.plates : null} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
   const all3d = frame && res ? <Frame3D frame={frame} res={res} cur={frame.floors.length - 1} roof={roof} dark={dark} roofOn className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" /> : roof3d;
   const views = [["2d", mode === "design" ? "ตาราง" : "แปลน 2D"], ["3d", "3D หลังคา"], ["all", "3D ทั้งหลัง"], ["split", "2D + 3D"]];
   const centre = view === "3d" ? roof3d : view === "all" ? all3d : view === "split" ? <div className="grid h-full min-h-0 grid-cols-2 gap-2"><div className="min-h-0">{plan}</div><div className="min-h-0">{all3d}</div></div> : plan;

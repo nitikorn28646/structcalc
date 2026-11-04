@@ -175,6 +175,7 @@ function buildLines(beams, cols = []) {
       if (s * Lp < TOL || s * Lp > Lp - TOL || r * Lq < TOL || r * Lq > Lq - TOL) continue; // not inside both
       const J = [p.A[0] + d[0] * s, p.A[1] + d[1] * s];
       if (cols.some((c) => dist(c, J) < TOL)) continue; // a column there: both runs are supported by it
+      if ([p, q].some((l) => l.through?.some((x) => dist(x, J) < TOL))) continue; // already a secondary resting there, kept whole
       const role = (l) => beams[memberAt(l, tOf(l, J))]?.role;
       let main;
       if (role(p) === "main" && role(q) !== "main" || role(q) === "secondary" && role(p) !== "secondary") main = p;
@@ -183,15 +184,25 @@ function buildLines(beams, cols = []) {
       else { main = Lp < Lq - 1e-6 ? p : Lq < Lp - 1e-6 ? q : p; guess.push({ p: J, main: main === p ? i : j, sec: main === p ? j : i }); }
       const sec = main === p ? q : p, k = main === p ? j : i;
       const t = tOf(sec, J), Ls = dist(sec.A, sec.B);
+      // a piece past the crossing whose far end stands on nothing (no column, no other beam) is a cantilever of the secondary
+      // (user 2026-11-04: a stub drawn past the main beam had no forces — cut off it had one support and was unstable): keep the
+      // secondary whole, resting on the main at J (interior support), so the stub is a cantilever with the back span behind it
+      const onSome = (e) => cols.some((c) => dist(c, e) < TOL) || lines.some((o) => o !== sec && (() => { const L = dist(o.A, o.B), u = unitOf(o), dd = sub(e, o.A), tt = dd[0] * u[0] + dd[1] * u[1];
+        return Math.abs(cross(u, dd)) < TOL && tt > -TOL && tt < L + TOL; })());
+      if (!onSome(sec.A) || !onSome(sec.B)) {
+        if (!(sec.through ??= []).some((x) => dist(x, J) < TOL)) { sec.through.push(J); changed = true; break outer2; }
+        continue;
+      }
       const keep = (a, b) => sec.members.filter((m) => { const x = tOf(sec, beams[m].a), y = tOf(sec, beams[m].b); return Math.min(Math.max(x, y), b) - Math.max(Math.min(x, y), a) > TOL; });
-      lines.splice(k, 1, { A: sec.A, B: J, members: keep(0, t) }, { A: J, B: sec.B, members: keep(t, Ls) });
+      const thr = (a, b) => (sec.through ?? []).filter((x) => { const v = tOf(sec, x); return v > a + TOL && v < b - TOL; });
+      lines.splice(k, 1, { A: sec.A, B: J, members: keep(0, t), through: thr(0, t) }, { A: J, B: sec.B, members: keep(t, Ls), through: thr(t, Ls) });
       changed = true; break outer2;
     }
   }
   const out = lines.map((l, k) => {
     const L = dist(l.A, l.B), u = [(l.B[0] - l.A[0]) / L, (l.B[1] - l.A[1]) / L];
     const arc = l.members.length === 1 && beams[l.members[0]].arc?.s ? beams[l.members[0]].arc : null;
-    return { id: k, A: l.A, B: l.B, L, u, members: l.members, ...(arc ? { arc } : {}) };
+    return { id: k, A: l.A, B: l.B, L, u, members: l.members, through: l.through ?? [], ...(arc ? { arc } : {}) };
   });
   // guesses by index → by the final line objects (indices moved while splitting): report the point only
   out.guess = guess.map((g) => g.p);
@@ -395,6 +406,12 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       if (!host.cols.length && ln.cols.length >= 2) addCarrier(host, { t: along(host, p), host: ln.id, at: t, rev: true });
       else if (!host.carriers.some((x) => x.rev && x.host === ln.id && Math.abs(x.at - t) < TOL)) addCarrier(ln, { t, host: host.id, at: along(host, p) }); // not when that line already rests here on this one
     }
+  }
+  // secondaries kept whole over a main beam (a cantilever stub past it): interior support where they cross
+  for (const ln of lines) for (const J of ln.through ?? []) {
+    const host = lines.find((o) => o !== ln && along(o, J) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
+    const t = along(ln, J);
+    if (host && t !== null) addCarrier(ln, { t, host: host.id, at: along(host, J) });
   }
   // crossings decided by length only (no role, same number of columns): say which one was taken as the main beam
   const guesses = lines.guess ?? [];

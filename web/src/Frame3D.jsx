@@ -87,7 +87,7 @@ function useRoofFaces(roof, on) {
   useEffect(() => {
     if (!on || !roof?.pts) return;
     let live = true;
-    import("./RoofPage.jsx").then(async (m) => { const sk = await m.loadSkeleton(), { g, fr, dz } = m.runRoof(roof, sk); if (live && g) setFaces(Object.assign(g.faces.filter((f) => !f.gable), { g, fr, plates: dz ? (await import("./PlateView.jsx")).platesOf(dz).plates : null })); });
+    import("./RoofPage.jsx").then(async (m) => { const sk = await m.loadSkeleton(), { g, fr, dz } = m.runRoof(roof, sk); if (live && g) setFaces(Object.assign(g.faces.filter((f) => !f.gable), { g, fr, loose: dz?.loose ?? [], plates: dz ? (await import("./PlateView.jsx")).platesOf(dz).plates : null })); });
     return () => { live = false; };
   }, [roof, on]);
   return on ? faces : null;
@@ -199,7 +199,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
             );
           })}
           {on.roof && roofFaces?.map((f, i) => <RoofFace key={i} f={f} dz={base0} faint={on.roofFrame && !!roofFaces.fr} />)}
-          {on.roofFrame && roofFaces?.fr && <RoofFrameMembers g={roofFaces.g} fr={roofFaces.fr} plates={roofFaces.plates} Z0={base0} />}
+          {on.roofFrame && roofFaces?.fr && <RoofFrameMembers g={roofFaces.g} fr={roofFaces.fr} plates={roofFaces.plates} loose={roofFaces.loose} Z0={base0} />}
         </group>
       </Bounds>
       <Grid args={[80, 80]} position={[0, -top / 2 - (fo.t ?? 0.4) - 1.51, 0]} cellColor={dark ? "#252a44" : "#e4e7ec"} sectionColor={dark ? "#323a5c" : "#d0d5dd"} fadeDistance={70} infiniteGrid />
