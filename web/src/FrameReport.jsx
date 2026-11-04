@@ -256,6 +256,13 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             <div className="grid grid-cols-2 gap-2">{[...new Map(cs.map(({ sp }) => [`${sp.type.name}|${fmt(sp.len, 2)}|${sp.detail.through}|${sp.detail.noBack}`, sp])).values()].map((sp) => (
               <Figure key={sp.id} caption={`คานยื่น ${sp.id} (${sp.typeName})`}><CantileverDetail d={sp.detail} t={sp.type} L={sp.len} id={sp.id} /></Figure>))}</div>
           </>) : null; })()}
+          {/* short spans hogging all along: extra top bars the whole span (floor.js sp.topFull, user 2026-11-04) */}
+          {(() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.topFull).map((sp) => ({ sp, k }))); return cs.length ? (<>
+            <Sub>ช่วงคานที่มีโมเมนต์ลบตลอดช่วง — เหล็กบน (รวมเหล็กเสริมพิเศษ) ยาวตลอดช่วง แทนการตัดที่ L/4</Sub>
+            <Table head={["ชั้น / ช่วง", "Type", "ยาว (ม.)", "เหล็กบน", "M กลางช่วง (กก.-ม.)", "เหตุผล"]}
+              rows={cs.map(({ sp, k }) => [`${floors[k].name} ${sp.id}`, sp.typeName, fmt(sp.len, 2), `${sp.topFull.bars} ยาวตลอดช่วง`, fmt(sp.topFull.Mmid, 0),
+                sp.topFull.lifted ? "ปลายช่วงถูกยก (ช่วงสั้นติดช่วงยาว) — ยึดเหล็กเข้าเสา" : "โมเมนต์ลบถึงกลางช่วง (ขอบเขตน้ำหนักจรแบบหมากรุก)"])} />
+          </>) : null; })()}
           {/* reinforcement sections of every beam type (support / mid-span) and column level in use */}
           <Sub>รูปตัดเหล็กเสริมคาน (ซ้าย: ช่วงหัวเสา · ขวา: ช่วงกลางคาน)</Sub>
           <div className="grid grid-cols-2 gap-2">

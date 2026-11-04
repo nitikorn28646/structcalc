@@ -502,6 +502,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                   <div key={s.id} className={`rounded-md px-2 py-1.5 ring-1 ${s.ok ? "ring-gray-200" : "bg-red-50 ring-red-200 dark:bg-red-500/10"}`}>
                     <div className="flex justify-between tabular-nums"><span className="font-medium">ช่วง {s.id} · {s.typeName ?? s.type.name} · {fmt(s.len, 2)} ม.</span><span className={s.ok ? "text-green-600" : "text-red-600"}>{s.ok ? "ผ่าน" : "ไม่ผ่าน"} · {s.check.util >= 8.99 ? "เกินกำลังหน้าตัด" : `ใช้ ${fmt(s.check.util * 100, 0)}%`}</span></div>
                     <div className="text-gray-500 tabular-nums">M+ {fmt(s.Mpos, 0)} · M− {fmt(s.Mneg, 0)} กก.-ม. · V {fmt(s.V, 0)} กก.{s.Mt ? ` · T ${fmt(s.Mt, 0)} กก.-ม.` : ""}</div>
+                    {s.topFull && <div className="text-gray-600">เหล็กบน {s.topFull.bars} ยาวตลอดช่วง — {s.topFull.lifted ? "ปลายถูกยก" : "โมเมนต์ลบถึงกลางช่วง"} (M กลางช่วง {fmt(s.topFull.Mmid, 0)} กก.-ม.)</div>}
                     {s.detail && <div className="text-gray-600">คานยื่น: เหล็กบน {s.detail.bars} ยาวตลอด + งอขอที่ปลาย · {s.detail.noBack ? `ฝังในเสา ≥ ld ${fmt(s.detail.ld, 2)} ม.` : s.detail.through ? `ฝากตลอดช่วง ${s.detail.back}` : `ฝากเข้าช่วง ${s.detail.back} ${fmt(s.detail.ext, 2)} ม.`}</div>}
                     {why.map((t) => <div key={t} className="text-red-600">• {t}</div>)}
                     {s.ok && (() => { // why not a lighter type (user 2026-11-04: "คำนวณผิด?" — most spans looked under-used on the moment chart)

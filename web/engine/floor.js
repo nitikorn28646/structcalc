@@ -338,6 +338,13 @@ export function checkSpan(t, sp, mat) {
     if (sp.kind !== "cantilever") out.mid = designSection({ ...base, M: sp.Mpos, s: t.sMid, top: lay(top), bottom: lay(bot, botX) });
     out.sup = designSection({ ...base, M: sp.Mneg, s: t.sSup, top: lay(bot), bottom: lay(top, topX) }); // tension at the top
   } catch (e) { return { error: e.message, ok: false }; }
+  // ACI 318 minimum-shear-reinforcement exemption (mat.stirrupExempt, user 2026-11-04, off by default): a shallow beam (h ≤ 25 cm)
+  // or one with V ≤ Vc/2, without design torsion, needs no minimum stirrups — the spacing limit d/2 and Av,min do not govern
+  // (stirrups of the type are still placed as detailing). Ole's house: grade beams 20×20 failed only on s ≤ d/2.
+  if (mat.stirrupExempt) for (const r of [out.mid, out.sup]) {
+    if (!r || !(t.h <= 0.25 + 1e-9 || base.V <= r.Vc / 2) || MtUse > (Tlim ?? 0) / 4 || r.Vp > 0) continue; // V > Vc needs stirrups by strength; torsion ≥ ¼ cracking (ACI threshold) too
+    Object.assign(r, { stExempt: t.h <= 0.25 + 1e-9 ? "h ≤ 25 ซม." : "V ≤ Vc/2", AminOk: true, stirrup: r.stirrup === "CHECK_SPACING" ? `${t.stSets ?? 1}-${t.st} @ ${r === out.mid ? t.sMid : t.sSup}` : r.stirrup });
+  }
   // a short segment (span < 4h, e.g. between close columns) is a deep beam: its h/L ratio is reported, the WSD checks still apply
   const deep = sp.len < 4 * t.h;
   const ok1 = (r) => r.minDepthOk && (r.deepOk || deep) && r.nOk && r.AsMinOk !== false && r.doublyCheck === "OK" && r.VpOk && r.vtOk && r.vOk && r.AminOk !== false && r.stirrup !== "CHECK_SPACING" && r.topOk && r.botOk;
@@ -661,6 +668,17 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       (ln.uplift ??= []).push({ x, p, R: ln.res.R[k] });
       warnings.push(`แนวคาน ${ln.id + 1} ที่ (${p[0].toFixed(2)}, ${p[1].toFixed(2)}): ปลายคานถูกยก ${Math.round(-ln.res.R[k]).toLocaleString()} กก. (คานต่อเนื่อง — ช่วงสั้นติดช่วงยาว) — ${col ? "ยึดเหล็กคานเข้าเสาให้รับแรงดึง และตรวจเสา/ฐานรากรับแรงถอน" : "จุดรองรับต้องรับแรงดึงได้"} หรือปรับช่วงคาน/ตำแหน่งเสา`);
     });
+  }
+  // short span hogging all along (user 2026-11-04, automatic): when the live-load envelope keeps a negative moment at mid-span
+  // (a short span between long ones, or an end lifted by its neighbour) the extra top bars cut at L/4 would stop inside the
+  // hogging zone — they run the whole span instead (sp.topFull, detailing only; the section check is unchanged)
+  for (const sp of result.spans) {
+    if (sp.kind === "cantilever") continue;
+    const ln = result.lines.find((l) => l.id === sp.line); if (!ln?.env) continue;
+    const xm = (sp.x0 + sp.x1) / 2, e = ln.env.env.find((v) => xm >= v.curve.x0 - 1e-9 && xm <= v.curve.x0 + v.curve.L + 1e-9); if (!e) continue;
+    const i = Math.round(((xm - e.curve.x0) / (e.curve.L || 1)) * 40), Mm = e.curve.Mmin[Math.max(0, Math.min(40, i))];
+    const lifted = (ln.uplift ?? []).some((u) => Math.abs(u.x - sp.x0) < 1e-3 || Math.abs(u.x - sp.x1) < 1e-3);
+    if (Mm < -Math.max(10, 0.05 * sp.Mneg) || lifted) sp.topFull = { bars: [sp.type?.top, sp.type?.topX].filter(Boolean).join(" + "), Mmid: Mm, lifted };
   }
   for (const pl of pointLoads) if (pl.on === "column") { result.columns[pl.ci].R += pl.P; result.columns[pl.ci].from.push({ point: pl.i, R: pl.P }); }
   // a secondary beam deeper than the beam carrying it (user 2026-11-04: "why is a secondary sometimes deeper than the main?") — each

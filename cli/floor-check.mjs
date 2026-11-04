@@ -44,6 +44,11 @@ const cn = { columns: [[0, 0], [4, 0], [0, 4], [4, 4], [0, 4.6]], beams: [{ a: [
   { a: [0, 4], b: [0, 4.6] }, { a: [0, 4.6], b: [4, 4.6] }].map((b) => ({ ...b, type: null })), t: 0.12, finish: 100, live: 200, panels: {} };
 const rcn = run("corner on a cantilever tip", cn), tip = rcn.spans.find((s) => s.kind === "cantilever");
 check("corner: stub is a cantilever carrying the edge beam", !!tip && Math.abs(tip.len - 0.6) < 1e-6 && tip.Mneg > 0 && !rcn.warnings.some((w) => w.startsWith("มุมคานไม่มีเสา")), tip ? `M- ${Math.round(tip.Mneg)} ${tip.typeName}` : "none");
+// ACI minimum-stirrup exemption (mat.stirrupExempt): a 20×20 grade beam failing only on s ≤ d/2 passes with it
+{ const gb = { name: "GB", b: 0.2, h: 0.2, top: "2-DB 12", bot: "2-DB 12", st: "RB 6", sMid: 0.2, sSup: 0.2 };
+  const f0 = grid([0, 6.4], [0, 1]); f0.panels = {}; f0.t = 0; f0.finish = 0; f0.live = 0;
+  const why = (m) => { const r = analyzeFloor(f0, [gb], { ...mat, ...m }), c = r.spans.find((s) => s.len > 6).check; return c.mid.stirrup !== "CHECK_SPACING" && c.sup.stirrup !== "CHECK_SPACING"; };
+  check("stirrup exemption: 20x20 GB spacing d/2 waived only with it", !why({}) && why({ stirrupExempt: true }), ""); }
 const x3 = room(); x3.beams.push({ a: [3, 0], b: [3, 5], type: null }, { a: [0, 2.5], b: [6, 2.5], type: null, role: "main" });
 const rx3 = run("X crossing, role main on the long beam", x3);
 check("crossing: role main wins", rx3.lines.some((l) => Math.abs(l.L - 6) < 1e-6 && l.carriers.length === 2) && rx3.lines.filter((l) => Math.abs(l.L - 2.5) < 1e-6 && l.carriers.length === 2).length === 2 && !rx3.warnings.some((w) => w.startsWith("คานตัดกัน")), "");
