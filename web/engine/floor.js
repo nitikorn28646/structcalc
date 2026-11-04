@@ -292,6 +292,7 @@ export function barLayers(b, mat, st, main, special) {
   const C = cap(Math.max(...groups.map((g) => BARS[g.bar]?.d ?? 1.2))), cnt = [Math.min(N, C)];
   let r = N - cnt[0];
   while (r > 0) { const k = cnt.length === 2 ? r : Math.min(r, C); cnt.push(k); r -= k; }
+  if (cnt.length > 3 || cnt.some((c) => c > C)) L.over = { cnt, C }; // more bars than fit across the width in a layer (audit F5)
   for (let k = cnt.length - 1; k >= 1; k--) if (cnt[k] === 1) {
     if (cnt[k - 1] - 1 >= 2) { cnt[k - 1]--; cnt[k]++; } else if (k >= 2 && cnt[0] - 1 >= 2) { cnt[0]--; cnt[k]++; } else L.odd = true;
   }
@@ -318,6 +319,9 @@ const typeWeight = (t) => t.b * t.h * 1e4 + (steel(t.top) + steel(t.bot) + steel
 // support; a span shorter than 2d (deep) keeps its largest shear. range(sp, h, mat) → [a0, a1] or null (use the largest shear)
 export function shearRange(sp, h, mat) {
   if ((mat.shearAt ?? "d") !== "d" || !sp.endCol) return null;
+  // a deep span (clear span < 4h, ACI 318-11 11.7.1 / 10.7.1) keeps the largest shear: the "shear at d" rule does not apply (audit F2,
+  // 2026-11-04: a 2.0 m × h 1.0 m span got V = 0 because both d-sections met in the middle)
+  if (sp.len < 4 * h) return null;
   const d = h - ((mat.cover ?? 3) + 1.5) / 100, P = sp.Pat ?? [];
   const a0 = sp.endCol[0] && !P.some((x) => x > 1e-6 && x < d) ? d : 0, a1 = sp.endCol[1] && !P.some((x) => x < sp.len - 1e-6 && x > sp.len - d) ? d : 0;
   if (!(a0 || a1) || a0 + a1 >= sp.len - 1e-6) return null;
@@ -326,8 +330,14 @@ export function shearRange(sp, h, mat) {
 export function vAtD(sp, h, mat) {
   const r = shearRange(sp, h, mat);
   if (!r || !sp.Vx?.length) return sp.V;
-  const vs = sp.Vx.filter(([x]) => x >= r[0] - 1e-9 && x <= r[1] + 1e-9).map(([, v]) => v);
-  return vs.length ? Math.min(sp.V, Math.max(...vs)) : sp.V;
+  // |V| envelope exactly at x: linear between the samples (exact for uniform loads), the larger side at a jump (audit F6: the first
+  // sample past d was used — up to 5 % low)
+  const at = (x) => { let best = -1; const V = sp.Vx;
+    for (let i = 0; i + 1 < V.length; i++) { const [x0, v0] = V[i], [x1, v1] = V[i + 1]; if (x < x0 - 1e-9 || x > x1 + 1e-9) continue;
+      best = Math.max(best, x1 - x0 < 1e-9 ? Math.max(v0, v1) : v0 + ((v1 - v0) * (x - x0)) / (x1 - x0)); }
+    return best; };
+  const vs = sp.Vx.filter(([x]) => x > r[0] + 1e-9 && x < r[1] - 1e-9).map(([, v]) => v), ends = [at(r[0]), at(r[1])].filter((v) => v >= 0);
+  return vs.length || ends.length ? Math.min(sp.V, Math.max(...vs, ...ends)) : sp.V;
 }
 
 // WSD checks of one span with one beam type (mid-span sagging + support hogging), like the beam module
@@ -354,13 +364,45 @@ export function checkSpan(t, sp, mat) {
     if (!r || !(t.h <= 0.25 + 1e-9 || base.V <= r.Vc / 2) || MtUse > (Tlim ?? 0) / 4 || r.Vp > 0) continue; // V > Vc needs stirrups by strength; torsion ≥ ¼ cracking (ACI threshold) too
     Object.assign(r, { stExempt: t.h <= 0.25 + 1e-9 ? "h ≤ 25 ซม." : "V ≤ Vc/2", AminOk: true, stirrup: r.stirrup === "CHECK_SPACING" ? `${t.stSets ?? 1}-${t.st} @ ${r === out.mid ? t.sMid : t.sSup}` : r.stirrup });
   }
+  // ---- checks added by the audit of 2026-11-04 (beam.js itself is frozen; every rule cites ACI 318-11, the base of วสท. — UNVERIFIED
+  // against the วสท. text, user decision 2026-11-04) ----
+  const bcm = t.b * 100, hcm = t.h * 100, sq = Math.sqrt(fcB), fys = mat.fys ?? 2400, fsL = out.sup?.fs ?? out.mid?.fs ?? 1700, ds = BARS[t.st]?.d ?? 0.6;
+  const coverB = mat.cover ?? 3, xo = bcm - 2 * coverB - ds, yo = hcm - 2 * coverB - ds, Aoh = xo * yo, ph = 2 * (xo + yo), A0 = 0.85 * Aoh;
+  const torsionOn = MtUse > (Tlim ?? 0) / 4; // threshold: ¼ of the cracking torque (11.5.1), Tlim as above
+  for (const [r, s, k] of [[out.mid, t.sMid, "mid"], [out.sup, t.sSup, "sup"]]) {
+    if (!r) continue;
+    // F1: compression bars below the neutral axis (k < d′/d) give fs′ ≤ 0 → As′ < 0 and the check passed; such a section must be deeper
+    if (r.mode === "doubly" && !(r.fsPrime > 0)) r.compBarsOk = false;
+    // stresses of the bars actually provided (cracked transformed section, As′ with 2n − 1): fc ≤ allowable, fs ≤ allowable
+    const lay = k === "mid" ? [barLayers(t.b, mat, t.st, bot, botX), barLayers(t.b, mat, t.st, top)] : [barLayers(t.b, mat, t.st, top, topX), barLayers(t.b, mat, t.st, bot)];
+    const M = k === "mid" ? sp.Mpos : sp.Mneg;
+    if (M > 1 && r.provBot > 0) { const n = r.n, As = r.provBot, Asp = r.provTop, d = r.d, dp = r.dPrime, a2 = bcm / 2, b2 = (2 * n - 1) * Asp + n * As, c2 = -((2 * n - 1) * Asp * dp + n * As * d);
+      const kd = (-b2 + Math.sqrt(b2 * b2 - 4 * a2 * c2)) / (2 * a2), I = (bcm * kd ** 3) / 3 + (2 * n - 1) * Asp * (kd - dp) ** 2 + n * As * (d - kd) ** 2;
+      r.act = { kd, I, fc: (M * 100 * kd) / I, fs: (n * M * 100 * (d - kd)) / I }; r.stressOk = r.act.fc <= r.fc * 1.001 && r.act.fs <= r.fs * 1.001; }
+    // F5: bars that do not fit in their layers
+    if (lay[0].over || lay[1].over) r.barsFit = false;
+    // F3: minimum shear reinforcement (ACI 318-11 11.4.6.1: where V > ½Vc — the WSD form of Vu > 0.5φVc; exempt (d) h ≤ 250 mm;
+    // (e) beams integral with slabs is not applied) — Av,min = max(0.062√f′c, 0.35)·bw·s/fyt (eq. 11-13; ksc: 0.2√f′c, 3.5), s ≤ d/2 ≤ 600 mm (11.4.5.1)
+    const need = base.V > r.Vc / 2 && !(hcm <= 25 + 1e-9 && r.Vp === 0 && !torsionOn) && !r.stExempt;
+    if (need) { const AvMin = (Math.max(0.2 * sq, 3.5) * bcm * s * 100) / fys, sMaxV = Math.min(r.d / 2, 60) / 100;
+      r.minShear = { AvMin, sMax: sMaxV, Av: r.Aact }; r.minShearOk = r.Aact >= AvMin - 1e-9 && s <= sMaxV + 1e-9; }
+    // F8: torsion by the thin-walled tube of ACI 318-11 11.5.3.6 / 11.5.3.7 (θ = 45°), WSD stresses fv / fs instead of φ·fy:
+    // At/s = T/(2·A0·fv) per leg, A0 = 0.85·Aoh; Al = (At/s)·ph·(fv/fs); minimum 11.5.5.2 (Av + 2At ≥ Av,min), 11.5.5.3 (Al,min), spacing 11.5.6.1 ≤ min(ph/8, 300 mm)
+    if (torsionOn) { const At1 = (MtUse * 100) / (2 * A0 * r.fsv), AvS = typeof r.AvS === "number" ? r.AvS : 0, tot = AvS + 2 * At1;
+      const sReq = tot > 0 ? r.Aact / tot / 100 : Infinity, sTor = Math.min(ph / 8, 30) / 100, At1m = Math.max(At1, (1.78 * bcm) / r.fsv / 2);
+      const Al = At1 * ph * (r.fsv / fsL), AlMin = Math.max(0, (1.34 * sq * bcm * hcm) / fsL - At1m * ph * (r.fsv / fsL)), AlReq = Math.max(Al, AlMin);
+      const extraFace = Math.max(0, AlReq / 2 - 2 * (r.Ast ?? 0)); // beam.js already adds 2·Ast to each face
+      r.torsionAci = { At1, A0, Aoh, ph, sReq, sTor, Al, AlMin, extraFace };
+      r.torsionAciOk = s <= Math.min(sReq, sTor) + 1e-9 && (typeof r.reqBot !== "number" || r.provBot >= r.reqBot + extraFace - 1e-9) && (typeof r.reqTop !== "number" || r.provTop >= r.reqTop + extraFace - 1e-9); }
+  }
   // a short segment (span < 4h, e.g. between close columns) is a deep beam: its h/L ratio is reported, the WSD checks still apply
   const deep = sp.len < 4 * t.h;
-  const ok1 = (r) => r.minDepthOk && (r.deepOk || deep) && r.nOk && r.AsMinOk !== false && r.doublyCheck === "OK" && r.VpOk && r.vtOk && r.vOk && r.AminOk !== false && r.stirrup !== "CHECK_SPACING" && r.topOk && r.botOk;
+  const add = (r) => r.compBarsOk !== false && r.stressOk !== false && r.barsFit !== false && r.minShearOk !== false && r.torsionAciOk !== false;
+  const ok1 = (r) => r.minDepthOk && (r.deepOk || deep) && r.nOk && r.AsMinOk !== false && r.doublyCheck === "OK" && r.VpOk && r.vtOk && r.vOk && r.AminOk !== false && r.stirrup !== "CHECK_SPACING" && r.topOk && r.botOk && add(r);
   // tension steel, compression steel (doubly reinforced when M > Mc) and shear, as required / provided
   const util = (r) => Math.max(typeof r.reqBot === "number" ? r.reqBot / r.provBot : 9, typeof r.reqTop === "number" && r.reqTop > 0 ? r.reqTop / (r.provTop || 1e-9) : 0, r.Vp > 0 ? r.Vp / r.Vc2 : 0);
   // As,min applies to the sagging face; a support with no hogging moment only needs its shear checked
-  const supOk = sp.Mneg < 1 ? out.sup.VpOk && out.sup.stirrup !== "CHECK_SPACING" && out.sup.AminOk !== false : ok1(out.sup);
+  const supOk = sp.Mneg < 1 ? out.sup.VpOk && out.sup.stirrup !== "CHECK_SPACING" && out.sup.AminOk !== false && out.sup.minShearOk !== false && out.sup.torsionAciOk !== false && out.sup.barsFit !== false : ok1(out.sup);
   return { ...out, MtUse, MtAll, Tlim, deep: deep && !(out.mid ?? out.sup).deepOk, ok: (!out.mid || ok1(out.mid)) && supOk, util: Math.max(out.mid ? util(out.mid) : 0, sp.Mneg < 1 ? 0 : util(out.sup)) };
 }
 
@@ -383,6 +425,11 @@ export function spanReasons(c) {
     if (r.vtOk === false || r.vOk === false) out.push(`${w}: หน่วยแรงบิด/เฉือนรวมเกินกำหนด`);
     if (r.stirrup === "CHECK_SPACING") out.push(`${w}: ระยะเหล็กปลอกเกิน s ≤ ${typeof r.sMax === "number" ? r.sMax.toFixed(2) : "–"} ม.`);
     if (r.AminOk === false) out.push(`${w}: เหล็กปลอกน้อยกว่าขั้นต่ำ`);
+    if (r.compBarsOk === false) out.push(`${w}: เหล็กรับแรงอัดอยู่ใต้แกนสะเทิน (k ${r.k.toFixed(3)} < d′/d ${(r.dPrime / r.d).toFixed(3)}) — หน้าตัดตื้นเกินไป ต้องเพิ่มความลึก`);
+    if (r.stressOk === false) out.push(`${w}: หน่วยแรงจริงของเหล็กที่ใส่ fc ${r.act.fc.toFixed(1)} / ${r.fc.toFixed(1)} · fs ${r.act.fs.toFixed(0)} / ${r.fs.toFixed(0)} กก./ซม.² เกินที่ยอมให้`);
+    if (r.barsFit === false) out.push(`${w}: จัดเหล็กไม่ได้ — จำนวนเหล็กต่อชั้นเกินที่ใส่ได้ตามความกว้าง (หรือเกิน 3 ชั้น)`);
+    if (r.minShearOk === false) out.push(`${w}: เหล็กปลอกขั้นต่ำ (ACI 318-11 11.4.6: V > ½Vc) — Av ${r.minShear.Av.toFixed(2)} ≥ ${r.minShear.AvMin.toFixed(2)} ซม.² และ s ≤ ${r.minShear.sMax.toFixed(3)} ม.`);
+    if (r.torsionAciOk === false) out.push(`${w}: แรงบิด (ACI 318-11 11.5 ท่อผนังบาง) — s ≤ ${Math.min(r.torsionAci.sReq, r.torsionAci.sTor).toFixed(3)} ม., เหล็กตามยาวเพิ่ม ${r.torsionAci.extraFace.toFixed(2)} ซม.²/ด้าน`);
   }
   if (c.defl && c.defl.ok === false) out.push(`ระยะแอ่น ${(c.defl.dT * 1000).toFixed(1)} มม. (ยอมให้ ${(c.defl.limT * 1000).toFixed(1)}) / จร ${(c.defl.dL * 1000).toFixed(1)} (ยอมให้ ${(c.defl.limL * 1000).toFixed(1)})`);
   return [...new Set(out)];
@@ -503,9 +550,14 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     if (ln) {
       const a = Math.min(along(ln, c.a), along(ln, c.b)), b = Math.max(along(ln, c.a), along(ln, c.b));
       for (const [k, v] of Object.entries(g)) if (v > 0) ln.slab.push({ a, b, wa: v * L, wb: v * L, g: k, from: `พื้นยื่น ${i + 1}` });
-      ln.torsion.push({ a, b, m: ((g.DL + g.SDL + g.LL) * L * L) / 2, mL: (g.LL * L * L) / 2 }); // mL = live part (load combinations)
+      // compatibility torsion (user decision 2026-11-04, option ข): when a cast-in-place slab panel continues on the other side of the
+      // beam, the cantilever moment wL²/2 is carried across by the slab (its top bars run into the interior panel) — the beam's
+      // torsion is then compatibility torsion (ACI 318-11 11.5.2.2: may be reduced to the cracking torque), not equilibrium torsion
+      const mid = [(c.a[0] + c.b[0]) / 2 - n[0] * 0.15, (c.a[1] + c.b[1]) / 2 - n[1] * 0.15], back = panels.find((pn) => !pn.open && pn.st === "S" && pn.t > 0 && insidePoly(pn.P, mid));
+      ln.torsion.push({ a, b, m: ((g.DL + g.SDL + g.LL) * L * L) / 2, mL: (g.LL * L * L) / 2, compat: !!back, from: `พื้นยื่น ${i + 1}` }); // mL = live part (load combinations)
+      if (back) back.cantEdge = [...(back.cantEdge ?? []), { i, M: ((g.DL + g.SDL + g.LL) * L * L) / 2, L }];
     } else warnings.push(`พื้นยื่น ${i + 1} ไม่ได้วางบนคาน`);
-    return { i, P, t, L, g, w: g.DL + g.SDL + g.LL, area: ab * L, line: ln?.id };
+    return { i, P, t, L, g, w: g.DL + g.SDL + g.LL, area: ab * L, line: ln?.id, back: ln ? ln.torsion.at(-1)?.compat : false };
   });
   // a uniform load along segment a-b onto the beam line under it (false when no beam is there)
   const onBeam = (a, b, q, g, from, mid = false) => { // mid: onto a beam inside the storey (stair landing)
@@ -576,7 +628,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     if (tip && tip.line !== undefined) {
       const ln = lines[tip.line], src = floor.cants[tip.i], a = along(ln, src.a), b = along(ln, src.b), f = L / dist(src.a, src.b);
       ln.slab.push({ a: Math.min(a, b), b: Math.max(a, b), wa: l.q * f, wb: l.q * f, g, from });
-      ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: l.q * f * tip.L, mL: g === "LL" ? l.q * f * tip.L : 0 });
+      ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: l.q * f * tip.L, mL: g === "LL" ? l.q * f * tip.L : 0, compat: !!tip.back }); // the railing moment goes the same way as its slab's
       return { i, on: "cant" };
     }
     if (onBeam(l.a, l.b, l.q, g, from)) return { i, on: "beam" };
@@ -837,7 +889,9 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
             // limits from the design criteria (mat.deflLive / mat.deflTotal, default L/360 and L/240)
             const lL = Le / (mat.deflLive ?? 360), lT = Le / (mat.deflTotal ?? 240);
             return { dL: dl, dT: dt, limL: lL, limT: lT, ok: dl <= lL + 1e-9 && dt <= lT + 1e-9, I: (els[0] && EI[i0]) || 0 }; })(),
-          Mt: ln.torsion.reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2) });
+          Mt: ln.torsion.reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2),
+          // equilibrium part (cantilever slabs with no slab behind the beam, loads hung on it); the rest is compatibility torsion
+          MtEq: ln.torsion.filter((q) => !q.compat).reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2) });
       }
     }
   }

@@ -1,6 +1,14 @@
 # Test log (newest on top)
 Format: date · step · action · result · expected · severity (บล็อก / สำคัญ / เล็ก) · status (open / fixed in <commit>)
 
+## 2026-11-04 · beam design audit (cli/audit-beam.mjs, report https://claude.ai/artifact/2jTd6Kfik4f9ZvJgBfJpiM)
+- F1 CRITICAL doubly with k < d′/d passed (As′ < 0) · fixed (NG + provided-bar stress gate)
+- F2 CRITICAL deep span V at d ≈ 0 · fixed (spans < 4h use the largest V)
+- F5 HIGH 3rd layer overflow passed · fixed · F6 MEDIUM V at d from the next sample · fixed (interpolated)
+- F3 HIGH no min stirrups for V ≤ Vc · fixed (ACI 318-11 11.4.6) · F8 MEDIUM torsion vs thin tube · fixed (11.5, adds to beam.js) · option ข compat torsion · done
+- F4 HIGH cut-off of extra bars · open · F7 MEDIUM 0.5Ig vs Branson · open · F9 wall plates one EI · open · F11 shear limits · UNVERIFIED
+- after: 41/98 spans pass (was 48), 0 pass-but-independent-NG (was 36); auto types: beamtypes-check 54/57 (k 1), 53/57 (k 3) — open
+
 ## 2026-11-04 · verification campaign (cloud) — `node cli/verify20.mjs 40` (40 generated houses, independent checks), report books scanned in Chromium
 Checks per house: ΣRz of the 3D frame = all applied loads (slabs, walls, cantilever slabs, stairs, line / point loads, beam + column self weight);
 accumulated column loads ≥ the weight (≤ +25 %); simple spans: M+, V by statics, deflection (3·δD + δL, δL) by virtual work with the program's EI;

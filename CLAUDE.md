@@ -456,3 +456,13 @@ As, column stacking, piles / spread q, wind+EQ combo equilibrium, slab wall fact
 for browser report scans. Fixed: element deflection sign (floor.js elementDeflections + roofMembers prof: v'' = +M/EI, was −M → δ 3–10 % low),
 lateral on + "continuous" warned / INCOMPLETE, wall / point loads on slabs ×2 for slab moments (mat.slabLineFactor). Open: cantilever-slab torsion
 taken in full by the edge beam even with a back slab (conservative — ask the user).
+BEAM AUDIT 2026-11-04 (cli/audit-beam.mjs + indep-beam.mjs: 37 cases × given/auto types, independent formulas; report artifact
+https://claude.ai/artifact/2jTd6Kfik4f9ZvJgBfJpiM). User decisions: stay WSD; clauses from ACI 318-11 (base of วสท.), tagged UNVERIFIED.
+DONE (floor.js checkSpan wrapper, beam.js untouched): F1 doubly with fs′ ≤ 0 → NG + stress gate of the provided bars (cracked section,
+2n−1); F2 spans < 4h keep the largest V (no shear at d); F5 bars over a layer / > 3 layers → NG (barLayers L.over); F6 V at d interpolated;
+F3 min stirrups where V > ½Vc (11.4.6, Av,min = max(0.2√f′c, 3.5)·b·s/fys, s ≤ d/2 ≤ 60 cm, exempt h ≤ 25 cm); F8 torsion thin tube
+(11.5.3.6/7, A0 = 0.85Aoh, Al·fv/fs, Al,min, s ≤ ph/8 ≤ 30 cm); option ข: cantilever-slab torsion is compatibility when a cast S panel is
+behind the beam (torsion item compat, span.MtEq; slab row back.len = top bars into the inner panel). beamTypes designBH grows on the new
+flags. Audit after: no span passes that the independent check fails (was 36). Yasothon 55/57 (2 torsion spans), baseline re-saved.
+OPEN: F7 Branson Ie + long-term λ (not built), F4 cut-off lengths / ld / 12.10.5 shear at cutoff (not built), beamtypes-check k = 1/3
+now 54/57 and 53/57 (torsion spans no type in the limits carries — gate red), E2E expected values not re-saved, F11 shear limits UNVERIFIED.

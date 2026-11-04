@@ -62,7 +62,11 @@ export function designBH(sps, b, h, bar, mat, g, start = null) {
       if (m && m.topOk === false) { nT++; grew = true; }
       if (s && (s.botOk === false || (s.doublyCheck && s.doublyCheck !== "OK") || s.AsMinOk === false)) { xT++; grew = true; }
       if (s && s.topOk === false) { nB++; grew = true; }
-      for (const [r, k] of [[s, "sSup"], [m, "sMid"]]) if (r && (r.stirrup === "CHECK_SPACING" || r.AminOk === false || r.vOk === false)) {
+      if ([m, s].some((r) => r && (r.compBarsOk === false || r.barsFit === false))) return null; // needs another b × h (audit F1 / F5)
+      for (const r of [m, s]) if (r?.torsionAciOk === false && r.torsionAci.extraFace > 0) { if (r === m) { xB++; nT++; } else { xT++; nB++; } grew = true; } // torsion longitudinal bars
+      if (m?.stressOk === false) { xB++; grew = true; }
+      if (s?.stressOk === false) { xT++; grew = true; }
+      for (const [r, k] of [[s, "sSup"], [m, "sMid"]]) if (r && (r.stirrup === "CHECK_SPACING" || r.AminOk === false || r.vOk === false || r.minShearOk === false || r.torsionAciOk === false)) {
         if (r.vOk === false || r.VpOk === false) return null; // shear / torsion stress beyond the section: deeper or wider
         if (t[k] - g.ds >= g.sMin - 1e-9) t[k] = +(t[k] - g.ds).toFixed(3); else if (si + 1 < g.stirrups.length) { si++; t.sSup = t.sMid = g.sMax; } else return null;
         grew = true;

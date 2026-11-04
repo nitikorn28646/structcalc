@@ -290,7 +290,7 @@ export function analyzeFrame(frame) {
         const fr = f3.spans.find((x) => x.floor === k && x.id === sp.id);
         sp.f3 = fr ?? null;
         // shear: at d from the supports where the rule allows it (vAtD / Vd), the largest of the methods
-        sp.envF = { Mpos: Math.max(sp.Mpos, fr?.Mpos ?? 0), Mneg: Math.max(sp.Mneg, fr?.Mneg ?? 0), V: Math.max(vAtD(sp, sp.type.h, mat), fr?.Vd ?? fr?.V ?? 0), Mt: Math.max(sp.Mt ?? 0, fr?.T ?? 0), MtEq: sp.Mt ?? 0 }; // MtEq: equilibrium torsion (continuous model, cantilever slabs) — the rest may be compatibility torsion
+        sp.envF = { Mpos: Math.max(sp.Mpos, fr?.Mpos ?? 0), Mneg: Math.max(sp.Mneg, fr?.Mneg ?? 0), V: Math.max(vAtD(sp, sp.type.h, mat), fr?.Vd ?? fr?.V ?? 0), Mt: Math.max(sp.Mt ?? 0, fr?.T ?? 0), MtEq: sp.MtEq ?? sp.Mt ?? 0 }; // MtEq: equilibrium torsion (continuous model, cantilever slabs) — the rest may be compatibility torsion
         // load combinations with wind / earthquake: the largest of every combination, with the name of the one that governs
         sp.gov = {};
         for (const cb of f3.combos ?? []) {
@@ -317,7 +317,7 @@ export function analyzeFrame(frame) {
   // final checks of every span with its design forces (envelope when the frame ran)
   for (const an of g.an) {
     for (const sp of an.spans) {
-      const F = sp.envF ?? { Mpos: sp.Mpos, Mneg: sp.Mneg, V: vAtD(sp, sp.type.h, mat), Mt: sp.Mt ?? 0, MtEq: sp.Mt ?? 0 };
+      const F = sp.envF ?? { Mpos: sp.Mpos, Mneg: sp.Mneg, V: vAtD(sp, sp.type.h, mat), Mt: sp.Mt ?? 0, MtEq: sp.MtEq ?? sp.Mt ?? 0 };
       sp.cont = { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V, Mt: sp.Mt ?? 0 };
       sp.Vmax = Math.max(sp.V, sp.f3?.V ?? 0); // largest shear (the design value F.V may be the one at d)
       const vc = vAtD(sp, sp.type.h, mat), src = (k) => (sp.gov?.[k] ? "LAT" : F[k] > (k === "V" ? vc : sp[k]) + 1e-6 ? "3D" : "ต่อเนื่อง"); // LAT = a combination with wind / earthquake governs
