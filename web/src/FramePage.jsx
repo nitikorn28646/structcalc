@@ -24,7 +24,7 @@ import LoadCases from "./LoadCases.jsx";
 import { highlight } from "./highlight.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, spanReasons, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
-import { analyzeFrame, stackKey } from "../engine/frame.js";
+import { analyzeFrame, checkEnv, stackKey } from "../engine/frame.js";
 import { designSlabs } from "../engine/slabDesign.js";
 import { frame3dModel } from "../engine/frame3d.js";
 import { GRADES, SLAB_BARS } from "../engine/tables.js";
@@ -492,6 +492,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                     <div className="text-gray-500 tabular-nums">M+ {fmt(s.Mpos, 0)} · M− {fmt(s.Mneg, 0)} กก.-ม. · V {fmt(s.V, 0)} กก.{s.Mt ? ` · T ${fmt(s.Mt, 0)} กก.-ม.` : ""}</div>
                     {s.detail && <div className="text-gray-600">คานยื่น: เหล็กบน {s.detail.bars} ยาวตลอด + งอขอที่ปลาย · {s.detail.noBack ? `ฝังในเสา ≥ ld ${fmt(s.detail.ld, 2)} ม.` : s.detail.through ? `ฝากตลอดช่วง ${s.detail.back}` : `ฝากเข้าช่วง ${s.detail.back} ${fmt(s.detail.ext, 2)} ม.`}</div>}
                     {why.map((t) => <div key={t} className="text-red-600">• {t}</div>)}
+                    {s.ok && (() => { // why not a lighter type (user 2026-11-04: "คำนวณผิด?" — most spans looked under-used on the moment chart)
+                      const lighter = types.map((t, i) => ({ t, i })).filter(({ t }) => t.b * t.h < s.type.b * s.type.h - 1e-9 || (t.b * t.h <= s.type.b * s.type.h + 1e-9 && t !== s.type && types.indexOf(t) < s.typeIdx)).slice(-2);
+                      return lighter.map(({ t }) => { const c = checkEnv(t, s, frame.mat); return c.ok ? null : <div key={t.name} className="text-gray-500">ไม่ใช้ {t.name} ({Math.round(t.b * 100)}×{Math.round(t.h * 100)}) เพราะ: {spanReasons(c).slice(0, 2).join(" · ") || "ไม่ผ่าน"}</div>; });
+                    })()}
                   </div>); })}</div>) : null; })()}
             </div>)}
             {col && (() => { const c = colAt(sel.i), st = res.stacks.find((s) => s.key === stackKey(col)); return (<div className="space-y-2 text-[13px]">
@@ -582,7 +586,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   ) : step === "analysis" || step === "design" ? (
     <section className="rounded-2xl border border-gray-200 bg-white px-3 pt-2">        
           <div className="flex items-center justify-between px-1 text-sm font-semibold text-gray-800">{line?.res ? `แรงเฉือน / โมเมนต์ แนวคาน ${line.id + 1}` : (boardStep === "cols" ? `อัตราใช้งานเสา ใต้${fl.name}` : `อัตราใช้งานคาน ${fl.name}`)}
-            <span className="text-[11px] font-normal text-gray-500">{line?.res ? `ยาว ${fmt(line.L, 2)} ม.` : "เหล็กที่ต้องการ / ที่ใส่"}</span></div>
+            <span className="text-[11px] font-normal text-gray-500">{line?.res ? `ยาว ${fmt(line.L, 2)} ม.` : "ค่ามากสุดของ เหล็กที่ต้องการ/ที่ใส่ · แรงเฉือน · ระยะแอ่น (ไม่รวมข้อกำหนดระยะปลอก d/2 — คลิกคานดูเหตุผล)"}</span></div>
           {line?.res ? <ForceCharts L={line.L} fns={{ V: line.res.V, M: line.res.M }} dark={dark} height={260} animate={false} /> : <UtilBars items={boardStep === "cols" ? colsHere.map((c) => ({ label: `${cTypes[c.typeIdx]?.name} ${stackKey(c.p)}`, util: c.check.util, ok: c.ok, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length], sel: { kind: "column", i: c.i } }))
             : an.spans.map((s) => ({ label: `${s.id} ${s.typeName ?? types[s.typeIdx]?.name ?? ""}`, util: s.check.util, ok: s.ok, color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length], sel: { kind: "beam", i: s.member } }))} dark={dark} height={260} onPick={(x) => x?.sel && setSel(x.sel)} />}
         </section>
