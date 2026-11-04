@@ -12,6 +12,8 @@ import { footingModel, pileCapModel } from "./drawings.js";
 import { PILES } from "../engine/footing.js";
 import { DEFAULT_FOOTING, PILE_SAFE, designFooting } from "../engine/frame.js";
 import FootingPlan, { FootingLegend, footingMarks } from "./FootingPlan.jsx";
+import { FootingDetail } from "./Details.jsx";
+import { FootingCage3D } from "./Cage3D.jsx";
 import { SLAB_BARS } from "../engine/tables.js";
 
 const th = "px-1 py-1 text-left text-[11px] font-medium text-gray-500", td = "px-1 py-0.5 tabular-nums";
@@ -71,8 +73,10 @@ export function FootingTypes({ frame, set, res }) {
   const del = (i) => { set("footTypes", types.filter((_, j) => j !== i)); set("footPick", Object.fromEntries(Object.entries(pick).filter(([, v]) => v !== i).map(([k, v]) => [k, v > i ? v - 1 : v]))); };
   const foots = res.footings ?? [], shown = foots.find((f) => f.stack === selStack);
   const governing = [...new Set(foots.map((f) => f.type ?? null))].map((ty) => foots.filter((f) => (f.type ?? null) === ty).reduce((a, f) => ((f.util ?? 0) > (a.util ?? 0) ? f : a)));
-  const draw = (f) => f?.inp && f.r ? <Drawing model={f.kind === "spread" ? footingModel(f.inp, f.r) : pileCapModel(f.inp, f.r, PILES[f.pile]?.b ?? 0.18)} className="mx-auto h-[70mm]" fontSize={9} width={300} /> : <p className="text-gray-400">ไม่มีรูป ({f?.error ?? "ยังไม่ได้ออกแบบ"})</p>;
+  // construction-drawing detail (plan + section) and a 3D cage on demand (one at a time)
+  const draw = (f) => f?.inp && f.r ? (cage3 === f.stack ? <FootingCage3D f={f} className="h-[260px] overflow-hidden rounded-lg" /> : <FootingDetail f={f} mark={marks?.mark?.(f) ?? ""} className="mx-auto h-[78mm] w-full overflow-visible" />) : <p className="text-gray-400">ไม่มีรูป ({f?.error ?? "ยังไม่ได้ออกแบบ"})</p>;
   const marks = footingMarks(res.footings);
+  const [cage3, setCage3] = useState(null);
   return (
     <div className="max-w-[1500px] space-y-5 text-[12px]">
       <section className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-white/[0.03]">
@@ -149,7 +153,7 @@ export function FootingTypes({ frame, set, res }) {
       <section>
         <p className="mb-1 text-sm font-semibold text-gray-800">3 · รูปฐานราก {shown ? `— เสา ${shown.stack}` : "— ฐานวิกฤตของแต่ละ type"}</p>
         <div className="grid gap-3 xl:grid-cols-3 md:grid-cols-2">{(shown ? [shown] : governing).map((f) => (
-          <figure key={f.stack} className="rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200">{draw(f)}
+          <figure key={f.stack} className="relative rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200"><button onClick={() => setCage3(cage3 === f.stack ? null : f.stack)} className={`absolute right-2 top-2 z-10 rounded-md px-2 py-0.5 text-[11px] ring-1 ${cage3 === f.stack ? "bg-brand-500 text-[#fff] ring-brand-500" : "bg-white text-gray-600 ring-gray-300"}`}>3D</button>{draw(f)}
             <figcaption className="mt-1 text-center text-[11px] text-[#667085]">{f.type ?? "อัตโนมัติ"} · เสา {f.stack} · {f.kind === "spread" ? "ฐานแผ่" : `${f.n} × ${f.pile}`} · {f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} ม.` : ""} · ใช้ {fmt((f.util ?? 0) * 100, 0)}%</figcaption></figure>))}</div>
       </section>
       <section>

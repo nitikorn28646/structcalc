@@ -46,7 +46,7 @@ export default function BeamCage3D({ b, h, L, cover, stirrupBar, type, mid, sup,
   const span = Math.max(L, 1);
   return (
     <div className={`relative ${className}`}>
-      <Canvas shadows dpr={[1, 2]} camera={{ position: [span * 0.75, span * 0.22, span * 0.3], fov: 35, near: 0.01, far: 100 }}>
+      <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }} camera={{ position: [span * 0.75, span * 0.22, span * 0.3], fov: 35, near: 0.01, far: 100 }}>
         <color attach="background" args={[dark ? "#0f1222" : "#f9fafb"]} />
         <hemisphereLight args={["#ffffff", "#d0d5dd", 0.9]} />
         <directionalLight position={[3, 6, 4]} intensity={1.6} castShadow shadow-mapSize={[1024, 1024]} />

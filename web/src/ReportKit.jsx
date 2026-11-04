@@ -37,7 +37,11 @@ const PAGE_CSS = `
 // Paginate the hidden report into #print-root, print, then clean up.
 export async function printReport({ dialog = true } = {}) {
   // every report block of the hidden print area (the workflow prints roof + structure); not the on-screen preview in <main>
-  const blocks = [...document.querySelectorAll(".report")].filter((e) => !e.closest("main")), src = { innerHTML: blocks.map((e) => e.innerHTML).join("") };
+  // 3D figures (WebGL canvases, preserveDrawingBuffer) become pictures — the paged copy is made from HTML text
+  const still = (e) => { const c = e.cloneNode(true), a = [...e.querySelectorAll("canvas")], b = [...c.querySelectorAll("canvas")];
+    a.forEach((cv, i) => { try { const img = Object.assign(document.createElement("img"), { src: cv.toDataURL("image/png") }); img.style.width = "100%"; img.style.height = "100%"; img.style.objectFit = "contain"; b[i]?.replaceWith(img); } catch { b[i]?.remove(); } });
+    return c.innerHTML; };
+  const blocks = [...document.querySelectorAll(".report")].filter((e) => !e.closest("main")), src = { innerHTML: blocks.map(still).join("") };
   let root = document.getElementById("print-root");
   if (!root) {
     root = Object.assign(document.createElement("div"), { id: "print-root" });

@@ -1,6 +1,10 @@
 // Thai calculation report for the RC frame drawn on plan: loads, slab panels, continuous beams, beam / column types, schedules.
 import { PILE_SAFE } from "../engine/frame.js";
 import FootingPlan, { FootingLegend, footingMarks } from "./FootingPlan.jsx";
+import { BeamDetail, ColumnDetail, FootingDetail } from "./Details.jsx";
+import { FootingCage3D } from "./Cage3D.jsx";
+import BeamCage3D from "./BeamCage3D.jsx";
+import { beamLayersOf } from "./DesignFigures.jsx";
 import { Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
@@ -225,7 +229,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           <div className="grid grid-cols-2 gap-2">{[...fNames.entries()].map(([key, name]) => {
             const f = res.footings.filter((x) => fKey(x) === key).reduce((a, x) => ((x.P ?? 0) > (a.P ?? 0) ? x : a));
             return f.inp && f.r ? <Figure key={key} caption={`${name} · ${f.kind === "spread" ? `ฐานแผ่ ${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp.t, 2)} ม.` : `เข็ม ${f.n} × ${f.pile} ฐาน ${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp.t, 2)} ม.`} · ${res.footings.filter((x) => fKey(x) === key).length} ฐาน`}>
-              <Drawing model={f.kind === "spread" ? footingModel(f.inp, f.r) : pileCapModel(f.inp, f.r, PILES[f.pile]?.b ?? 0.18)} className="mx-auto h-[70mm]" fontSize={9} width={300} /></Figure> : null; })}</div>
+              <div className="grid grid-cols-[3fr_2fr] items-center gap-1"><FootingDetail f={f} mark={name} className="mx-auto h-[72mm] w-full overflow-visible" /><FootingCage3D f={f} className="h-[60mm] overflow-hidden rounded" /></div></Figure> : null; })}</div>
         </Sec>}
 
         {show("back") && <Sec id="c-schedules" n={N("c-schedules")} th="ตาราง type คาน เสา และฐานราก" en="Beam & column schedules" intro="ขนาดและเหล็กเสริมที่ใช้ ความยาวคานรวมวัดตามแนวศูนย์กลาง ยังไม่รวมระยะทาบและเศษเหล็ก">
@@ -253,14 +257,13 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           </>) : null; })()}
           {/* reinforcement sections of every beam type (support / mid-span) and column level in use */}
           <Sub>รูปตัดเหล็กเสริมคาน (ซ้าย: ช่วงหัวเสา · ขวา: ช่วงกลางคาน)</Sub>
-          <div className="grid grid-cols-4 gap-2">
-            {types.filter((_, i) => spans.some((sp) => sp.typeIdx === i)).flatMap((t) => {
-              const L = (main, special) => barLayers(t.b, mat, t.st, parseBars(main), parseBars(special));
-              return [["หัวเสา", L(t.top, t.topX), L(t.bot)], ["กลางคาน", L(t.top), L(t.bot, t.botX)]].map(([where, top, bottom]) => (
-                <Figure key={`${t.name}${where}`} caption={`${t.name} ${where} · ${stLabel(t)} @${fmt(where === "หัวเสา" ? t.sSup : t.sMid, 2)}`}>
-                  <Drawing model={beamSectionModel({ b: t.b, h: t.h, cover: mat.cover, stirrupBar: t.st, top, bottom })} className="mx-auto h-[38mm]" fontSize={8} width={150} />
-                </Figure>
-              ));
+          <div className="grid grid-cols-2 gap-2">
+            {types.filter((_, i) => spans.some((sp) => sp.typeIdx === i)).map((t, k) => { const LL = beamLayersOf(t, mat);
+              return (
+                <Figure key={t.name} caption={`${t.name} ${fmt(t.b * 100, 0)}×${fmt(t.h * 100, 0)} ซม. · หัวเสา ${stLabel(t)} @${fmt(t.sSup, 2)} · กลางคาน @${fmt(t.sMid, 2)}`}>
+                  <div className="grid grid-cols-3 items-center gap-1"><BeamDetail t={t} mat={mat} at="sup" className="h-[40mm] w-full" /><BeamDetail t={t} mat={mat} at="mid" className="h-[40mm] w-full" />
+                    {k < 8 ? <BeamCage3D b={t.b} h={t.h} L={2.4} cover={mat.cover ?? 3} stirrupBar={t.st} type="both_ends" mid={LL.mid} sup={LL.sup} sEnd={t.sSup} sMid={t.sMid} className="h-[40mm] overflow-hidden rounded" /> : <span />}</div>
+                </Figure>);
             })}
           </div>
           <Sub>รูปตัดเหล็กเสริมเสา</Sub>
@@ -268,7 +271,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             {colTypes.flatMap((t, i) => t.levels.filter((lv) => res.columns.some((c) => c.typeIdx === i && c.lv === lv)).map((lv) => { const [nx, ny] = faceBars(lv.n), j = t.levels.indexOf(lv);
               return (
                 <Figure key={`${t.name}${lv.level}`} caption={`${t.name} ${lv.level} · ${lv.n}-${lv.mainBar} · ${lv.tieBar} @${fmt(lv.s, 2)}`}>
-                  <Drawing model={columnSectionModel({ Bx: lv.Bx, By: lv.By, cover: (j === 0 && mat.coverPier > 0 ? mat.coverPier : mat.coverCol ?? mat.cover), tieD: SLAB_BARS[lv.tieBar]?.d ?? 0.6, barD: SLAB_BARS[lv.mainBar]?.d ?? 1.2, nx, ny })} className="mx-auto h-[38mm]" fontSize={8} width={150} />
+                  <ColumnDetail lv={lv} cover={j === 0 && mat.coverPier > 0 ? mat.coverPier : mat.coverCol ?? mat.cover ?? 3} className="mx-auto h-[36mm] w-full" />
                 </Figure>
               ); }))}
           </div>
