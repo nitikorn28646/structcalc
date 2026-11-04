@@ -31,6 +31,13 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
     v: Number(v), polys: ps.map((p) => p.P), form: { kind: "floor", lc: field === "live" ? "LL" : "DL", v: Number(v) }, pick: ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })),
     set: (nv) => setFloor({ panels: { ...fl.panels, ...Object.fromEntries(ps.map((p) => [p.key, { ...(fl.panels?.[p.key] ?? {}), [field]: nv }])) } }),
   }));
+  // cantilever slabs: same floor loads (finish = SDL, live = LL), kept on floor.cants[i]
+  const cantsA = an?.cants ?? [];
+  const cantItems = (field) => group(cantsA.map((c, i) => ({ ...c, i, val: field === "finish" ? c.g.SDL : c.g.LL })), (c) => c.val).map(([v, cs]) => ({
+    id: `c-${field}-${v}`, text: `FLOOR −${fmt(Number(v), 0)} kg/m²`, note: `พื้นยื่น · ${field === "finish" ? "ปูผิว/ฝ้า" : "จร"} · ${cs.length} แผ่น`, v: Number(v), polys: cs.map((c) => c.P),
+    form: { kind: "floor", lc: field === "live" ? "LL" : "DL", v: Number(v) }, pick: cs.map((c) => ({ kind: "cant", i: c.i })),
+    set: (nv) => setFloor({ cants: (fl.cants ?? []).map((c, i) => (cs.some((x) => x.i === i) ? { ...c, [field]: nv } : c)) }),
+  }));
   const lineItems = (pred) => group(lines.map((l, i) => ({ ...l, i })).filter(pred), (l) => `${l.g ?? "SP"}|${l.q}|${l.name ?? ""}`).map(([k, ls]) => ({
     id: `l-${k}`, text: `UNI GY −${fmt(ls[0].q, 0)} kg/m`, note: `${ls[0].name || "น้ำหนักแผ่"}${ls[0].g === "WALL" ? " (ผนัง)" : ""} · ${ls.length} ช่วง`, v: ls[0].q, segs: ls.map((l) => [l.a, l.b]), form: { kind: "uni", lc: ls[0].g === "LL" ? "LL" : "DL", g: ls[0].g === "LL" ? "WALL" : ls[0].g ?? "SP", name: ls[0].name ?? "", v: ls[0].q },
     pick: ls.map((l) => { const bi = beams.findIndex((b) => near(b.a, l.a) && near(b.b, l.b)); return bi >= 0 ? { kind: "beam", i: bi } : null; }).filter(Boolean),
@@ -55,8 +62,8 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
     del: () => setFloor({ loadItems: defs.filter((x) => x.id !== d.id) }) }));
   const tree0 = {
     DL: [{ id: "sw", text: "SELFWEIGHT Y −1", note: `คาน พื้น เสา คิดอัตโนมัติ · ชั้นนี้ ${fmt((an?.groups?.DL ?? 0) / 1000, 1)} ตัน`, ro: true },
-      ...floorItems("finish"), ...lineItems((l) => l.g !== "LL"), ...wallItems, ...pointItems((q) => q.g !== "LL")],
-    LL: [...floorItems("live"), ...lineItems((l) => l.g === "LL"), ...pointItems((q) => q.g === "LL")],
+      ...floorItems("finish"), ...cantItems("finish"), ...lineItems((l) => l.g !== "LL"), ...wallItems, ...pointItems((q) => q.g !== "LL")],
+    LL: [...floorItems("live"), ...cantItems("live"), ...lineItems((l) => l.g === "LL"), ...pointItems((q) => q.g === "LL")],
   };
   const tree = { DL: [...tree0.DL, ...defItems("DL", tree0.DL)], LL: [...tree0.LL, ...defItems("LL", tree0.LL)] };
   const addItem = () => {
@@ -70,6 +77,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
   const noLive = live.filter((p) => !(p.live > 0)), noFin = live.filter((p) => !(p.finish > 0)), dflt = live.filter((p) => !fl.panels?.[p.key] || (fl.panels[p.key].finish === undefined && fl.panels[p.key].live === undefined));
   const name = (p) => `P${panels.indexOf(p) + 1}`;
   const checks = [
+    cantsA.some((c) => !(c.g.LL > 0)) && { bad: true, text: `พื้นยื่นไม่มีน้ำหนักจร ${cantsA.filter((c) => !(c.g.LL > 0)).length} แผ่น`, ps: [] , polys: cantsA.filter((c) => !(c.g.LL > 0)).map((c) => c.P) },
     noLive.length && { bad: true, text: `ไม่มีน้ำหนักจร ${noLive.length} แผ่น: ${noLive.map(name).join(", ")}`, ps: noLive },
     noFin.length && { bad: true, text: `ไม่มีปูผิว/ฝ้า ${noFin.length} แผ่น: ${noFin.map(name).join(", ")}`, ps: noFin },
     dflt.length && { bad: false, text: `ใช้ค่าเริ่มต้นของชั้น (ยังไม่ได้ Assign) ${dflt.length} แผ่น: ${dflt.map(name).slice(0, 12).join(", ")}${dflt.length > 12 ? " …" : ""}`, ps: dflt },
@@ -78,9 +86,10 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
   // ---- assign ----
   const unit = KINDS.find((k) => k[0] === form.kind)[2];
   const assign = (targets) => {
-    const v = Number(form.v) || 0, out = { panels: null, lineLoads: null, pointLoads: null }; let n = 0, skip = 0;
+    const v = Number(form.v) || 0, out = { panels: null, cants: null, lineLoads: null, pointLoads: null }; let n = 0, skip = 0;
     for (const t of targets) {
-      if (form.kind === "floor" && t.kind === "panel") { const p = panels[t.i]; if (!p) continue; out.panels = out.panels ?? { ...fl.panels }; out.panels[p.key] = { ...(out.panels[p.key] ?? {}), [form.lc === "LL" ? "live" : "finish"]: v }; n++; }
+      if (form.kind === "floor" && t.kind === "cant") { out.cants = out.cants ?? [...(fl.cants ?? [])]; if (out.cants[t.i]) { out.cants[t.i] = { ...out.cants[t.i], [form.lc === "LL" ? "live" : "finish"]: v }; n++; } }
+      else if (form.kind === "floor" && t.kind === "panel") { const p = panels[t.i]; if (!p) continue; out.panels = out.panels ?? { ...fl.panels }; out.panels[p.key] = { ...(out.panels[p.key] ?? {}), [form.lc === "LL" ? "live" : "finish"]: v }; n++; }
       else if (form.kind === "uni" && t.kind === "beam") { const b = beams[t.i]; if (!b) continue; if (b.arc?.s) { skip++; continue; } out.lineLoads = out.lineLoads ?? [...lines]; out.lineLoads.push({ a: [...b.a], b: [...b.b], q: v, name: form.name, g: form.lc === "LL" ? "LL" : form.g }); n++; }
       else if (form.kind === "con" && t.kind === "beam") { const b = beams[t.i]; if (!b) continue; const L = Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]), d = Math.min(L, Math.max(0, Number(form.d1) || 0)) / (L || 1);
         out.pointLoads = out.pointLoads ?? [...points]; out.pointLoads.push({ p: [b.a[0] + (b.b[0] - b.a[0]) * d, b.a[1] + (b.b[1] - b.a[1]) * d], P: v, name: form.name, g: form.lc }); n++; }
@@ -98,7 +107,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
     <button onClick={() => setOpen({ ...open, [k]: !open[k] })} className="flex w-full items-center gap-1 py-0.5 text-left text-[12.5px] font-semibold text-gray-800 dark:text-gray-100">
       {open[k] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
       <span className={`grid h-4 w-4 place-items-center rounded-sm text-[9px] font-bold text-white ${tag === "C" ? "bg-[#3e63dd]" : "bg-[#b42318]"}`}>{tag}</span>{label}</button>);
-  const sel = { panel: multi.filter((m) => m.kind === "panel").length, beam: multi.filter((m) => m.kind === "beam").length, column: multi.filter((m) => m.kind === "column").length };
+  const sel = { panel: multi.filter((m) => m.kind === "panel" || m.kind === "cant").length, beam: multi.filter((m) => m.kind === "beam").length, column: multi.filter((m) => m.kind === "column").length };
 
   return (<>
     <Card title={`Load Cases — ${fl.name}`}>
@@ -110,7 +119,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
       </div>
       <div className="mb-2 space-y-0.5 text-[11.5px]">
         {checks.length ? checks.map((c) => (
-          <div key={c.text} onMouseEnter={() => highlight({ floor: cur, polys: c.ps.map((p) => p.P), bad: c.bad })} onMouseLeave={() => highlight(null)}
+          <div key={c.text} onMouseEnter={() => highlight({ floor: cur, polys: c.polys ?? c.ps.map((p) => p.P), bad: c.bad })} onMouseLeave={() => highlight(null)}
             className={`flex items-start gap-1.5 rounded px-1.5 py-0.5 ${c.bad ? "bg-red-50 text-red-700 dark:bg-red-500/10" : "bg-amber-50 text-[#b54708] dark:bg-amber-500/10"}`}>
             <span>{c.bad ? "⚠" : "ⓘ"}</span><span className="flex-1">{c.text}</span>
             <button onClick={() => setPickSet(c.ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })))} className="shrink-0 text-brand-500 hover:underline">เลือก</button></div>))

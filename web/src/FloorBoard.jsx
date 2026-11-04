@@ -30,7 +30,7 @@ const TOOLS = {
   other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["area", "เพิ่มบนพื้น", PanelTop, "คลิกแผ่นพื้นเพื่อเพิ่มน้ำหนักต่อพื้นที่จากคลัง เช่น ห้องน้ำ / ฝ้า"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
   result: [SEL], cols: [SEL], grid: [SEL], assign: [["select", "เลือก", MousePointer2, "Load Cases: คลิกคาน / เสา / แผ่นพื้น · Ctrl หรือ Shift + คลิก = เพิ่ม · ลากกรอบ (ซ้าย→ขวา ทั้งชิ้น · ขวา→ซ้าย แตะ) · Ctrl+A ทั้งหมด · Esc ล้าง · แล้วกด Assign ทางขวา"]],
 };
-const BOXABLE = { assign: ["beam", "column", "panel"], frame: ["column", "beam", "cant"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
+const BOXABLE = { assign: ["beam", "column", "panel", "cant"], frame: ["column", "beam", "cant"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
 // polygon corners: vertices where the outline turns (a column / beam end on an edge adds a straight-through vertex)
 export const corners = (P) => P.filter((q, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length], u = [q[0] - a[0], q[1] - a[1]], v = [b[0] - q[0], b[1] - q[1]], L = Math.hypot(...u) * Math.hypot(...v); return L > 0 && Math.abs(u[0] * v[1] - u[1] * v[0]) / L > 0.05; }); // turns of more than ~3°
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
@@ -101,7 +101,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     if (ci >= 0 && step !== "slab" && step !== "wall") return { kind: "column", i: ci };
     const bi = beams.findIndex((b) => segDist(raw, b.a, b.b).d < r);
     if (bi >= 0 && step !== "slab") return { kind: "beam", i: bi };
-    if (step === "frame") { const ci = an?.cants.findIndex((c) => inside(c.P, raw)) ?? -1; if (ci >= 0) return { kind: "cant", i: ci }; } // after columns / beams: a cantilever slab starts on its beam
+    if (step === "frame" || step === "assign") { const ci = an?.cants.findIndex((c) => inside(c.P, raw)) ?? -1; if (ci >= 0) return { kind: "cant", i: ci }; } // after columns / beams: a cantilever slab starts on its beam
     const pn = an?.panels.find((p) => inside(p.P, raw));
     return pn ? { kind: "panel", key: pn.key } : null;
   };
@@ -155,7 +155,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       if (e.button === 0) {
         const h = hitAt(raw);
         if (step === "assign") { // Load Cases: click = select (Ctrl / Shift adds), or assign straight away with the cursor
-          const m = h && (h.kind === "panel" ? { kind: "panel", i: (an?.panels ?? []).findIndex((p) => p.key === h.key) } : ["beam", "column"].includes(h.kind) ? h : null);
+          const m = h && (h.kind === "panel" ? { kind: "panel", i: (an?.panels ?? []).findIndex((p) => p.key === h.key) } : ["beam", "column", "cant"].includes(h.kind) ? h : null);
           if (m && onPick) { onPick(m); return; }
           if (m) { setMulti((cur) => (e.ctrlKey || e.metaKey || e.shiftKey ? (cur.some((x) => x.kind === m.kind && x.i === m.i) ? cur.filter((x) => !(x.kind === m.kind && x.i === m.i)) : [...cur, m]) : [m])); setSel(null); return; }
           if (e.shiftKey) { setDrag({ pan: true, sx: e.clientX, sy: e.clientY, vb }); return; }
@@ -413,7 +413,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               {txt([q.p[0] + 12 * k, q.p[1] + 10 * k], `${q.name ? `${q.name} ` : ""}${fmt(q.P, 0)} กก.`, SP_C, 10, "start", 600)}
             </g>
           ))}
-          {multi.map((m, j) => { const P = ITEM[m.kind][1](listOf(m.kind)[m.i] ?? {}); if (!P[0]) return null;
+          {multi.map((m, j) => { const P = m.kind === "cant" && an?.cants?.[m.i] ? an.cants[m.i].P : ITEM[m.kind][1](listOf(m.kind)[m.i] ?? {}); if (!P[0]) return null;
             if (P.length > 2) return <polygon key={`m${j}`} points={P.map((q) => `${q[0]},${-q[1]}`).join(" ")} fill="#f79009" fillOpacity={0.22} stroke="#f79009" strokeWidth={2 * k} />;
             return P.length === 1 ? <circle key={`m${j}`} cx={P[0][0]} cy={-P[0][1]} r={14 * k} fill="#f79009" fillOpacity={0.3} />
               : <line key={`m${j}`} x1={P[0][0]} y1={-P[0][1]} x2={P[1][0]} y2={-P[1][1]} stroke="#f79009" strokeOpacity={0.5} strokeWidth={12 * k} strokeLinecap="round" />; })}
