@@ -436,3 +436,11 @@ put columns on that floor with "เฉพาะเสา"), one "ไม่มี
 Stair landing: user chose ก (landing beam on the OUTER edge of the landing) = current model — no change needed.
 The user sent a project .json (Yasothon-like, saved 2026-11-04 08:42) at the end of the session — client data, not committed; ask again.
 PLANS 2026-11-04: report plans coloured (drawings.js Draw.fill → SVG polygons under the lines; SLAB_FILL by slab kind, COLTYPE_FILL by column type, footings gray) + legends; empty beam / column plans skipped. Stair convention change (draw on the lower floor = goes up) proposed, not built (user to decide).
+ROOF SHAPES + STAIRS (2026-11-04 late): roof.js roofGeometry rewritten for gables — gable edges pushed out by D (neighbours lengthened),
+hip skeleton of that outline, faces cut back at the gable line (Sutherland–Hodgman) → gable walls = profile on the line; shed (หมาแหงน)
+= three gables; inner-corner / reflex-meeting gables demoted to hips (g.warnings); eaves meeting in a narrow gap → clear error. New edge
+type "manila" (dm = edge.dm or ¼ edge length): main faces cut beyond the dm line + hip skirts (second skeleton without manila pushes) in
+the strip, gablet wall between them; menus cycle ปั้นหยา → จั่ว → มนิลา. Faces/lines now built from 3D points (no skeleton indices).
+Tests: cli/roof-shapes.cjs (browser, 28 shapes: planar faces, faces tile the plan, area = plan/cosθ, framing) 28/28; cli/stair-check.mjs
+(node, 10 stair kinds/landing supports: total load = loads on beams) 10/10. Stairs drawn on the floor they start from → stored on the
+floor above (FloorBoard onStairUp / stairsAbove dashed, click → that floor). Not supported yet: multi-level roofs (separate eave heights).
