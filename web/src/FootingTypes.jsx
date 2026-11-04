@@ -11,6 +11,7 @@ import Drawing from "./Drawing.jsx";
 import { footingModel, pileCapModel } from "./drawings.js";
 import { PILES } from "../engine/footing.js";
 import { DEFAULT_FOOTING, PILE_SAFE, designFooting } from "../engine/frame.js";
+import FootingPlan, { FootingLegend, footingMarks } from "./FootingPlan.jsx";
 import { SLAB_BARS } from "../engine/tables.js";
 
 const th = "px-1 py-1 text-left text-[11px] font-medium text-gray-500", td = "px-1 py-0.5 tabular-nums";
@@ -71,8 +72,14 @@ export function FootingTypes({ frame, set, res }) {
   const foots = res.footings ?? [], shown = foots.find((f) => f.stack === selStack);
   const governing = [...new Set(foots.map((f) => f.type ?? null))].map((ty) => foots.filter((f) => (f.type ?? null) === ty).reduce((a, f) => ((f.util ?? 0) > (a.util ?? 0) ? f : a)));
   const draw = (f) => f?.inp && f.r ? <Drawing model={f.kind === "spread" ? footingModel(f.inp, f.r) : pileCapModel(f.inp, f.r, PILES[f.pile]?.b ?? 0.18)} className="mx-auto h-[70mm]" fontSize={9} width={300} /> : <p className="text-gray-400">ไม่มีรูป ({f?.error ?? "ยังไม่ได้ออกแบบ"})</p>;
+  const marks = footingMarks(res.footings);
   return (
     <div className="max-w-[1500px] space-y-5 text-[12px]">
+      <section className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-white/[0.03]">
+        <h3 className="mb-1 text-sm font-semibold text-gray-800 dark:text-gray-100">แปลนฐานราก (ใต้ {frame.floors[0]?.name}) — ขนาดจริง สีตามแบบฐาน</h3>
+        <FootingPlan floor={frame.floors[0]} footings={res.footings} columns={res.columns.filter((c) => c.floor === 0)} colTypes={frame.colTypes} marks={marks} className="h-[520px] w-full" />
+        <FootingLegend footings={res.footings} marks={marks} />
+      </section>
       <section>
         <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]">
           <span className="font-medium text-gray-600">ใช้กำลังรับไม่เกิน</span>

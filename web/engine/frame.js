@@ -339,6 +339,15 @@ export function analyzeFrame(frame) {
     if (minP < 0) g.warnings.push(`ฐานราก ${c.stack}: แรงถอน ${Math.round(-minP)} กก. (ชุด ${lc.find((x) => x.R[2] === minP).name}) — ตรวจแรงถอนเข็ม`);
     return { ...worst, minP };
   });
+  // footings overlapping or too close (user 2026-11-04: "ฐานรากเดี่ยวไม่ค่อยติดหรือซ้อนกัน"): clear gap between plan rectangles
+  // < 0.10 m (room for the formwork / excavation) → combined footing or resize; each pair flagged on the footing plan (f.clash)
+  const gapMin = 0.1, clash = [];
+  for (let i = 0; i < footings.length; i++) for (let j = i + 1; j < footings.length; j++) {
+    const a = footings[i], b = footings[j]; if (!a.r?.Bx || !b.r?.Bx) continue;
+    const gx = Math.abs(a.p[0] - b.p[0]) - (a.r.Bx + b.r.Bx) / 2, gy = Math.abs(a.p[1] - b.p[1]) - (a.r.By + b.r.By) / 2, gap = Math.max(gx, gy);
+    if (gap < gapMin) { clash.push(`(${a.p[0].toFixed(2)}, ${a.p[1].toFixed(2)})–(${b.p[0].toFixed(2)}, ${b.p[1].toFixed(2)}) ${gap < 0 ? `ซ้อนกัน ${(-gap).toFixed(2)}` : `ห่าง ${gap.toFixed(2)}`} ม.`); (a.clash ??= []).push(j); (b.clash ??= []).push(i); }
+  }
+  if (clash.length) g.warnings.push(`ฐานรากซ้อน/ชิดกันเกินไป ${clash.length} คู่ (ระยะห่างน้อยกว่า ${gapMin.toFixed(2)} ม.): ${clash.slice(0, 3).join(" · ")}${clash.length > 3 ? " …" : ""} — ใช้ฐานรากร่วม หรือปรับขนาด / ตำแหน่งฐาน`);
   const lateral = lat && f3?.combos ? lateralChecks(frame, lat, f3) : null;
   // a type whose bars cannot be read would be checked with no steel at all: say so instead of a silent NG
   for (const t of beamTypes) for (const k of ["top", "bot", "topX", "botX"]) if (t[k] && !parseBars(t[k])) g.warnings.push(`Type คาน ${t.name}: อ่านเหล็ก "${t[k]}" ไม่ได้ (ใช้รูปแบบ เช่น 2-DB12, 3-RB9) — คิดเป็นไม่มีเหล็ก`);

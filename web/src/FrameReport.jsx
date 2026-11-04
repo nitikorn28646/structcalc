@@ -1,5 +1,6 @@
 // Thai calculation report for the RC frame drawn on plan: loads, slab panels, continuous beams, beam / column types, schedules.
 import { PILE_SAFE } from "../engine/frame.js";
+import FootingPlan, { FootingLegend, footingMarks } from "./FootingPlan.jsx";
 import { Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
@@ -56,9 +57,8 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           ["ผลการตรวจสอบรวม", res.ok ? "ผ่านทุกข้อ" : `คานไม่ผ่าน ${spans.filter((s) => !s.ok).length} ช่วง · เสาไม่ผ่าน ${res.columns.filter((c) => !c.ok).length} ต้น/ชั้น`, res.ok],
         ];
   // footing marks F1, F2 … : one per distinct footing (its type name when footing types are used)
-  const fKey = (f) => (f.type ? `T:${f.type}` : f.kind === "spread" ? `S:${f.r?.Bx}x${f.r?.By}x${f.inp?.t}|${f.r?.longText ?? f.inp?.sLong}` : `P:${f.n}x${f.pile}|${f.r?.Bx}x${f.r?.By}|${f.inp?.sLong}`);
-  const fNames = new Map(); for (const f of res.footings) if (!fNames.has(fKey(f))) fNames.set(fKey(f), f.type ?? `F${fNames.size + 1}`);
-  const fName = (f) => fNames.get(fKey(f));
+  // footing marks F1… (largest = F1) shared with the footing plan (FootingPlan.jsx footingMarks)
+  const FM = footingMarks(res.footings), fKey = (f) => FM.mark(f), fNames = new Map(FM.list.map((n) => [n, n])), fName = (f) => FM.mark(f);
   const Wrap = part === "all" ? ({ children }) => <div className="report">{children}</div> : ({ children }) => <>{children}</>;
   return (
     <Wrap>
@@ -124,7 +124,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           {(() => { const base = floors[0], cols0 = res.columns.filter((c) => c.floor === 0);
             const fts = res.footings.map((f) => ({ p: f.p, name: fName(f), Bx: f.r?.Bx, By: f.r?.By, text: f.kind === "spread" ? `${fmt(f.r?.Bx ?? 0, 2)}x${fmt(f.r?.By ?? 0, 2)}` : `เข็ม ${f.n}x${f.pile}` }));
             return <Figure caption={`แปลนฐานราก (ใต้ ${base.name}) — ${fNames.size} แบบ: ${[...fNames.values()].join(", ")}`}>
-              <Drawing model={framePlanModel(base, res.floors[0], types, cols0, { mode: "footings", footings: fts })} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>; })()}
+              <FootingPlan floor={base} footings={res.footings} columns={cols0} colTypes={colTypes} marks={FM} print className="mx-auto h-[118mm] w-full" /><FootingLegend footings={res.footings} marks={FM} /></Figure>; })()}
           {floors.map((f, k) => (
             <Figure key={`c${k}`} caption={`แปลนเสา — เสาใต้ ${f.name} (type และขนาด ซม.)`}>
               <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k), { mode: "columns", colTypes })} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
