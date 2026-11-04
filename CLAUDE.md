@@ -355,7 +355,15 @@ through, others stop at its face, beams stop at column faces, slabs inset to bea
 pile safe loads default PILE_SAFE (I-18 18 t, I-22 22 t, I-26 26 t); footing auto with types and none passing → noType + suggest;
 column-type levels vs floors warning + fill. LOAD CASES page (src/LoadCases.jsx, step 6 first tab, board step "assign"): tree DL/LL/DL+LL
 from panels finish/live, lineLoads (g SDL|WALL|LL, none = SP), pointLoads (g label only, solved as SP), walls read-only; Add → Assign
-to selection (FloorBoard onMulti/pickSet, panels boxable in "assign") or cursor (onPick). Not built yet: landing beams at mid level, load arrows in 3D.
+to selection (FloorBoard onMulti/pickSet, panels boxable in "assign") or cursor (onPick). Later 2026-11-04: workflow steps 2+3 merged → "เสา คาน พื้น" (WORKFLOW has no "slab" step; ?step=slab falls back to frame; slab table
+mode "struct"), all loads in step 5 (Load Cases has floor defaults, load check of slabs without finish/live or on the default, slab load
+table mode "load"); S slabs (one- and two-way) get dashed diagonals, PS the drafting symbol; warnings float over the plan; keyboard by
+e.code (Thai layout); Esc twice → select tool; stair partly over a slab warned; column-type levels vs floors; footing noType/suggest.
+Step numbers now: 0 project · 1 grid · 2 frame · 3 stair · 4 roof · 5 loads · 6 analysis · 7 design · 8 footing · 9 report.
+NEXT (user request 2026-11-04): stair with landing must load 3 beams — floor-1 beam (foot), LANDING BEAM AT MID LEVEL, floor-2 beam (head)
+— and the moments; today the landing edge goes to a beam of the floor below / this floor at that floor's level (landingTo). Plan: beam
+`level` (elevation inside the storey) → 3D joint on the columns at that height (column split), landing reaction on it, plan tag, 3D at
+the real height. Not built yet: that, load arrows in 3D, auto stair sizing button.
 
 OPEN ITEMS for the next session: (1) web copy published 2026-11-03 (Artifact version 3, without project files — open a .json with เปิด); (2) E2E expected re-saved; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
 torsion — likely the type list has no 20×40 with RB9 @0.10; check per-span reasons on the user's project); (4) Ole: 28 beams fail only on
