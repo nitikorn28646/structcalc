@@ -60,7 +60,8 @@ export async function printReport({ dialog = true, standalone = false } = {}) {
   // standalone: the paged book as one self-contained HTML file (user 2026-11-04: printing did nothing inside the claude.ai frame —
   // its sandbox blocks window.print). Styles are inlined (cross-origin sheets, e.g. Google Fonts, stay as links); opened, it prints itself.
   if (standalone) {
-    const css = [...document.styleSheets].map((sh) => { try { return `<style>${[...sh.cssRules].map((r) => r.cssText).join("\n")}</style>`; } catch { return sh.href ? `<link rel="stylesheet" href="${sh.href}">` : ""; } }).join("\n");
+    const css = [...document.styleSheets].map((sh) => { try { const abs = (t) => t.replace(/url\((["']?)(?!data:|blob:|https?:)([^)"']+)\1\)/g, (m, q, u) => `url("${new URL(u, sh.href || location.href).href}")`);
+      return `<style>${abs([...sh.cssRules].map((r) => r.cssText).join("\n"))}</style>`; } catch { return sh.href ? `<link rel="stylesheet" href="${sh.href}">` : ""; } }).join("\n");
     const html = `<!doctype html><html lang="th" class="printing"><head><meta charset="utf-8"><title>${document.title.replace(/</g, "")}</title>${css}</head><body>${root.outerHTML}`
       + `<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},600)})<\/script></body></html>`;
     done();
