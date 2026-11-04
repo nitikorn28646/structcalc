@@ -4,15 +4,32 @@ import { Previewer } from "pagedjs";
 // @page rules and running header/footer; Tailwind classes in the report body come from the app stylesheet.
 const PAGE_CSS = `
 @page {
-  size: A4; margin: 18mm 14mm 18mm 14mm;
+  size: A4; margin: 18mm 14mm 26mm 14mm;
   @top-left { content: string(rp-project); font: 8pt Sarabun, sans-serif; color: #667085; }
+  @top-center { content: string(rp-sec); font: 8pt Sarabun, sans-serif; color: #344054; }
   @top-right { content: "รายการคำนวณออกแบบโครงสร้าง (" string(rp-method) ")"; font: 8pt Sarabun, sans-serif; color: #667085; }
-  @bottom-left { content: "StructCalc · " string(rp-member); font: 8pt Sarabun, sans-serif; color: #98a2b3; }
-  @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 8pt Sarabun, sans-serif; color: #667085; }
+  @bottom-left { content: "StructCalc · " string(rp-member); font: 7.5pt Sarabun, sans-serif; color: #98a2b3; vertical-align: top; padding-top: 3mm; }
+  /* every sheet signed by the engineer (user 2026-11-04) */
+  @bottom-center { content: "ลงชื่อ ....................................................... วิศวกรผู้คำนวณ\\A" string(rp-eng); white-space: pre; text-align: center;
+    font: 8.5pt Sarabun, sans-serif; color: #344054; vertical-align: top; padding-top: 3mm; border-top: 0.6pt solid #98a2b3; }
+  @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 8pt Sarabun, sans-serif; color: #667085; vertical-align: top; padding-top: 3mm; }
 }
+/* the cover: no running header / footer (it carries its own signature block) */
+@page cover { margin: 14mm; @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-center { content: none; border: none; } @bottom-right { content: none; } }
+.rp-cover { page: cover; break-after: page; }
+/* the first chapter after the contents starts its own page (no break here: two breaks made an empty page) */
 .rp-str-project { string-set: rp-project content(text); }
 .rp-str-member { string-set: rp-member content(text); }
 .rp-str-method { string-set: rp-method content(text); }
+.rp-str-eng { string-set: rp-eng content(text); }
+.rp-sec-name { string-set: rp-sec content(text); }
+/* layout: every chapter on a new page; a heading stays with what follows; table heads repeat; rows / figures not cut */
+.rp-chapter { break-before: page; }
+.rp h2, .rp-sub, .rp-intro { break-after: avoid; }
+.rp thead { display: table-header-group; }
+.rp tr, .rp figure { break-inside: avoid; }
+.rp-toc a::after { content: target-counter(attr(href url), page); float: right; }
+.rp-toc a { display: block; border-bottom: 0.5pt dotted #98a2b3; }
 `;
 
 // Paginate the hidden report into #print-root, print, then clean up.
@@ -45,7 +62,8 @@ export const Chip = ({ ok, children }) => (
 );
 
 const WSD_STD = "วิธีหน่วยแรงใช้งาน (WSD) ตาม ว.ส.ท. / ACI 318";
-export function Doc({ project, title, subtitle, memberLabel, member, summary, method = "WSD", standard = WSD_STD, children }) {
+// bare: inside the whole-project book (cover / contents come from WorkReport): no title block, no info table, no end signature
+export function Doc({ project, title, subtitle, memberLabel, member, summary, method = "WSD", standard = WSD_STD, children, bare = false }) {
   const info = [["โครงการ", project.name], ["เจ้าของโครงการ", project.owner || "-"], ["สถานที่ก่อสร้าง", project.location || "-"],
     ["วิศวกรผู้คำนวณ", `${project.engineer || "-"} ${project.license ? `(${project.license})` : ""}`],
     [memberLabel, project.floor ? `${member} · ชั้น ${project.floor}` : member], ["วันที่", project.date]];
@@ -54,6 +72,8 @@ export function Doc({ project, title, subtitle, memberLabel, member, summary, me
       <span className="rp-str-project hidden">{project.name}</span>
       <span className="rp-str-member hidden">{`${memberLabel} ${member}`}</span>
       <span className="rp-str-method hidden">{method}</span>
+      <span className="rp-str-eng hidden">{`(${project.engineer || ".............................................."})${project.license ? `  ทะเบียน ${project.license}` : ""}`}</span>
+      {bare ? <>{children}</> : <>
       <div className="mb-3 rounded-lg bg-[#465fff] px-4 py-3 text-[#fff]">
         <div className="text-[14pt] font-semibold leading-tight">{title}</div>
         <div className="text-[9pt] opacity-90">{subtitle}</div>
@@ -84,21 +104,77 @@ export function Doc({ project, title, subtitle, memberLabel, member, summary, me
       )}
       {children}
       <Signature project={project} standard={standard} />
+      </>}
+    </div>
+  );
+}
+// bare reports put this inside their first chapter (a box before a chapter break stood alone on a page)
+export function SummaryBox({ summary }) {
+  return (
+    <div className="mb-4 break-inside-avoid rounded-lg border border-[#c7d2fe] bg-[#eef2ff] px-4 py-2.5">
+      <div className="mb-1 font-semibold text-[#3641f5]">สรุปผลการออกแบบ</div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-[9.5pt]">
+        {summary.map(([k, v, ok]) => (
+          <div key={k} className="flex justify-between gap-2 border-b border-[#dde3ff] py-0.5">
+            <span className="text-[#475467]">{k}</span>
+            <span className="flex items-center gap-1.5 font-semibold">{v}{ok !== undefined && <Chip ok={ok} />}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-export function Sec({ n, th, en, intro, children }) {
+// chapter = starts a new printed page (default); id = anchor for the table of contents
+export function Sec({ n, th, en, intro, children, id, chapter = true }) {
   return (
-    <section className="mb-4">
+    <section id={id} className={`mb-4 ${chapter ? "rp-chapter" : ""}`}>
       <h2 className="mb-1 flex items-baseline gap-2 border-b-2 border-[#465fff] pb-0.5 break-after-avoid">
-        <span className="rounded bg-[#465fff] px-1.5 text-[9pt] font-semibold text-[#fff]">ขั้นที่ {n}</span>
-        <span className="text-[11.5pt] font-semibold">{th}</span>
+        <span className="rounded bg-[#465fff] px-1.5 text-[9pt] font-semibold text-[#fff]">{typeof n === "number" ? `ขั้นที่ ${n}` : n}</span>
+        <span className="rp-sec-name text-[11.5pt] font-semibold">{th}</span>
         {en && <span className="text-[8.5pt] text-[#98a2b3]">{en}</span>}
       </h2>
-      {intro && <p className="mb-1.5 text-[9pt] text-[#475467] break-after-avoid">{intro}</p>}
+      {intro && <p className="rp-intro mb-1.5 text-[9pt] text-[#475467] break-after-avoid">{intro}</p>}
       {children}
     </section>
+  );
+}
+// sub-heading kept on the page of the table / figure after it
+export const Sub = ({ children, className = "" }) => <p className={`rp-sub mt-2 font-semibold text-gray-800 ${className}`}>{children}</p>;
+
+// formal cover page (user 2026-11-04): title, project data, standards, engineer signature block
+export function Cover({ project, title = "รายการคำนวณออกแบบโครงสร้าง", subtitle, items = [], standards = [] }) {
+  const rows = [["โครงการ", project.name], ["เจ้าของโครงการ", project.owner], ["สถานที่ก่อสร้าง", project.location], ...items, ["วันที่", project.date]].filter(([, v]) => v);
+  return (
+    <div className="rp-cover flex min-h-[265mm] flex-col border-[1.5pt] border-double border-[#1d2939] p-[10mm] text-center">
+      <div className="text-[10pt] tracking-[0.3em] text-[#475467]">STRUCTURAL CALCULATION</div>
+      <div className="mt-[22mm] text-[24pt] font-semibold leading-tight text-[#1d2939]">{title}</div>
+      {subtitle && <div className="mt-2 text-[12pt] text-[#475467]">{subtitle}</div>}
+      <div className="mx-auto mt-[16mm] h-[1.2pt] w-[60%] bg-[#1d2939]" />
+      <table className="mx-auto mt-[12mm] w-[80%] text-left text-[12pt]"><tbody>
+        {rows.map(([k, v]) => <tr key={k}><td className="w-[38%] py-1.5 align-top text-[#475467]">{k}</td><td className="py-1.5 font-semibold text-[#1d2939]">{v}</td></tr>)}
+      </tbody></table>
+      {standards.length > 0 && <div className="mx-auto mt-[12mm] w-[80%] text-left text-[9.5pt] text-[#475467]">
+        <div className="mb-1 font-semibold text-[#344054]">มาตรฐานและกฎหมายที่ใช้</div>
+        <ol className="list-decimal pl-5">{standards.map((x) => <li key={x}>{x}</li>)}</ol></div>}
+      <div className="mt-auto grid grid-cols-2 gap-[10mm] pt-[12mm] text-[11pt]">
+        <div className="self-end text-left text-[9pt] text-[#667085]">รายการคำนวณนี้ลงนามโดยวิศวกรผู้คำนวณทุกแผ่น</div>
+        <div>
+          <div className="mb-1">ลงชื่อ ...................................................................</div>
+          <div>( {project.engineer || "..................................................."} )</div>
+          <div className="text-[10pt] text-[#475467]">วิศวกรผู้คำนวณ{project.license ? ` · ทะเบียน ${project.license}` : ""}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+// table of contents with page numbers (Paged.js target-counter); items [{ id, n, th }]
+export function Toc({ items }) {
+  return (
+    <div className="rp-toc-page">
+      <h2 className="mb-3 border-b-2 border-[#465fff] pb-1 text-[14pt] font-semibold">สารบัญ</h2>
+      <div className="rp-toc text-[11pt] leading-[2]">{items.map((x) => <div key={x.id}><a href={`#${x.id}`} className="text-[#1d2939] no-underline">{x.n}  {x.th}</a></div>)}</div>
+    </div>
   );
 }
 

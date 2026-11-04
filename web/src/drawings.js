@@ -575,34 +575,47 @@ export function plateModel(g, plates, posts = []) {
   return d.framed(60);
 }
 // ---------------------------------------------------------------- RC floor framing plan: grid, beams (true width, coloured by type), columns, slab panels
-export function framePlanModel(floor, an, beamTypes, cols = []) {
-  const d = new Draw(9), c = ([x, y]) => [x * 100, y * 100];
+// opts.mode (report plans, user 2026-11-04): "beams" (default: beams at true width coloured by type, tags), "columns" (column plan: type
+// and size at every column, beams thin), "footings" (footing plan: footing outline at true size + tag / size / piles, beams thin),
+// "slabs" (slab plan: panel tag, kind, thickness, span direction; beams thin). opts.colTypes / opts.footings [{p, name, Bx, By, text}]
+export function framePlanModel(floor, an, beamTypes, cols = [], opts = {}) {
+  const mode = opts.mode ?? "beams", d = new Draw(9), c = ([x, y]) => [x * 100, y * 100];
   const pts = [...floor.columns, ...floor.beams.flatMap((b) => [b.a, b.b])];
   if (!pts.length) return d.framed(60);
-  const G = floor.grid, axis = (o, ds) => ds.reduce((a, v) => [...a, a[a.length - 1] + v], [o]), GX = axis(G.x0, G.dx), GY = axis(G.y0, G.dy);
+  const G = floor.grid ?? { x0: 0, y0: 0, dx: [], dy: [] }, axis = (o, ds) => ds.reduce((a, v) => [...a, a[a.length - 1] + v], [o]), GX = axis(G.x0, G.dx), GY = axis(G.y0, G.dy);
   const x0 = Math.min(...GX, ...pts.map((p) => p[0])) * 100 - 120, x1 = Math.max(...GX, ...pts.map((p) => p[0])) * 100 + 120;
   const y0 = Math.min(...GY, ...pts.map((p) => p[1])) * 100 - 120, y1 = Math.max(...GY, ...pts.map((p) => p[1])) * 100 + 120;
   GX.forEach((x, i) => { d.line([x * 100, y0], [x * 100, y1], "DIM"); d.circle([x * 100, y1 + 40], 28, "DIM"); d.text(String.fromCharCode(65 + i), x * 100, y1 + 40); });
   GY.forEach((y, i) => { d.line([x0, y * 100], [x1, y * 100], "DIM"); d.circle([x1 + 40, y * 100], 28, "DIM"); d.text(String(GY.length - i), x1 + 40, y * 100); });
   GX.slice(1).forEach((x, i) => d.dim(GX[i] * 100, x * 100, y0 - 40, `${num(x - GX[i], 2)}`, false, 10));
   GY.slice(1).forEach((y, i) => d.dim(GY[i] * 100, y * 100, x0 - 40, `${num(y - GY[i], 2)}`, true, 10));
-  an?.panels.forEach((p, i) => {
+  if (mode === "slabs") an?.panels.forEach((p, i) => {
     const m = p.P.reduce((s, q) => [s[0] + (q[0] * 100) / p.P.length, s[1] + (q[1] * 100) / p.P.length], [0, 0]);
-    d.text(p.open ? `P${i + 1} ช่องเปิด` : `P${i + 1} (${p.kind === "twoway" ? "2 ทาง" : p.kind === "oneway" ? "1 ทาง" : "อื่นๆ"}) t=${num(p.t * 100, 0)} ซม.`, m[0], m[1]);
+    const kind = p.open ? "ช่องเปิด" : p.stairWell ? "ช่องบันได" : p.st === "GS" ? "GS บนดิน" : p.st === "PS" ? `PS ${p.dir === "x" ? "↔" : "↕"}` : p.kind === "twoway" ? "S 2 ทาง" : p.kind === "oneway" ? "S 1 ทาง" : "S";
+    d.text(`P${i + 1}`, m[0], m[1] + 14); d.text(`${kind}${p.open || p.stairWell ? "" : ` t=${num(p.t * 100, 0)}`}`, m[0], m[1] - 14);
   });
   floor.beams.forEach((b, i) => {
-    const sp = an?.spans.find((s) => s.member === i), ti = sp?.typeIdx ?? b.type ?? 0, t = beamTypes[ti] ?? beamTypes[0], layer = `PLATE${ti % PLATE_COLORS.length}`;
+    const sps = an?.spans.filter((s) => (s.members ?? [s.member]).includes(i)) ?? [], sp = sps[0], ti = sp?.typeIdx ?? b.type ?? 0, t = beamTypes[ti] ?? beamTypes[0];
+    const layer = mode === "beams" ? `PLATE${ti % PLATE_COLORS.length}` : "OUTLINE";
     const a = c(b.a), e = c(b.b), L = Math.hypot(e[0] - a[0], e[1] - a[1]), n = [-(e[1] - a[1]) / L, (e[0] - a[0]) / L], w = (t.b * 100) / 2;
     if (b.arc?.s) { // arc beam: inner and outer faces as short chords, offsets in plan metres
       const sc = L / Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]);
       for (const s of [-1, 1]) { const P = arcPolyline(b.a, b.b, b.arc.s, 16), off = P.map((p, k) => { const q = P[Math.min(k + 1, P.length - 1)], r = P[Math.max(k - 1, 0)], tx = q[0] - r[0], ty = q[1] - r[1], tl = Math.hypot(tx, ty); return c([p[0] - (ty / tl) * (w / sc) * s, p[1] + (tx / tl) * (w / sc) * s]); }); off.slice(1).forEach((p, k) => d.line(off[k], p, layer)); }
     } else for (const s of [-1, 1]) d.line([a[0] + n[0] * w * s, a[1] + n[1] * w * s], [e[0] + n[0] * w * s, e[1] + n[1] * w * s], layer);
-    const vert = Math.abs(n[0]) > 0.7;
-    d.text(`${t.name} ${num(t.b * 100, 0)}x${num(t.h * 100, 0)}`, (a[0] + e[0]) / 2 - n[0] * (w + 26), (a[1] + e[1]) / 2 - n[1] * (w + 26), vert);
+    if (mode !== "beams") return;
+    const vert = Math.abs(n[0]) > 0.7, cant = sps.length && sps.every((x) => x.kind === "cantilever");
+    d.text(`${t.name}${cant ? "A" : ""} ${num(t.b * 100, 0)}x${num(t.h * 100, 0)}`, (a[0] + e[0]) / 2 - n[0] * (w + 26), (a[1] + e[1]) / 2 - n[1] * (w + 26), vert);
   });
+  // footings first (under the columns)
+  if (mode === "footings") for (const f of opts.footings ?? []) {
+    const q = c(f.p), B = (f.Bx ?? 0.6) * 100, D = (f.By ?? 0.6) * 100;
+    d.rect(q[0] - B / 2, q[1] - D / 2, B, D, "OUTLINE");
+    d.text(f.name, q[0], q[1] - D / 2 - 16); if (f.text) d.text(f.text, q[0], q[1] - D / 2 - 40);
+  }
   floor.columns.forEach((p, i) => {
     const col = cols.find((x) => x.i === i), B = col?.lv?.Bx ?? 20, D = col?.lv?.By ?? 20, q = c(p);
     d.rect(q[0] - B / 2, q[1] - D / 2, B, D, "COLUMN");
+    if (mode === "columns" && col) d.text(`${opts.colTypes?.[col.typeIdx]?.name ?? ""} ${B}x${D}`, q[0], q[1] + D / 2 + 18);
   });
   return d.framed(60);
 }

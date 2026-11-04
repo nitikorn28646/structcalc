@@ -339,6 +339,13 @@ REVIEW FIXES (2026-11-03, cloud session, branch feature/review-fixes; findings i
   Yasothon k = 1/2/3/5: 232k/179k/173k/158k ฿, all 57/57. Big house: ~12 s per press. Test: cli/beamtypes-check.mjs (in the gate).
 - Bar clear spacing default 3.5 cm (user; floor.js DEFAULT_BAR_CLEAR, was 2.5). 3D frame joins near-miss joints (≤ 3.5 cm) and
   splits a host beam where the floor analysis put a beam on it (near-miss ends were loose → "unstable").
+- REPORT BOOK (user 2026-11-04: headings on the wrong page, more plans, formal cover, every sheet signed): src/WorkReport.jsx = Cover
+  (formal, ReportKit Cover) + Toc (Paged.js target-counter page numbers) + FrameReport part "front" (criteria with summary, lateral,
+  plans) + RoofReport bare (one chapter, sections n.1 …) + FrameReport part "back" (loads/slabs per floor, beam types, columns,
+  footings with F1… marks, plan and detail per footing type, schedules incl. footings, appendix = span tables + beam line diagrams).
+  framePlanModel opts.mode "beams" | "columns" | "footings" | "slabs". PAGE_CSS: signature in @bottom-center on every page, chapter
+  name in @top-center (string rp-sec), .rp-chapter = new page, .rp-sub / h2 keep with next, thead repeats, named page "cover".
+  Yasothon book 53 pages (Chromium). Standalone #frame / roof prints unchanged (part "all", bare false).
 - Baselines re-saved (regress + E2E). PyNite / Excel diffs NOT re-run here (cloud): re-run frame3d/contBeam PyNite and the beam Excel
   diff on the Windows PC (only V input changed for beams; beam.js untouched).
 

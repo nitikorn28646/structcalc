@@ -24,6 +24,7 @@ import { DEFAULT_FOOTING, FootingPage, FootingReport } from "./FootingPage.jsx";
 import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
 import { applyStandard } from "./DesignCriteria.jsx";
 import { FrameReport } from "./FrameReport.jsx";
+import { WorkReport } from "./WorkReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
 import { roofFromFrame, roofPoints } from "./roofLink.js";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
@@ -493,7 +494,7 @@ export default function App() {
           {mod === "work" ? (step === "roof" ? <div className="flex min-h-0 flex-1 flex-col"><div className="px-4 pt-3"><RoofLinkCard frame={frame} roof={roof} onFromFrame={roofFromStructure} set={setFrame} /></div><RoofPage roof={roof} set={setRoof} dark={dark} onFromFrame={roofFromStructure} /></div> : step === "report" ? (
             <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="report-preview mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
               <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง (หลังคา → โครงสร้าง → ฐานราก) · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
-              <RoofReport roof={roof} project={st.project} /><FrameReport frame={frame} project={st.project} />
+              <WorkReport frame={frame} roof={roof} project={st.project} />
             </div></main>
           ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} onProjectInfo={() => setProjOpen(true)}  onRoofFromFrame={roofFromStructure} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
           <main className="grid min-h-0 flex-1 gap-4 p-4 md:p-5 xl:grid-cols-[300px_1fr_1fr_1.15fr] xl:grid-rows-[auto_1fr]">
@@ -602,7 +603,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <ErrorBoundary resetKey={mod} quiet>{mod === "work" ? <><RoofReport roof={roof} project={st.project} /><FrameReport frame={frame} project={st.project} /></> : mod === "footing" ? <FootingReport f={footing} project={st.project} /> : mod === "stair" ? <StairReport s={stairSt} project={st.project} /> : mod === "column" ? <ColumnReport c={column} project={st.project} /> : mod === "slab" ? <SlabReport s={slab} project={st.project} /> : <Report st={st} res={res} forces={forces} fns={fns} />}</ErrorBoundary>
+      <ErrorBoundary resetKey={mod} quiet>{mod === "work" ? <WorkReport frame={frame} roof={roof} project={st.project} /> : mod === "footing" ? <FootingReport f={footing} project={st.project} /> : mod === "stair" ? <StairReport s={stairSt} project={st.project} /> : mod === "column" ? <ColumnReport c={column} project={st.project} /> : mod === "slab" ? <SlabReport s={slab} project={st.project} /> : <Report st={st} res={res} forces={forces} fns={fns} />}</ErrorBoundary>
     </>
   );
 }
