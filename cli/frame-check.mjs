@@ -32,4 +32,9 @@ const fl = (name, h, ex) => ({ name, h, t: 0.12, finish: 100, live: 200, columns
 const near = analyzeFrame({ ...frame, floors: [{ ...fl("GB", 1.5, []), t: 0 }, fl("F2", 3, [Bm(g(2, 0), g(2, 4)), Bm(g(2.02, 2), g(4, 2))])], colPick: {}, analysis: "envelope" });
 const ok2 = !!near.frame3d && Math.abs(near.frame3d.base.reduce((s, b) => s + b.R[2], 0) - near.frame3d.load) < 1e-6 * near.frame3d.load;
 console.log(`${ok2 ? "ok  " : "FAIL"} beam end 2 cm off its carrier: 3D frame stable and in equilibrium`);
-process.exit(ok && ok2 ? 0 : 1);
+// bored pile reinforcement (engine/borePile.js): Pa = 0.85·Ag·(0.25 f'c + fs ρ) ≥ P, ρ ≥ 0.5 %, ≥ 6 bars, clear spacing kept
+const { borePileRebar } = await import("../web/engine/borePile.js");
+const bp = [[0.35, 30000], [0.5, 60000], [0.6, 85000], [1.0, 230000]].map(([D, P]) => ({ D, P, r: borePileRebar({ D, P, fc: 240 }) }));
+const ok3 = bp.every(({ P, r }) => r.ok && r.Pa >= P && r.rho >= 0.005 - 1e-9 && r.n >= 6) && Math.abs(bp[1].r.Pa - 0.85 * bp[1].r.Ag * (0.25 * 240 + 1600 * bp[1].r.rho)) < 1e-6;
+console.log(`${ok3 ? "ok  " : "FAIL"} bored pile bars: ${bp.map(({ D, r }) => `Ø${D} ${r.n}-${r.bar}`).join(" · ")}`);
+process.exit(ok && ok2 && ok3 ? 0 : 1);

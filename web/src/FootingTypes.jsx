@@ -18,7 +18,7 @@ const box = "h-7 rounded border border-gray-300 bg-transparent px-1 text-[12px]"
 const KIND = (p) => (p.startsWith("I-") ? "ไอ (I)" : p.startsWith("SO-") ? "สี่เหลี่ยมกลวง" : p.startsWith("S-") ? "สี่เหลี่ยมตัน" : p.startsWith("HP") ? "เหล็ก H" : "เข็มเจาะ");
 const BARS = Object.keys(SLAB_BARS).filter((b) => b.startsWith("DB"));
 // the pile-cap checks that failed, in words (engine/footing.js flags)
-const WHY = { pileOk: "แรงต่อเข็มเกินค่าปลอดภัย", dOk: "ฐานบางไป (ความลึกประสิทธิผล)", vOk: "แรงเฉือนทางเดียว", vpOk: "แรงเฉือนทะลุรอบเสา", vppOk: "แรงเฉือนทะลุรอบเข็ม",
+const WHY = { boreOk: "เหล็กเสริมในเข็มเจาะไม่พอ (เพิ่มขนาดเข็ม)", pileOk: "แรงต่อเข็มเกินค่าปลอดภัย", dOk: "ฐานบางไป (ความลึกประสิทธิผล)", vOk: "แรงเฉือนทางเดียว", vpOk: "แรงเฉือนทะลุรอบเสา", vppOk: "แรงเฉือนทะลุรอบเข็ม",
   AsOkL: "เหล็กแนวยาวไม่พอ", AsOkS: "เหล็กแนวสั้นไม่พอ", perimOk: "แรงยึดเหนี่ยวเหล็ก", ancOk: "ระยะฝังเหล็กไม่พอ (ขยายฐาน / ใช้เหล็กเล็กลง)", bearingOk: "แรงแบกทานใต้เสา", limOk: "แรงต่อเข็มเกินขีดที่กำหนด" };
 const WHY_S = { qOk: "แรงดันดินเกิน qa (ขยายฐาน)", qminOk: "แรงดันดินติดลบ — ฐานยก (ขยายฐาน)", dOk: "ฐานบางไป (ความลึกประสิทธิผล)", vOk: "แรงเฉือนทางเดียว", vpOk: "แรงเฉือนทะลุรอบเสา",
   AsOkL: "เหล็กแนวยาวไม่พอ", AsOkS: "เหล็กแนวสั้นไม่พอ", perimOkL: "แรงยึดเหนี่ยวเหล็กแนวยาว", perimOkS: "แรงยึดเหนี่ยวเหล็กแนวสั้น", ancOkL: "ระยะฝังเหล็กแนวยาวไม่พอ",
@@ -134,7 +134,7 @@ export function FootingTypes({ frame, set, res }) {
             <td className={td}>{fmt(f.P / 1000, 2)}</td><td className={td}>{fmt(f.Mx ?? 0, 0)} / {fmt(f.My ?? 0, 0)}</td><td className={td}>{f.combo ?? "D+L"}</td>
             <td className={td}>{f.kind === "spread" ? "ฐานแผ่" : `${f.n} × ${f.pile}`}</td><td className={td}>{f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp?.t ?? 0.4, 2)}` : "-"}</td>
             <td className={td}>{!f.r ? "-" : f.kind === "spread" ? `q ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`}</td>
-            <td className={td}>{f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error}</td>
+            <td className={td}>{f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error}{f.r?.bore && <span className="block text-[11px] text-[#0e9384]">เข็มเจาะ: {f.r.bore.text}</span>}</td>
             <td className={`${td} ${f.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{f.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
             <td className={`${td} text-red-600`}>{f.ok ? "" : <>{f.noType && <b>ไม่มี type ไหนผ่าน — แสดง {f.type ?? "ตัว"}ที่ใกล้ผ่านที่สุด · </b>}{why(f)}{f.suggest && <span className="block text-[#b54708]">แนะนำเพิ่ม type: {f.suggest}</span>}</>}</td>
           </tr>)}</tbody></table>

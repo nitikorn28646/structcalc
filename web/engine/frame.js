@@ -1,6 +1,7 @@
 // Multi-storey frame (WSD): floors analysed from the top down; column axial loads accumulate floor by floor (+ self weight);
 // a column with nothing under it becomes a point load on the beams of the floor below. Columns are checked with engine/column.js.
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
+import { borePileRebar } from "./borePile.js";
 import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
 import { BARS } from "./tables.js";
 import { frame3dModel } from "./frame3d.js";
@@ -111,8 +112,12 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
       const ok = capOk(r, n) && r.limOk;
       if (tt.nb > 1) r.longText = `${r.nLong}-${inp.longBar} @ ${inp.sLong.toFixed(3)}`;
       if (tt.nbS > 1) r.shortText = `${r.nShort}-${inp.shortBar} @ ${inp.sShort.toFixed(3)}`;
-      if (ok) return { n, pile, r, ok, util: u, inp, type: tt.name ?? null };
-      if (!best || u < best.util) best = { n, pile, r, ok, util: u, inp, type: tt.name ?? null };
+      // bored pile: reinforcement inside the pile for its largest load (engine/borePile.js; soil capacity = the safe load given)
+      const bore = PILES[pile]?.bored ? borePileRebar({ D: PILES[pile].b, P: r.Ptmax, fc: fo.fcBore ?? 240, fy: fo.fy ?? 4000, L: tt.L ?? fo.pileL }) : null;
+      if (bore) { r.bore = bore; r.boreOk = bore.ok; }
+      const ok2 = ok && (!bore || bore.ok);
+      if (ok2) return { n, pile, r, ok: ok2, util: u, inp, type: tt.name ?? null };
+      if (!best || u < best.util) best = { n, pile, r, ok: ok2, util: u, inp, type: tt.name ?? null };
     } catch (e) { best ??= { n, pile, error: e.message, ok: false, util: 9, type: tt.name ?? null }; }
   }
   // auto with a type list and no type passes (user 2026-11-04: "F4 had one footing, after enlarging it many columns became F4"):
