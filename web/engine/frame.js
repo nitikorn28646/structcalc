@@ -115,6 +115,15 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
       if (!best || u < best.util) best = { n, pile, r, ok, util: u, inp, type: tt.name ?? null };
     } catch (e) { best ??= { n, pile, error: e.message, ok: false, util: 9, type: tt.name ?? null }; }
   }
+  // auto with a type list and no type passes (user 2026-11-04: "F4 had one footing, after enlarging it many columns became F4"):
+  // the closest type is shown, flagged noType, with the cap the program would design without the list as a suggestion
+  if (best && !fo.fixed && fo.types?.length) {
+    best = { ...best, noType: true };
+    try {
+      const alt = designFooting(P, pier, mat, { ...DEFAULT_FOOTING, ...fo, types: undefined, fixed: undefined }, Mx, My);
+      if (alt?.ok && alt.r) best.suggest = `${alt.n} × ${alt.pile} ฐาน ${alt.r.Bx.toFixed(2)} × ${alt.r.By.toFixed(2)} × ${(alt.inp?.t ?? 0).toFixed(2)} ม. ${alt.inp?.longBar ?? ""} @${(alt.inp?.sLong ?? 0).toFixed(2)}`;
+    } catch { /* no suggestion */ }
+  }
   return best;
 }
 

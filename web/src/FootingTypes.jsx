@@ -136,7 +136,7 @@ export function FootingTypes({ frame, set, res }) {
             <td className={td}>{!f.r ? "-" : f.kind === "spread" ? `q ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`}</td>
             <td className={td}>{f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error}</td>
             <td className={`${td} ${f.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{f.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
-            <td className={`${td} text-red-600`}>{f.ok ? "" : why(f)}</td>
+            <td className={`${td} text-red-600`}>{f.ok ? "" : <>{f.noType && <b>ไม่มี type ไหนผ่าน — แสดง {f.type ?? "ตัว"}ที่ใกล้ผ่านที่สุด · </b>}{why(f)}{f.suggest && <span className="block text-[#b54708]">แนะนำเพิ่ม type: {f.suggest}</span>}</>}</td>
           </tr>)}</tbody></table>
       </section>
       <section>

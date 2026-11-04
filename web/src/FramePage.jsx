@@ -19,6 +19,7 @@ import { fmt } from "./beamModel.js";
 import { beamCost, generateBeamTypes } from "../engine/beamTypes.js";
 import { findOverlaps, mergeOverlaps } from "../engine/floor.js";
 import { locateWarning } from "./warnLocate.js";
+import LoadCases from "./LoadCases.jsx";
 import { highlight } from "./highlight.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, spanReasons, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
@@ -157,8 +158,14 @@ function ColTypeTable({ types, setTypes, res, floors }) {
   const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] tabular-nums";
   const num = (i, j, k, step) => <input type="number" step={step} defaultValue={types[i].levels[j][k]} key={types[i].levels[j][k]} onBlur={(e) => setLv(i, j, k, Number(e.target.value))} className={`${cell} compact-num`} />;
   const sel = (i, j, k, opts) => <select value={types[i].levels[j][k]} onChange={(e) => setLv(i, j, k, e.target.value)} className={cell}>{opts.map((o) => <option key={o}>{o}</option>)}</select>;
+  // levels follow the project floors (user 2026-11-04: the type had 3 levels, the project 4 floors → the top level was used twice, unseen)
+  const short = types.filter((t) => t.levels.length < floors.length);
+  const fit = () => setTypes(types.map((t) => (t.levels.length >= floors.length ? t : { ...t, levels: [...t.levels, ...floors.slice(t.levels.length).map((f) => ({ ...t.levels.at(-1), level: f.name }))] })));
   return (
     <div className="space-y-4 overflow-auto text-[12px]">
+      {short.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] text-[#b54708]">
+        <span>โครงการมี {floors.length} ชั้น ({floors.map((f) => f.name).join(" · ")}) แต่ type {short.map((t) => `${t.name} มี ${t.levels.length} ระดับ`).join(", ")} — ชั้นที่เกินใช้ระดับบนสุดของ type ซ้ำ</span>
+        <button onClick={fit} className="rounded-md bg-[#b54708] px-2 py-0.5 font-medium text-white hover:opacity-90">เพิ่มระดับให้ครบทุกชั้น (คัดลอกระดับบน)</button></div>}
       {types.map((t, i) => (
         <div key={i}>
           <div className="mb-1 flex items-center gap-2 font-semibold"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }} />
@@ -170,14 +177,14 @@ function ColTypeTable({ types, setTypes, res, floors }) {
             <tbody>{t.levels.map((lv, j) => (
               <tr key={j} className="border-b border-gray-100">
                 <td className="px-1"><input defaultValue={lv.level} key={lv.level} onBlur={(e) => setLv(i, j, "level", e.target.value)} className={cell} /></td>
-                <td className="px-1 text-gray-500">{floors[j]?.name ?? (j === t.levels.length - 1 ? "ชั้นที่สูงกว่า" : "—")}</td>
+                <td className={`px-1 ${j >= floors.length ? "text-gray-300" : j === t.levels.length - 1 && floors.length > t.levels.length ? "font-medium text-[#b54708]" : "text-gray-500"}`}>{j >= floors.length ? "ไม่มีชั้นนี้ (ไม่ใช้)" : j === t.levels.length - 1 ? floors.slice(j).map((f) => f.name).join(", ") : floors[j].name}</td>
                 <td className="px-1 w-16">{num(i, j, "Bx", 5)}</td><td className="px-1 w-16">{num(i, j, "By", 5)}</td><td className="px-1 w-16">{num(i, j, "n", 2)}</td>
                 <td className="px-1 w-20">{sel(i, j, "mainBar", ["DB 12", "DB 16", "DB 20", "DB 25"])}</td><td className="px-1 w-20">{sel(i, j, "tieBar", ["RB 6", "RB 9", "DB 10"])}</td>
                 <td className="px-1 w-16">{num(i, j, "s", 0.025)}</td>
                 <td><button onClick={() => setTypes(types.map((x, a) => (a === i ? { ...x, levels: x.levels.filter((_, b) => b !== j) } : x)))} disabled={t.levels.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button></td>
               </tr>))}</tbody>
           </table>
-          <button onClick={() => setTypes(types.map((x, a) => (a === i ? { ...x, levels: [...x.levels, { ...x.levels.at(-1), level: `ชั้น ${x.levels.length}` }] } : x)))} className="mt-1 text-[12px] text-brand-500">+ เพิ่มระดับ</button>
+          <button onClick={() => setTypes(types.map((x, a) => (a === i ? { ...x, levels: [...x.levels, { ...x.levels.at(-1), level: floors[x.levels.length]?.name ?? `ชั้น ${x.levels.length}` }] } : x)))} className="mt-1 text-[12px] text-brand-500">+ เพิ่มระดับ</button>
         </div>
       ))}
       <button onClick={() => setTypes([...types, { ...types.at(-1), name: `C${types.length + 1}` }])} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่ม type เสา</button>
@@ -193,6 +200,7 @@ const STEPS = [["frame", "1 โครง", false, "ขั้น 1 โครง: 
   ["types", "Type คาน", false, "ตาราง Type คาน"], ["ctypes", "Type เสา", false, "ตาราง Type เสา"]];
 
 export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo, onRoofFromFrame }) {
+  const [multiSel, setMultiSel] = useState([]), [pickSet, setPickSet] = useState(null), [armed, setArmed] = useState(false), pickRef = useRef(null); // Load Cases page
   const [subState, setSubState] = useState(null), [view, setView] = useState("2d"), [sel, setSel] = useState(null), mode = step, setMode = () => {};
   const [show, setShow] = useState({ DL: true, SDL: true, WALL: true, LL: true, SP: true }), wallTypes = frame.wallTypes ?? DEFAULT_WALL_TYPES;
   const cur = Math.min(frame.cur ?? 0, frame.floors.length - 1), fl = frame.floors[cur], types = frame.beamTypes, cTypes = frame.colTypes;
@@ -266,17 +274,17 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     ["สรุปทั้งอาคาร", res.ok ? "ผ่านทั้งหมด" : `คานไม่ผ่าน ${res.floors.reduce((s, a) => s + a.spans.filter((x) => !x.ok).length, 0)} · เสาไม่ผ่าน ${res.columns.filter((c) => !c.ok).length}`]];
 
   // ---- workflow layout: sub-tabs + view switch, centre (2D / 3D / split or a table page), inspector on the right, drawer, status bar
-  const SUBS = { analysis: [["cont", "แรงภายในคาน"], ["colf", "แรงในเสา"], ["frame3d", "เทียบ 2 วิธี / ตั้งค่า"]], loads: [["wall", "ผนัง"], ["other", "น้ำหนักอื่น / หลังคา"], ["groups", "สรุปกลุ่มน้ำหนัก"], ["lateral", "ลม / แผ่นดินไหว / Combination"]],
+  const SUBS = { analysis: [["cont", "แรงภายในคาน"], ["colf", "แรงในเสา"], ["frame3d", "เทียบ 2 วิธี / ตั้งค่า"]], loads: [["cases", "Load Cases (ใส่น้ำหนัก)"], ["wall", "ผนัง (แบบวาด)"], ["other", "น้ำหนักอื่น / หลังคา"], ["groups", "สรุปกลุ่มน้ำหนัก"], ["lateral", "ลม / แผ่นดินไหว / Combination"]],
     design: [["result", "คาน"], ["cols", "เสา"], ["slabs", "พื้น / บันได"], ["types", "Type คาน"], ["ctypes", "Type เสา"]] };
   const subs = SUBS[step], sub = subs ? (subs.some((x) => x[0] === subState) ? subState : subs[0][0]) : null;
-  const boardStep = { frame: "frame", grid: "grid", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
+  const boardStep = { frame: "frame", grid: "grid", slab: "slab", stair: "stair", analysis: "result", footing: "cols" }[step] ?? (step === "loads" ? (sub === "cases" ? "assign" : sub === "other" ? "other" : "wall") : step === "design" ? (sub === "cols" ? "cols" : "result") : "result");
   const tablePage = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || step === "footing" || (step === "loads" && ["groups", "lateral"].includes(sub));
   // bulk tables: slab panels (step 3) and beam walls / line loads (step 6 walls)
   const bulkTab = step === "slab" ? ["panels", `แผ่นพื้นทั้งชั้น (${an.panels.length})`] : step === "loads" && sub === "wall" ? ["bwalls", `ผนัง / น้ำหนักบนคาน (${fl.beams.length})`] : null;
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
-  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
+  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
   const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
@@ -473,6 +481,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <button onClick={() => setFloor({ panels: Object.fromEntries(Object.entries(fl.panels ?? {}).filter(([k]) => k !== panel.key)) })} className="col-span-2 text-left text-[12px] text-brand-500">ใช้ค่าของชั้น</button>
             </div>)}
           </Card>
+  ) : step === "loads" && sub === "cases" ? (<LoadCases frame={frame} fl={fl} an={an} cur={cur} setFloor={setFloor} multi={multiSel} setPickSet={setPickSet} armed={armed} setArmed={setArmed} pickRef={pickRef} onLateral={() => setSubState("lateral")} />
   ) : step === "loads" && sub === "wall" ? (          <Card title="ชนิดผนัง (วัสดุ + ฉาบ)" icon={Ruler}>
             <div className="space-y-2 text-[12px]">
               {wallTypes.map((t, i) => { const put = (p) => set("wallTypes", wallTypes.map((x, j) => (j === i ? (() => { const n = { ...x, ...p }; return { ...n, w: Math.round(wallTypeW(n)) }; })() : x)));

@@ -27,13 +27,13 @@ const TOOLS = {
   wall: [SEL, ["wall", "ผนัง", Ruler, "คลิกต้น → ปลาย ต่อเนื่องได้ · วางบนคาน = ลงคาน · วางกลางพื้น = กระจายลงแผ่นพื้น · วาดซ้อนได้"], ["erase", "ลบ", Eraser, "คลิกผนังที่จะลบ"]],
   stair: [SEL, ["stair", "บันได", Footprints, "คลิกมุมหนึ่ง → มุมตรงข้ามของช่องบันได (ดูดเข้าเสา/คาน) · เลือกแบบ ทิศขึ้น ที่แผงซ้าย"], ["erase", "ลบ", Eraser, "คลิกบันไดที่จะลบ"]],
   other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["area", "เพิ่มบนพื้น", PanelTop, "คลิกแผ่นพื้นเพื่อเพิ่มน้ำหนักต่อพื้นที่จากคลัง เช่น ห้องน้ำ / ฝ้า"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
-  result: [SEL], cols: [SEL], grid: [SEL],
+  result: [SEL], cols: [SEL], grid: [SEL], assign: [["select", "เลือก", MousePointer2, "Load Cases: คลิกคาน / เสา / แผ่นพื้น · Ctrl หรือ Shift + คลิก = เพิ่ม · ลากกรอบ (ซ้าย→ขวา ทั้งชิ้น · ขวา→ซ้าย แตะ) · Ctrl+A ทั้งหมด · Esc ล้าง · แล้วกด Assign ทางขวา"]],
 };
-const BOXABLE = { frame: ["column", "beam"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
+const BOXABLE = { assign: ["beam", "column", "panel"], frame: ["column", "beam"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onImportFrame = null, colSize = () => null }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -123,8 +123,10 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     setStart(p);
   };
   const ITEM = { column: ["columns", (c) => [c]], beam: ["beams", (b) => [b.a, b.b]], wall: ["walls", (w) => [w.a, w.b]], lineLoad: ["lineLoads", (l) => [l.a, l.b]],
-    point: ["pointLoads", (q) => [q.p]], stair: ["stairs", (st) => [st.a, st.b, [st.a[0], st.b[1]], [st.b[0], st.a[1]]]], cant: ["cants", (c) => [c.a, c.b]] };
-  const listOf = (kind) => (kind === "wall" ? walls : floor[ITEM[kind][0]] ?? []);
+    point: ["pointLoads", (q) => [q.p]], panel: [null, (p) => p.P ?? []], stair: ["stairs", (st) => [st.a, st.b, [st.a[0], st.b[1]], [st.b[0], st.a[1]]]], cant: ["cants", (c) => [c.a, c.b]] };
+  const listOf = (kind) => (kind === "wall" ? walls : kind === "panel" ? an?.panels ?? [] : floor[ITEM[kind][0]] ?? []);
+  useEffect(() => { onMulti?.(multi); }, [multi]); // eslint-disable-line react-hooks/exhaustive-deps // Load Cases page: what is selected
+  useEffect(() => { if (pickSet) setMulti(pickSet); }, [pickSet]); // selection set from outside (a load item → its members)
   const endBox = () => {
     const b = box; setBox(null);
     if (!b || dist(b.p0, b.p1) < 3 * px()) return;
@@ -136,7 +138,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   };
   const delItems = (list) => {
     const patch = {};
-    for (const kind of Object.keys(ITEM)) { const ids = new Set(list.filter((x) => x?.kind === kind).map((x) => x.i)); if (ids.size) patch[ITEM[kind][0]] = listOf(kind).filter((_, i) => !ids.has(i)); }
+    if (step === "assign") return; // the Load Cases page never deletes members
+    for (const kind of Object.keys(ITEM)) { if (!ITEM[kind][0]) continue; const ids = new Set(list.filter((x) => x?.kind === kind).map((x) => x.i)); if (ids.size) patch[ITEM[kind][0]] = listOf(kind).filter((_, i) => !ids.has(i)); }
     if (Object.keys(patch).length) { commit(patch); setMulti([]); setSel(null); }
   };
   const onDown = (e) => {
@@ -147,6 +150,13 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     if (e.button === 1 || tool === "select") {
       if (e.button === 0) {
         const h = hitAt(raw);
+        if (step === "assign") { // Load Cases: click = select (Ctrl / Shift adds), or assign straight away with the cursor
+          const m = h && (h.kind === "panel" ? { kind: "panel", i: (an?.panels ?? []).findIndex((p) => p.key === h.key) } : ["beam", "column"].includes(h.kind) ? h : null);
+          if (m && onPick) { onPick(m); return; }
+          if (m) { setMulti((cur) => (e.ctrlKey || e.metaKey || e.shiftKey ? (cur.some((x) => x.kind === m.kind && x.i === m.i) ? cur.filter((x) => !(x.kind === m.kind && x.i === m.i)) : [...cur, m]) : [m])); setSel(null); return; }
+          if (e.shiftKey) { setDrag({ pan: true, sx: e.clientX, sy: e.clientY, vb }); return; }
+          setMulti([]); setDrag({ box: true }); setBox({ p0: raw, p1: raw }); return;
+        }
         setSel(h);
         if (h?.kind === "column" && step === "frame") { setDrag({ col: h.i, from: cols[h.i] }); return; }
         if (h) return;
@@ -369,7 +379,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               </g>
             );
           })}
-          {(show.SP || step === "other") && lineLoads.map((l, i) => {
+          {(show.SP || step === "other" || step === "assign") && lineLoads.map((l, i) => {
             const m = [(l.a[0] + l.b[0]) / 2, (l.a[1] + l.b[1]) / 2], L = dist(l.a, l.b) || 1, n = [-(l.b[1] - l.a[1]) / L, (l.b[0] - l.a[0]) / L];
             return (
               <g key={`ll${i}`}>
@@ -382,13 +392,14 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               </g>
             );
           })}
-          {(show.SP || step === "other") && pointLoads.map((q, i) => (
+          {(show.SP || step === "other" || step === "assign") && pointLoads.map((q, i) => (
             <g key={`pl${i}`}>
               <circle cx={q.p[0]} cy={-q.p[1]} r={(isSel("point", i) ? 11 : 8) * k} fill={SP_C} fillOpacity={0.25} stroke={isSel("point", i) ? "#f79009" : SP_C} strokeWidth={2 * k} />
               {txt([q.p[0] + 12 * k, q.p[1] + 10 * k], `${q.name ? `${q.name} ` : ""}${fmt(q.P, 0)} กก.`, SP_C, 10, "start", 600)}
             </g>
           ))}
           {multi.map((m, j) => { const P = ITEM[m.kind][1](listOf(m.kind)[m.i] ?? {}); if (!P[0]) return null;
+            if (P.length > 2) return <polygon key={`m${j}`} points={P.map((q) => `${q[0]},${-q[1]}`).join(" ")} fill="#f79009" fillOpacity={0.22} stroke="#f79009" strokeWidth={2 * k} />;
             return P.length === 1 ? <circle key={`m${j}`} cx={P[0][0]} cy={-P[0][1]} r={14 * k} fill="#f79009" fillOpacity={0.3} />
               : <line key={`m${j}`} x1={P[0][0]} y1={-P[0][1]} x2={P[1][0]} y2={-P[1][1]} stroke="#f79009" strokeOpacity={0.5} strokeWidth={12 * k} strokeLinecap="round" />; })}
           {box && <rect x={Math.min(box.p0[0], box.p1[0])} y={-Math.max(box.p0[1], box.p1[1])} width={Math.abs(box.p1[0] - box.p0[0])} height={Math.abs(box.p1[1] - box.p0[1])}

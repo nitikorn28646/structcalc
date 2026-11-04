@@ -360,7 +360,7 @@ export function spanReasons(c) {
 // floor.panels[key] = { kind: S | PS | GS, dir: x | y (PS), t, finish, live, open }; floor.walls = [{ a, b, kind, h, open %, layers }];
 // floor.cants = [{ a, b (on a beam), L, side ±1, t, finish, live }] cantilever slabs
 // floor.stairs = [{ a, b (plan rectangle corners), up: +x|-x|+y|-y, kind, t, riser, tread, finish, live, landingL, landingTo: this|below, side ±1 (cant) }]
-// floor.lineLoads = [{ a, b, q kg/m, name }] railings etc.; floor.pointLoads = [{ p, P kg, name }]; panels[key].extra kg/m² (SDL)
+// floor.lineLoads = [{ a, b, q kg/m, name, g: SDL | WALL | LL (Load Cases page; none = SP) }] railings, walls typed as kg/m etc.; floor.pointLoads = [{ p, P kg, name }]; panels[key].extra kg/m² (SDL)
 // downLines: line loads handed down by the floor above (stair bottoms) → [{ a, b, q, g, from }]
 // minTypes: { drawnBeamIndex: typeIdx } lightest type allowed (set by the 3D-frame envelope of analyzeFrame)
 export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = [], minTypes = null) {
@@ -496,17 +496,17 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   }
   // railings / line loads: on a cantilever slab tip → that slab's beam (+ torsion), on a beam → the beam, else spread over the panel
   const lineLoads = (floor.lineLoads ?? []).map((l, i) => {
-    const from = l.name || `น้ำหนักเส้น ${i + 1}`, L = dist(l.a, l.b);
+    const from = l.name || `น้ำหนักเส้น ${i + 1}`, L = dist(l.a, l.b), g = ["SDL", "WALL", "LL"].includes(l.g) ? l.g : "SP"; // load case (Load Cases page), old data = SP
     const tip = cants.find((c) => segDist(l.a, c.P[3], c.P[2]) < TOL && segDist(l.b, c.P[3], c.P[2]) < TOL);
     if (tip && tip.line !== undefined) {
       const ln = lines[tip.line], src = floor.cants[tip.i], a = along(ln, src.a), b = along(ln, src.b), f = L / dist(src.a, src.b);
-      ln.slab.push({ a: Math.min(a, b), b: Math.max(a, b), wa: l.q * f, wb: l.q * f, g: "SP", from });
-      ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: l.q * f * tip.L, mL: 0 });
+      ln.slab.push({ a: Math.min(a, b), b: Math.max(a, b), wa: l.q * f, wb: l.q * f, g, from });
+      ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: l.q * f * tip.L, mL: g === "LL" ? l.q * f * tip.L : 0 });
       return { i, on: "cant" };
     }
-    if (onBeam(l.a, l.b, l.q, "SP", from)) return { i, on: "beam" };
+    if (onBeam(l.a, l.b, l.q, g, from)) return { i, on: "beam" };
     const pn = inPanel([(l.a[0] + l.b[0]) / 2, (l.a[1] + l.b[1]) / 2]);
-    if (pn && pn.st !== "GS") { pn.g.SP = (pn.g.SP ?? 0) + (l.q * L) / pn.area; pn.w += (l.q * L) / pn.area; return { i, on: "panel", panel: pn.key }; }
+    if (pn && pn.st !== "GS") { pn.g[g] = (pn.g[g] ?? 0) + (l.q * L) / pn.area; pn.w += (l.q * L) / pn.area; return { i, on: "panel", panel: pn.key }; }
     warnings.push(`${from} ไม่มีคานหรือพื้นรับ`); return { i, on: null };
   });
   // point loads: on a beam → point load; else spread over the panel
