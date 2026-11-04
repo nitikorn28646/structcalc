@@ -407,7 +407,10 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
                   {/* ดั้ง: ring with a cross, large enough to read over beams and grid */}
                   <circle cx={p.x} cy={-p.y} r={12 * k} fill={bad ? "#f04438" : dark ? "#0f1222" : "#fff"} stroke={bad ? "#f04438" : "#12b76a"} strokeWidth={3 * k} />
                   <path d={`M${p.x - 7 * k} ${-p.y}H${p.x + 7 * k}M${p.x} ${-p.y - 7 * k}V${-p.y + 7 * k}`} stroke={bad ? "#fff" : "#12b76a"} strokeWidth={2.5 * k} />
-                  {bad && txt([p.x + 16 * k, p.y + 12 * k], "! ไม่มีอะเสรับ", "#f04438", 11, "start")}
+                  {/* one label for ดั้ง standing close together (a near-square hip roof puts two at almost the same point) */}
+                  {bad && !posts.slice(0, i).some((q) => Math.hypot(q.x - p.x, q.y - p.y) < 0.8 && loose.some((l) => Math.abs(l[0] - q.x) < 0.01 && Math.abs(l[1] - q.y) < 0.01)) && (() => {
+                    const n = posts.filter((q) => Math.hypot(q.x - p.x, q.y - p.y) < 0.8 && loose.some((l) => Math.abs(l[0] - q.x) < 0.01 && Math.abs(l[1] - q.y) < 0.01)).length;
+                    return txt([p.x + 16 * k, p.y + 22 * k], `! ไม่มีอะเสรับ${n > 1 ? ` (${n} ต้น)` : ""}`, "#f04438", 11, "start"); })()}
                 </g>
               );
             })}

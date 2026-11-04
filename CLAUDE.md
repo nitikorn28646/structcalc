@@ -430,3 +430,8 @@ PageRef with page numbers). Step 9 ReportQA card (stamp, revision, input checks)
 BAR LAYERS (user 2026-11-04): floor.js barLayers — first layer up to the width (clear max(barClear, db), largest bar of the face),
 an upper layer never holds ONE bar alone (4 → 2+2, 5 → 3+2, 6 → 3+3, 7 → 3+2+2); unpairable (narrow 2+1) → L.odd → warning per type,
 beamTypes fitsLayers rejects it. Used by checkSpan (d), Details / 3D cages, report. Yasothon: floor-2 span 14-1 B2 → B4 (baseline re-saved).
+UI TEST 2026-11-04 (docs/test-log.md): fixed new-project sample name, header notice (fades 10 s, × closes; only the × is clickable — a
+clickable notice once caught an E2E click on a button with the same words), util chart ticks, roof import with 0 columns (stays as a hint:
+put columns on that floor with "เฉพาะเสา"), one "ไม่มีอะเสรับ" label for ดั้ง close together, header buttons nowrap.
+Stair landing: user chose ก (landing beam on the OUTER edge of the landing) = current model — no change needed.
+The user sent a project .json (Yasothon-like, saved 2026-11-04 08:42) at the end of the session — client data, not committed; ask again.

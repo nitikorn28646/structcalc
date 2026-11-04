@@ -250,6 +250,8 @@ export default function App() {
     const patch = { columns, grid, H, fromFrame: true, guide: { outline: pts, beams } };
     remember(); setRoofState((x) => { const next = { ...x, ...patch }; try { localStorage.setItem("structcalc.roof", JSON.stringify(next)); } catch { /* ignore */ } return next; });
     setFrame("roofLink", { on: true, floor: linkFloor });
+    // no column under the roof floor (UI test 2026-11-04: "0 ต้น" with nothing to do): say where to put them — the message stays
+    if (!columns.length) { setNotice({ ok: false, text: `ชั้น ${frame.floors[linkFloor].name} ยังไม่มีเสา — ไปขั้น 2 เลือกชั้นนี้ที่หัวโปรแกรม แล้วกด "เฉพาะเสา" (หรือวางเสาเอง) จากนั้นกด "นำเข้าเสา + แปลนจากโครงสร้าง" อีกครั้ง` }); return; }
     setNotice({ ok: true, text: `นำเข้าเสา ${columns.length} ต้น + กริด + แปลน ${frame.floors[linkFloor].name} (เส้นจาง) แล้ว — วาดผนัง/ขอบหลังคา (หรือกด "ใช้ขอบอาคารเป็นผนัง") และวาดอะเสเอง แรงหลังคาจะลงเสา/คานชั้นนั้นอัตโนมัติ` });
   };
   const [tour, setTour] = useState(() => !tourSeen() && !new URLSearchParams(location.search).has("print"));
@@ -530,7 +532,7 @@ export default function App() {
                   {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </button>
                 {notice && <span title={notice.text} className={`flex max-w-[360px] items-start gap-1 self-center text-xs ${notice.ok ? "text-green-600" : "text-red-600"}`}><span className="line-clamp-2">{notice.text}</span><span role="button" aria-label="ปิด" onClick={() => setNotice(null)} className="cursor-pointer px-0.5 text-gray-400 hover:text-gray-600">×</span></span>}
-                <span className="flex items-center gap-1 rounded-lg bg-gray-100 p-0.5">
+                <span className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-gray-100 p-0.5 [&>button]:whitespace-nowrap">
                   <button onClick={() => (dirty ? setAskNew(true) : newProject())} title="โครงการใหม่ (เริ่มจากว่าง)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><FilePlus2 className="h-4 w-4" />ใหม่</button>
                   {snaps.length > 0 && <button onClick={restoreSnap} title={`กู้คืนงานที่ถูกแทนที่ล่าสุด (${snaps[0].name || "ไม่มีชื่อ"} · ${new Date(snaps[0].at).toLocaleString("th-TH")}) — เก็บไว้ ${snaps.length} ชุด`} className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white">กู้คืน</button>}
                   <button onClick={openFile} title="เปิดไฟล์โครงการ (.json)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><FolderOpen className="h-4 w-4" />เปิด</button>
