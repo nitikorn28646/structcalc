@@ -33,6 +33,7 @@ import { autoInnerPlates } from "../engine/roofMembers.js";
 import { HelpCircle, Redo2, Undo2 } from "lucide-react";
 import { StepGuide, Tour, markTourSeen, tourSeen } from "./Help.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { BRAND, imageToDataUrl, saveBrand, useBrand } from "./brand.js";
 
 const BAR_OPTS = [["", "—"], ...Object.keys(BARS).map((k) => [k, k])];
 // single-member calculators (tools); the building itself is designed in the workflow
@@ -315,6 +316,8 @@ export default function App() {
     [st.geom.type, st.geom.L, forces.w, forces.ML, forces.MR]);
   const [viewOpen, setViewOpen] = useState(false);
   const openRef = useRef(null), [notice, setNotice] = useState(null), [saveBox, setSaveBox] = useState(null);
+  const brand = useBrand(), [brandOpen, setBrandOpen] = useState(false);
+  useEffect(() => { document.title = `${BRAND.full} — ออกแบบโครงสร้าง คสล. และหลังคาเหล็ก`; }, []);
   // screen space (user 2026-11-04): left steps folded to icons, focus = plan only (no side bars / guide), remembered per browser
   const [mini, setMiniState] = useState(() => { try { return localStorage.getItem("structcalc.side") === "mini"; } catch { return false; } });
   const setMini = (v) => { setMiniState(v); try { localStorage.setItem("structcalc.side", v ? "mini" : "full"); } catch { /* ignore */ } };
@@ -420,8 +423,9 @@ export default function App() {
       <div className="app flex min-h-screen xl:h-screen xl:overflow-hidden">
         {!focus && <aside style={{ width: mini ? 60 : 230 }} className={`fixed inset-y-0 left-0 z-20 overflow-y-auto border-r border-gray-200 bg-white ${mini ? "px-2" : "px-4"} transition-transform lg:translate-x-0 ${menuOpen ? "translate-x-0" : "-translate-x-full"}`}>
           <div className={`flex items-center gap-2.5 text-xl font-semibold text-gray-900 ${mini ? "flex-col py-3" : "py-4"}`}>
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-500 text-[#fff]"><Calculator className="h-5 w-5" /></span>
-            {!mini && "StructCalc"}
+            <button onClick={() => setBrandOpen(true)} title={`${BRAND.full} — เจ้าของโปรแกรม (รูป / ลายเซ็น)`} className="shrink-0">
+              {brand.photo ? <img src={brand.photo} alt="" className="h-10 w-10 rounded-full object-cover ring-2 ring-brand-500" /> : <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500 text-[#fff]"><Calculator className="h-5 w-5" /></span>}</button>
+            {!mini && <span className="leading-tight"><span className="block text-[17px]">{BRAND.name}</span><span className="block text-[11px] font-medium text-brand-500">{BRAND.by}</span></span>}
             <button onClick={() => setMini(!mini)} title={mini ? "ขยายแถบขั้นตอน" : "พับแถบขั้นตอน (เหลือไอคอน)"} className={`${mini ? "" : "ml-auto"} grid h-7 w-7 place-items-center rounded-md text-[13px] text-gray-400 ring-1 ring-gray-200 hover:bg-gray-50`}>{mini ? "»" : "«"}</button>
           </div>
           {!mini && <p className="mb-1.5 text-xs uppercase tracking-wider text-gray-400">ขั้นตอนออกแบบ</p>}
@@ -504,6 +508,19 @@ export default function App() {
             </div>
           </header>
           {mod === "work" && !focus && <StepGuide key={step} step={step} index={WORKFLOW.findIndex((w) => w[0] === step)} />}
+          {brandOpen && <Dialog open onOpenChange={(o) => !o && setBrandOpen(false)}><DialogContent className="max-w-md">
+            <DialogTitle>{BRAND.full}</DialogTitle>
+            <p className="text-[13px] text-gray-600">รูปเจ้าของโปรแกรม (โลโก้มุมซ้ายบน หน้าแนะนำ) และลายเซ็นวิศวกร (ปกและท้ายกระดาษรายการคำนวณทุกแผ่น) — เก็บไว้ในเบราว์เซอร์นี้</p>
+            <div className="grid grid-cols-2 gap-3 text-[12px]">
+              {[["photo", "รูปถ่าย", 320, "image/jpeg"], ["sig", "ลายเซ็น (พื้นขาว/โปร่ง)", 480, "image/png"]].map(([k, t, mx, ty]) => (
+                <label key={k} className="flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border border-dashed border-gray-300 p-2 hover:bg-gray-50">
+                  {brand[k] ? <img src={brand[k]} alt="" className={k === "photo" ? "h-24 w-24 rounded-full object-cover" : "h-16 object-contain"} /> : <span className="grid h-20 w-full place-items-center text-gray-400">ยังไม่มี</span>}
+                  <span className="font-medium text-brand-600">{brand[k] ? `เปลี่ยน${t}` : `อัปโหลด${t}`}</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { saveBrand({ ...brand, [k]: await imageToDataUrl(f, mx, ty) }); } catch (er) { setNotice({ ok: false, text: er.message }); } }} />
+                </label>))}
+            </div>
+            <div className="flex justify-between text-[12px]"><button onClick={() => saveBrand({})} className="text-red-600">ลบรูปและลายเซ็น</button><button onClick={() => setBrandOpen(false)} className="rounded-md bg-brand-500 px-3 py-1 font-medium text-white">เสร็จ</button></div>
+          </DialogContent></Dialog>}
           {saveBox && <Dialog open onOpenChange={(o) => !o && setSaveBox(null)}><DialogContent className="max-w-lg">
             <DialogTitle>บันทึกโครงการ</DialogTitle>
             <p className="text-[13px] text-gray-600">หน้าเว็บนี้เปิดอยู่ในกรอบของ claude.ai ซึ่งอาจบล็อกการดาวน์โหลด ถ้าไม่มีไฟล์ <b>{saveBox.name}</b> ลงเครื่อง ใช้ทางใดทางหนึ่ง:</p>

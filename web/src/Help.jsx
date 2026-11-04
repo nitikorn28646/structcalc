@@ -71,7 +71,7 @@ export function Tour({ steps, onClose, onGo, onNew = null }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent wide>
         <div className="flex items-center gap-2"><HelpCircle className="h-5 w-5 text-brand-500" />
-          <DialogTitle className="text-lg">วิธีใช้ StructCalc</DialogTitle></div>
+          <DialogTitle className="text-lg">วิธีใช้ โครงสร้างไทย by นิธิกร</DialogTitle></div>
         <p className="mb-4 text-sm text-gray-600">ทำตามขั้นที่แถบซ้ายจากบนลงล่าง: สร้างโมเดลจากชั้นล่างขึ้นบน โปรแกรมคำนวณจากบนลงล่าง (หลังคา → คาน → เสา → ฐานราก) ให้เองทุกครั้งที่แก้ข้อมูล
           ทุกขั้นมีแถบ "วิธีใช้" ใต้หัวจอ และชี้เมาส์ที่เครื่องมือวาดเพื่อดูคำอธิบาย</p>
         <ol className="grid gap-2 text-[13px] md:grid-cols-2">

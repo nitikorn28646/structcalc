@@ -1,5 +1,6 @@
 ﻿// Building blocks for the calculation reports (Thai-first, paginated by Paged.js when printing).
 import { Previewer } from "pagedjs";
+import { BRAND, loadBrand } from "./brand.js";
 
 // @page rules and running header/footer; Tailwind classes in the report body come from the app stylesheet.
 const PAGE_CSS = `
@@ -8,10 +9,9 @@ const PAGE_CSS = `
   @top-left { content: string(rp-project); font: 8pt Sarabun, sans-serif; color: #667085; }
   @top-center { content: string(rp-sec); font: 8pt Sarabun, sans-serif; color: #344054; }
   @top-right { content: "รายการคำนวณออกแบบโครงสร้าง (" string(rp-method) ")"; font: 8pt Sarabun, sans-serif; color: #667085; }
-  @bottom-left { content: "StructCalc · " string(rp-member); font: 7.5pt Sarabun, sans-serif; color: #98a2b3; vertical-align: top; padding-top: 3mm; width: 40mm; }
+  @bottom-left { content: "โครงสร้างไทย · " string(rp-member); font: 7.5pt Sarabun, sans-serif; color: #98a2b3; vertical-align: top; padding-top: 3mm; width: 40mm; }
   /* every sheet signed by the engineer (user 2026-11-04) — one line (user: the registration number wrapped to a second line) */
-  @bottom-center { content: "ลงชื่อ ..................................  " string(rp-eng); white-space: nowrap; text-align: center;
-    font: 8pt Sarabun, sans-serif; color: #344054; vertical-align: top; padding-top: 3mm; border-top: 0.6pt solid #98a2b3; }
+  @bottom-center { content: element(rpSig); text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.6pt solid #98a2b3; }
   @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 8pt Sarabun, sans-serif; color: #667085; vertical-align: top; padding-top: 3mm; width: 24mm; }
 }
 /* the cover: no running header / footer (it carries its own signature block) */
@@ -22,6 +22,8 @@ const PAGE_CSS = `
 .rp-str-member { string-set: rp-member content(text); }
 .rp-str-method { string-set: rp-method content(text); }
 .rp-str-eng { string-set: rp-eng content(text); }
+.rp-sig-run { position: running(rpSig); display: block !important; white-space: nowrap; font: 8pt Sarabun, sans-serif; color: #344054; }
+.rp-sig-run img { display: inline-block; height: 9mm; vertical-align: middle; margin: -3mm 1mm 0; }
 .rp-sec-name { string-set: rp-sec content(text); }
 /* layout: every chapter on a new page; a heading stays with what follows; table heads repeat; rows / figures not cut */
 .rp-chapter { break-before: page; }
@@ -72,6 +74,7 @@ export function Doc({ project, title, subtitle, memberLabel, member, summary, me
       <span className="rp-str-project hidden">{project.name}</span>
       <span className="rp-str-member hidden">{`${memberLabel} ${member}`}</span>
       <span className="rp-str-method hidden">{method}</span>
+      <SigRun project={project} />
       <span className="rp-str-eng hidden">{`(${project.engineer || "........................................"}) วิศวกรผู้คำนวณ${project.license ? ` ทะเบียน ${project.license}` : ""}`}</span>
       {bare ? <>{children}</> : <>
       <div className="mb-3 rounded-lg bg-[#465fff] px-4 py-3 text-[#fff]">
@@ -142,6 +145,12 @@ export function Sec({ n, th, en, intro, children, id, chapter = true }) {
 // sub-heading kept on the page of the table / figure after it
 export const Sub = ({ children, className = "" }) => <p className={`rp-sub mt-2 font-semibold text-gray-800 ${className}`}>{children}</p>;
 
+// the signature line printed in the footer of every page (Paged.js running element; hidden on screen): the engineer's uploaded
+// signature image when there is one (logo → เจ้าของโปรแกรม), else the dotted line
+export function SigRun({ project }) {
+  const sig = loadBrand().sig;
+  return <div className="rp-sig-run hidden">ลงชื่อ {sig ? <img src={sig} alt="" /> : ".................................."} ({project.engineer || "........................................"}) วิศวกรผู้คำนวณ{project.license ? ` ทะเบียน ${project.license}` : ""}</div>;
+}
 // formal cover page (user 2026-11-04): title, project data, standards, engineer signature block
 export function Cover({ project, title = "รายการคำนวณออกแบบโครงสร้าง", subtitle, items = [], standards = [] }) {
   const rows = [["โครงการ", project.name], ["เจ้าของโครงการ", project.owner], ["สถานที่ก่อสร้าง", project.location], ...items, ["วันที่", project.date]].filter(([, v]) => v);
@@ -158,9 +167,9 @@ export function Cover({ project, title = "รายการคำนวณอ�
         <div className="mb-1 font-semibold text-[#344054]">มาตรฐานและกฎหมายที่ใช้</div>
         <ol className="list-decimal pl-5">{standards.map((x) => <li key={x}>{x}</li>)}</ol></div>}
       <div className="mt-auto grid grid-cols-2 gap-[10mm] pt-[12mm] text-[11pt]">
-        <div className="self-end text-left text-[9pt] text-[#667085]">รายการคำนวณนี้ลงนามโดยวิศวกรผู้คำนวณทุกแผ่น</div>
+        <div className="self-end text-left text-[9pt] text-[#667085]"><div className="mb-1 font-semibold text-[#344054]">จัดทำด้วยโปรแกรม {BRAND.full}</div>รายการคำนวณนี้ลงนามโดยวิศวกรผู้คำนวณทุกแผ่น</div>
         <div>
-          <div className="mb-1">ลงชื่อ ...................................................................</div>
+          <div className="mb-1">ลงชื่อ {loadBrand().sig ? <img src={loadBrand().sig} alt="" className="inline-block h-[14mm] align-bottom" /> : "..................................................................."}</div>
           <div>( {project.engineer || "..................................................."} )</div>
           <div className="text-[10pt] text-[#475467]">วิศวกรผู้คำนวณ{project.license ? ` · ทะเบียน ${project.license}` : ""}</div>
         </div>
