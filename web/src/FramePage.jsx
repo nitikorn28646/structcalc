@@ -93,7 +93,7 @@ function AutoBeamTypes({ frame, set, res }) {
       const g = generateBeamTypes(frame, k);
       if (!g) { setMsg({ ok: false, text: "ยังไม่มีคานให้จัด type" }); return; }
       set("beamTypes", g.beamTypes); set("floors", g.floors); set("beamAutoK", k);
-      setMsg({ ok: g.ok === g.n, text: `${g.beamTypes.length} type${g.beamTypes.length < k ? ` (ขอ ${k} — ที่เหลือไม่มีคานใช้ จึงตัดออก)` : ""} · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})${g.unmatched.length ? ` · ไม่มีหน้าตัดในกรอบ (กว้าง ≥ 0.20, ลึก ≤ 0.80 ม., เหล็ก ≤ 2 ชั้น) สำหรับช่วง ${g.unmatched.join(", ")} — เพิ่ม type เอง` : ""}` });
+      setMsg({ ok: g.ok === g.n, text: `${g.beamTypes.length} type${g.beamTypes.length < k ? ` (ขอ ${k} — ที่เหลือไม่มีคานใช้ จึงตัดออก)` : ""} · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})${g.big.length ? ` · ⚠ คานใหญ่พิเศษ (เกินกรอบปกติ ขยายถึงกว้าง 0.40 ลึก 1.00 ม.): ช่วง ${g.big.join(", ")} → ${g.beamTypes.filter((t) => t.big).map((t) => `${t.name} ${fmt(t.b * 100, 0)}×${fmt(t.h * 100, 0)}`).join(", ")} — ตรวจว่าทำได้จริง หรือเพิ่มเสาแทน` : ""}${g.unmatched.length ? ` · ไม่มีหน้าตัดในกรอบ (กว้าง ≥ 0.20, ลึก ≤ 0.80 ม., เหล็ก ≤ 2 ชั้น) สำหรับช่วง ${g.unmatched.join(", ")} — เพิ่ม type เอง` : ""}` });
     } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(false); }
   }, 30); };
   return (
@@ -127,7 +127,7 @@ function TypeTable({ types, setTypes, an }) {
         <tbody>{types.map((t, i) => (
           <tr key={i} className="border-b border-gray-100">
             <td className="px-1"><span className="mr-1 inline-block h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }} />
-              <input defaultValue={t.name} key={t.name} onBlur={(e) => set(i, "name", e.target.value.trim() || t.name)} className={`${cell} !w-12 font-semibold`} /></td>
+              <input defaultValue={t.name} key={t.name} onBlur={(e) => set(i, "name", e.target.value.trim() || t.name)} className={`${cell} !w-12 font-semibold`} />{t.big && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700" title="คานใหญ่พิเศษ: เกินกรอบปกติ (กว้าง 0.30 / ลึก 0.80 ม.) ใช้เฉพาะช่วงที่หน้าตัดปกติรับไม่ได้">ใหญ่พิเศษ</span>}</td>
             <td className="px-1 w-16">{num(i, "b", 0.05)}</td><td className="px-1 w-16">{num(i, "h", 0.05)}</td>
             <td className="px-1">{bars(i, "top")}</td><td className="px-1">{bars(i, "topX")}</td><td className="px-1">{bars(i, "bot")}</td><td className="px-1">{bars(i, "botX")}</td>
             <td className="px-1 w-20"><select value={t.st} onChange={(e) => set(i, "st", e.target.value)} className={cell}>{["RB 6", "RB 9", "DB 10", "DB 12"].map((s) => <option key={s}>{s}</option>)}</select></td>

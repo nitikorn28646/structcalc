@@ -119,7 +119,16 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
   }));
   // the cheapest own section of each span (sort key); a span that nothing within the limits can carry stays unmatched
   const own = spans.map((sp) => ({ sp, d: designGroup([sp], mat, g) }));
-  const unmatched = own.filter((o) => !o.d).map((o) => o.sp.id);
+  // spans that nothing within the limits carries (e.g. a transfer girder): extended limits for those spans only (user 2026-11-03:
+  // b up to 0.40, h up to 1.00 m), one type for all of them if one passes, else one each — flagged big ("คานใหญ่พิเศษ")
+  const gBig = { ...g, b: [...new Set([...g.b, 0.4])], hMax: 1.0 };
+  const over = own.filter((o) => !o.d), bigTypes = [], bigIds = [];
+  if (over.length) {
+    const all = designGroup(over.map((o) => o.sp), mat, gBig);
+    const ds = all ? [{ d: all, ids: over.map((o) => o.sp.id) }] : over.map((o) => ({ d: designGroup([o.sp], mat, gBig), ids: [o.sp.id] }));
+    for (const x of ds) if (x.d) { bigTypes.push({ ...x.d.t, cost: x.d.cost, big: true }); bigIds.push(...x.ids); }
+  }
+  const unmatched = over.map((o) => o.sp.id).filter((id) => !bigIds.includes(id));
   const list = own.filter((o) => o.d).sort((a, b) => a.d.cost - b.d.cost);
   const n = Math.max(1, Math.min(k, list.length)), types = [];
   for (let i = 0; i < n; i++) {
@@ -128,9 +137,10 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
     const d = designGroup(grp.map((o) => o.sp), mat, g) ?? grp[grp.length - 1].d;
     types.push({ ...d.t, cost: d.cost, count: grp.length });
   }
+  types.push(...bigTypes);
   // identical types merged, cheapest first, named B1, B2, …
   const uniq = [...new Map(types.map((t) => [`${t.b}|${t.h}|${t.top}|${t.bot}|${t.topX}|${t.botX}|${t.st}|${t.stSets}|${t.sSup}|${t.sMid}`, t])).values()].sort((a, b) => a.cost - b.cost);
-  return { types: uniq.map((t, i) => ({ name: `B${i + 1}`, b: t.b, h: t.h, top: t.top, bot: t.bot, topX: t.topX, botX: t.botX, st: t.st, ...(t.stSets > 1 ? { stSets: t.stSets } : {}), sSup: t.sSup, sMid: t.sMid, auto: true })), unmatched };
+  return { types: uniq.map((t, i) => ({ name: `B${i + 1}`, b: t.b, h: t.h, top: t.top, bot: t.bot, topX: t.topX, botX: t.botX, st: t.st, ...(t.stSets > 1 ? { stSets: t.stSets } : {}), sSup: t.sSup, sMid: t.sMid, auto: true, ...(t.big ? { big: true } : {}) })), unmatched, big: bigIds };
 }
 
 // One press of the button: k types for the whole project. The design forces depend on the types (self weight, stiffness of the
@@ -147,7 +157,7 @@ export function generateBeamTypes(frame, k, g = BEAM_GEN) {
     if (!out.types.length) break;
     f = { ...f, beamTypes: out.types }; r = analyzeFrame(f);
     const s = score(r);
-    if (!best || s.ok > best.s.ok || (s.ok === best.s.ok && s.cost < best.s.cost)) best = { types: out.types, s, unmatched: out.unmatched };
+    if (!best || s.ok > best.s.ok || (s.ok === best.s.ok && s.cost < best.s.cost)) best = { types: out.types, s, unmatched: out.unmatched, big: out.big };
     if (s.ok === s.n) break;
   }
   // repair: the spans still failing get their own type grown in place (stirrups closer / RB6 → RB9 → 2 sets, more bars) — the
@@ -194,5 +204,5 @@ export function generateBeamTypes(frame, k, g = BEAM_GEN) {
   const area = (x) => { const b = parseBars(x); return b ? b.n * BARS[b.bar].A : 0; }, steel = (t) => area(t.top) + area(t.bot) + area(t.topX) + area(t.botX);
   const types = best.types.filter((_, i) => used.has(i)).sort((a, b) => a.b * a.h - b.b * b.h || a.h - b.h || steel(a) - steel(b) || beamCost(a, g) - beamCost(b, g))
     .map((t, i) => ({ ...t, name: `B${i + 1}` }));
-  return { beamTypes: types, floors: f.floors, ...best.s, unmatched: best.unmatched, asked: k };
+  return { beamTypes: types, floors: f.floors, ...best.s, unmatched: best.unmatched, big: best.big ?? [], asked: k };
 }
