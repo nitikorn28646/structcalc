@@ -19,6 +19,7 @@ import { fmt } from "./beamModel.js";
 import { beamCost, generateBeamTypes } from "../engine/beamTypes.js";
 import { findOverlaps, mergeOverlaps } from "../engine/floor.js";
 import { locateWarning } from "./warnLocate.js";
+import { SlabSection, slabRebar } from "./SlabDetail.jsx";
 import LoadCases from "./LoadCases.jsx";
 import { highlight } from "./highlight.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, spanReasons, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
@@ -211,7 +212,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   // copy the floor below (columns and beams) — most floors repeat the one under them
   const copyBelow = cur > 0 ? (withBeams = true) => { const b = frame.floors[cur - 1]; setFloor({ columns: b.columns.map((c) => [...c]), beams: withBeams ? b.beams.map((x) => ({ ...x, a: [...x.a], b: [...x.b] })) : [] }); } : null;
   const goFloor = (i) => { set("cur", i); setSel(null); };
-  const [pinW, setPinW] = useState(null); // warning clicked in the list: its place keeps flashing
+  const [pinW, setPinW] = useState(null), [slabAll, setSlabAll] = useState(false), [slabAllRows, setSlabAllRows] = useState(false); // warning clicked in the list: its place keeps flashing
   const colsHere = res.columns.filter((c) => c.floor === cur), colAt = (i) => colsHere.find((c) => c.i === i);
   const setMat = (k, v) => set("mat", { ...frame.mat, [k]: v });
   const [critMsg, setCritMsg] = useState(""), [libSel, setLibSel] = useState(null);
@@ -310,21 +311,42 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
     : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol"])}<ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
-    : step === "design" && sub === "slabs" ? (
+    : step === "design" && sub === "slabs" ? (() => {
+      // every slab / cantilever slab / stair: this floor or all floors, bars by position, section drawing; row → flashes on the plan
+      const ks = slabAll ? frame.floors.map((_, k) => k) : [cur];
+      const rows = ks.flatMap((k) => (k === cur ? slabRows : designSlabs(res.floors[k], frame.floors[k], frame.mat)).map((x) => ({ ...x, k }))).filter((x) => slabAllRows || x.r || x.kind === "S" || x.kind === "ST"); // GS / PS rows (no design) hidden unless asked
+      const setF = (k, patch) => set("floors", frame.floors.map((f, i) => (i === k ? { ...f, ...patch } : f)));
+      const where = (x) => { const a = res.floors[x.k], f = frame.floors[x.k];
+        const P = x.key ? a?.panels.find((p) => p.key === x.key)?.P : x.ci !== undefined ? a?.cants[x.ci]?.P : x.si !== undefined ? (() => { const st = f.stairs[x.si]; return [[st.a[0], st.a[1]], [st.b[0], st.a[1]], [st.b[0], st.b[1]], [st.a[0], st.b[1]]]; })() : null;
+        return P ? { floor: x.k, polys: [P], bad: x.r ? !x.ok : false } : null; };
+      const inp = "h-7 w-16 rounded border border-gray-300 bg-transparent px-1";
+      return (
       <div className="space-y-3">
-      {coverBar(["coverSlab"])}
-      <table className="w-full border-collapse text-[12px]"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "หนา (ม.)", "ขนาดเหล็ก", "เหล็กเสริม", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
-        <tbody>{slabRows.map((x) => <tr key={x.name} className="border-b border-gray-100 tabular-nums"><td className="px-1 py-1">{x.name}</td><td className="px-1">{x.way ?? x.kind}</td><td className="px-1">{x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-"}</td>
+      <div className="flex flex-wrap items-center gap-3">{coverBar(["coverSlab"])}
+        <div className="inline-flex rounded-lg p-0.5 text-[12px] ring-1 ring-gray-200">{[[false, `ชั้นนี้ (${fl.name})`], [true, "ทุกชั้น"]].map(([v, t]) => <button key={t} onClick={() => setSlabAll(v)} className={`rounded-md px-2.5 py-1 ${slabAll === v ? "bg-brand-500 text-[#fff]" : "text-gray-600 hover:bg-gray-50"}`}>{t}</button>)}</div>
+        <label className="flex items-center gap-1 text-[12px] text-gray-600"><input type="checkbox" checked={slabAllRows} onChange={(e) => setSlabAllRows(e.target.checked)} />แสดง GS / PS ด้วย</label>
+        <span className="text-[12px] text-gray-500">ผ่าน {rows.filter((x) => x.r && x.ok).length}/{rows.filter((x) => x.r).length} · ชี้แถว = กระพริบบนแปลน / 3D · คลิกแถว = ไปชั้นนั้น</span></div>
+      <table className="w-full border-collapse text-[12px]"><thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{[...(slabAll ? ["ชั้น"] : []), "แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "หนา (ม.)", "ขนาดเหล็ก", "เหล็กแต่ละตำแหน่ง (ต้องการ As ซม.²/ม.)", "ผล"].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
+        <tbody>{rows.map((x) => { const f = frame.floors[x.k], at = where(x); return (
+          <tr key={`${x.k}-${x.name}`} onMouseEnter={() => at && highlight(at)} onMouseLeave={() => highlight(null)} onClick={(e) => { if (["INPUT", "SELECT"].includes(e.target.tagName)) return; if (x.k !== cur) goFloor(x.k); if (at) highlight(at); }}
+            className={`cursor-pointer border-b border-gray-100 align-top tabular-nums hover:bg-brand-50/50 ${x.r && !x.ok ? "bg-red-50/40" : ""}`}>
+          {slabAll && <td className="px-1 py-1 text-gray-500">{f.name}</td>}
+          <td className="px-1 py-1 font-medium">{x.name}</td><td className="px-1">{x.way ?? ({ C: "พื้นยื่น", ST: "บันได", PS: "PS", GS: "GS" })[x.kind] ?? x.kind}</td><td className="px-1">{x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-"}</td>
           <td className="px-1">{x.cont ?? "-"}</td>
-          <td className="px-1">{x.key ? <input type="number" step="0.01" value={fl.panels?.[x.key]?.t ?? fl.t} onChange={(e) => setFloor({ panels: { ...fl.panels, [x.key]: { ...fl.panels?.[x.key], t: Number(e.target.value) } } })} className="h-7 w-16 rounded border border-gray-300 bg-transparent px-1" />
-            : x.si !== undefined ? <input type="number" step="0.01" value={fl.stairs[x.si].t ?? 0.12} onChange={(e) => setFloor({ stairs: fl.stairs.map((q, j) => (j === x.si ? { ...q, t: Number(e.target.value) } : q)) })} className="h-7 w-16 rounded border border-gray-300 bg-transparent px-1" /> : "-"}</td>
-          <td className="px-1">{x.key && x.r ? <select value={fl.panels?.[x.key]?.bar ?? "RB 9"} onChange={(e) => setFloor({ panels: { ...fl.panels, [x.key]: { ...fl.panels?.[x.key], bar: e.target.value } } })} className="h-7 rounded border border-gray-300 bg-transparent px-1">{Object.keys(SLAB_BARS).map((b) => <option key={b}>{b}</option>)}</select>
-            : x.si !== undefined && x.r ? <select value={fl.stairs[x.si].mainBar ?? "DB 12"} onChange={(e) => setFloor({ stairs: fl.stairs.map((q, j) => (j === x.si ? { ...q, mainBar: e.target.value } : q)) })} className="h-7 rounded border border-gray-300 bg-transparent px-1">{Object.keys(SLAB_BARS).map((b) => <option key={b}>{b}</option>)}</select> : "-"}</td>
-          <td className="px-1">{x.text ?? x.note}</td><td className={`px-1 ${x.r ? (x.ok ? "text-green-600" : "font-semibold text-red-600") : "text-gray-400"}`}>{x.r ? (x.ok ? "ผ่าน" : "ไม่ผ่าน") : "-"}</td></tr>)}</tbody></table>
-      <p className="text-sm font-semibold text-gray-800">โมเมนต์ในพื้นและบันได (ต่อความกว้าง 1 ม.) — {fl.name}</p>
-      <div className="grid gap-3 xl:grid-cols-2">{slabRows.filter((x) => x.r).map((x) => <div key={x.name} className="rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200"><p className="text-[12px] font-medium text-[#344054]">{x.name} · {x.way ?? ({ C: "พื้นยื่น", ST: "บันได" })[x.kind]} · {x.text}</p><SlabStrip row={x} /></div>)}</div>
-      </div>
-    ) : step === "loads" && sub === "groups" ? <div className="max-w-md"><Card title={`น้ำหนักแยกกลุ่ม — ${fl.name}`} icon={Layers}>
+          <td className="px-1">{x.key ? <input type="number" step="0.01" value={f.panels?.[x.key]?.t ?? f.t} onChange={(e) => setF(x.k, { panels: { ...f.panels, [x.key]: { ...f.panels?.[x.key], t: Number(e.target.value) } } })} className={inp} />
+            : x.si !== undefined ? <input type="number" step="0.01" value={f.stairs[x.si].t ?? 0.12} onChange={(e) => setF(x.k, { stairs: f.stairs.map((q, j) => (j === x.si ? { ...q, t: Number(e.target.value) } : q)) })} className={inp} />
+            : x.ci !== undefined ? <input type="number" step="0.01" value={f.cants[x.ci].t ?? f.t} onChange={(e) => setF(x.k, { cants: f.cants.map((q, j) => (j === x.ci ? { ...q, t: Number(e.target.value) } : q)) })} className={inp} /> : "-"}</td>
+          <td className="px-1">{x.key && x.r ? <select value={f.panels?.[x.key]?.bar ?? "RB 9"} onChange={(e) => setF(x.k, { panels: { ...f.panels, [x.key]: { ...f.panels?.[x.key], bar: e.target.value } } })} className="h-7 rounded border border-gray-300 bg-transparent px-1">{Object.keys(SLAB_BARS).map((b) => <option key={b}>{b}</option>)}</select>
+            : x.si !== undefined && x.r ? <select value={f.stairs[x.si].mainBar ?? "DB 12"} onChange={(e) => setF(x.k, { stairs: f.stairs.map((q, j) => (j === x.si ? { ...q, mainBar: e.target.value } : q)) })} className="h-7 rounded border border-gray-300 bg-transparent px-1">{Object.keys(SLAB_BARS).map((b) => <option key={b}>{b}</option>)}</select> : x.r ? "RB 9" : "-"}</td>
+          <td className="px-1 py-1">{x.r ? <div className="space-y-0.5">{slabRebar(x).map((b) => <div key={b.pos} className="flex gap-2"><span className="w-48 shrink-0 text-gray-500">{b.pos}</span><span className="font-medium text-gray-800">{b.text}</span>{b.need > 0 && <span className="text-gray-400">({fmt(b.need, 2)})</span>}</div>)}</div> : <span className="text-gray-500">{x.note}</span>}</td>
+          <td className={`px-1 ${x.r ? (x.ok ? "text-green-600" : "font-semibold text-red-600") : "text-gray-400"}`}>{x.r ? (x.ok ? "ผ่าน" : "ไม่ผ่าน") : "-"}</td></tr>); })}</tbody></table>
+      <p className="text-sm font-semibold text-gray-800">รูปตัดเสริมเหล็ก และโมเมนต์ต่อความกว้าง 1 ม.</p>
+      <div className="grid gap-3 xl:grid-cols-2">{rows.filter((x) => x.r).map((x) => { const f = frame.floors[x.k], t = x.key ? f.panels?.[x.key]?.t ?? f.t : x.si !== undefined ? f.stairs[x.si].t ?? 0.12 : x.ci !== undefined ? f.cants[x.ci].t ?? f.t : f.t, at = where(x); return (
+        <div key={`${x.k}-${x.name}`} onMouseEnter={() => at && highlight(at)} onMouseLeave={() => highlight(null)} className="rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200">
+          <p className="text-[12px] font-medium text-[#344054]">{slabAll ? `${f.name} · ` : ""}{x.name} · {x.way ?? ({ C: "พื้นยื่น", ST: "บันได" })[x.kind]} · <span className={x.ok ? "text-green-600" : "text-red-600"}>{x.ok ? "ผ่าน" : "ไม่ผ่าน"}</span></p>
+          <SlabSection row={x} t={t} dark={dark} /><SlabStrip row={x} /></div>); })}</div>
+      </div>); })()
+    : step === "loads" && sub === "groups" ? <div className="max-w-md"><Card title={`น้ำหนักแยกกลุ่ม — ${fl.name}`} icon={Layers}>
           <div className="space-y-1 text-[13px]">
             {Object.entries(GROUPS).map(([g, [name, color]]) => (
               <label key={g} className="flex cursor-pointer items-center gap-2">

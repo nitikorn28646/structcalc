@@ -43,7 +43,7 @@ export function designSlabs(an, floor, mat, sm = {}) {
     const rail = (an.lineLoads ?? []).filter((l) => l.on === "cant").length ? (floor.lineLoads ?? []).filter((_, j) => an.lineLoads[j].on === "cant").reduce((s, l) => s + l.q, 0) : 0;
     try {
       const r = cantilever({ ...base, t: c.t, extra: c.g.SDL, live: c.g.LL, L: c.L, P: rail, a: c.L, mainBar: bar, tempBar: bar });
-      out.push({ name: `พื้นยื่น ${i + 1}`, kind: "C", L: c.L, r, text: `${r.mainText} (บน) · ${r.tempText} (กันร้าว)`, ok: r.nOk && r.minTOk && r.dOk && r.VcOk && r.McOk && r.uOk, note: rail ? `รวมราว ${rail} กก./ม. ที่ปลาย` : "" });
+      out.push({ name: `พื้นยื่น ${i + 1}`, ci: i, kind: "C", L: c.L, r, text: `${r.mainText} (บน) · ${r.tempText} (กันร้าว)`, ok: r.nOk && r.minTOk && r.dOk && r.VcOk && r.McOk && r.uOk, note: rail ? `รวมราว ${rail} กก./ม. ที่ปลาย` : "" });
     } catch (e) { out.push({ name: `พื้นยื่น ${i + 1}`, kind: "C", note: e.message, ok: false }); }
   });
   (floor.stairs ?? []).forEach((st, i) => {
