@@ -213,13 +213,24 @@ export function designRoof(g, fr, roof, d) {
   });
 
   // supports (สะพาน): interior rafter reaction ≈ w × span per rafter, spread over the rafter spacing; spans between ตุ๊กตา
-  fr.supports.forEach((x, i) => spans("support", "support", "support", `support-${i + 1}`, `สะพาน S${i + 1}`, [...x.a, x.za], [...x.b, x.zb], roof.frame.postSp,
-    (section, count, L) => simpleBeam({ ...base, section, selfW: section.w, transfer: (ra.w * span) / D, L, count })));
+  const supWarn = []; // (the warnings list starts further down)
+  const supRun = (section, count, L) => simpleBeam({ ...base, section, selfW: section.w, transfer: (ra.w * span) / D, L, count });
+  fr.supports.forEach((x, i) => {
+    if (!roof.dang) return spans("support", "support", "support", `support-${i + 1}`, `สะพาน S${i + 1}`, [...x.a, x.za], [...x.b, x.zb], roof.frame.postSp, supRun);
+    // posts placed by the engineer: the support spans between the ดั้ง / ตุ๊กตา on its line (its ends need one each)
+    const a = [...x.a, x.za], b = [...x.b, x.zb], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const ts = roof.dang.map(([px, py]) => { const t = ((px - a[0]) * (b[0] - a[0]) + (py - a[1]) * (b[1] - a[1])) / (L * L), off = Math.abs((px - a[0]) * (b[1] - a[1]) - (py - a[1]) * (b[0] - a[0])) / L; return off < 0.05 && t > -0.01 && t < 1.01 ? Math.min(1, Math.max(0, t)) : null; }).filter((t) => t !== null);
+    const ends = [ts.some((t) => t < 0.01), ts.some((t) => t > 0.99)];
+    if (!ends[0] || !ends[1]) supWarn.push(`สะพาน S${i + 1}: ปลาย${!ends[0] && !ends[1] ? "ทั้งสองข้าง" : !ends[0] ? "ต้น" : "ท้าย"}ไม่มีดั้ง/ตุ๊กตารับ — วางดั้งที่ปลายสะพาน (เครื่องมือ "ดั้ง")`);
+    const cuts = [...new Set([0, ...ts.filter((t) => t > 0.01 && t < 0.99), 1])].sort((p, q) => p - q), P = (t) => a.map((v, k) => v + (b[k] - v) * t);
+    cuts.slice(1).forEach((t, j) => addMember("support", "support", "support", `support-${i + 1}-${j + 1}`, cuts.length > 2 ? `สะพาน S${i + 1} ช่วง ${j + 1}/${cuts.length - 1}` : `สะพาน S${i + 1}`,
+      P(cuts[j]), P(t), (t - cuts[j]) * L, (section, count) => supRun(section, count, (t - cuts[j]) * L)));
+  });
 
   // Plates bearing on plates (user 2026-11-03: "ทั้งคานทั้งอะเส"): every post (ดั้ง / ตุ๊กตา) and every end of an interior plate
   // that lands inside another plate is a point load on that plate; the wall plates (A) are designed with those loads too.
   // Each plate member carries `bear`: the loads it hands down to the structure [{ p: [x, y], P }] (roofLink sums them).
-  const warnings = [], near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
+  const warnings = [...supWarn], near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
   const postLoad = (pt) => members.reduce((t, x) => t
     + ((x.group === "ridge" || x.group === "support") && (near(x.p, pt) || near(x.q, pt)) ? x.r.R : 0)
     + ((x.group === "hip" || x.group === "valley") && near(x.q, pt) ? Math.max(0, x.r.Rmin) : 0), 0); // an uplifting hip end adds nothing

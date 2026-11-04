@@ -139,7 +139,9 @@ export function frameRoof(g, roof, supportsIn) {
     for (const l of g.lines) if (l.type === "ridge") along(l.p, l.q, l.p[2], l.q[2], "ดั้ง");
     for (const l of g.lines) if (l.type === "hip" || l.type === "valley") for (const v of [l.p, l.q]) addPost(v, v[2], "ดั้ง");
   }
-  for (const s of supports) along(s.a, s.b, s.za, s.zb, "ตุ๊กตา");
+  // ตุ๊กตา along the supports only while the posts are automatic; once the engineer places the ดั้ง (roof.dang) they place every
+  // post themselves (user 2026-11-04: "สะพานสร้างดั้งเอง ไม่ต้อง เดี๋ยวผมสร้างเอง") — the support then spans between those posts
+  if (!roof.dang) for (const s of supports) along(s.a, s.b, s.za, s.zb, "ตุ๊กตา");
   const supLen = supports.reduce((a, s) => a + Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1], s.zb - s.za), 0);
   const sum = (arr) => arr.reduce((a, m) => a + m.len, 0);
   return {
