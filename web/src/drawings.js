@@ -592,7 +592,7 @@ export function framePlanModel(floor, an, beamTypes, cols = [], opts = {}) {
   if (mode === "slabs") an?.panels.forEach((p, i) => {
     const m = p.P.reduce((s, q) => [s[0] + (q[0] * 100) / p.P.length, s[1] + (q[1] * 100) / p.P.length], [0, 0]);
     const kind = p.open ? "ช่องเปิด" : p.stairWell ? "ช่องบันได" : p.st === "GS" ? "GS บนดิน" : p.st === "PS" ? `PS ${p.dir === "x" ? "↔" : "↕"}` : p.kind === "twoway" ? "S 2 ทาง" : p.kind === "oneway" ? "S 1 ทาง" : "S";
-    if (p.st === "S" && !p.open && !p.stairWell && p.kind === "twoway" && p.P.length === 4) [[0, 2], [1, 3]].forEach(([a, b]) => d.line([p.P[a][0] * 100, p.P[a][1] * 100], [p.P[b][0] * 100, p.P[b][1] * 100], "DIM")); // two-way: diagonals
+    if (p.st === "S" && !p.open && !p.stairWell && p.kind === "twoway") { const C = p.P.filter((q, j) => { const a = p.P[(j + p.P.length - 1) % p.P.length], b = p.P[(j + 1) % p.P.length]; return Math.abs((q[0] - a[0]) * (b[1] - q[1]) - (q[1] - a[1]) * (b[0] - q[0])) > 1e-6; }); if (C.length === 4) [[0, 2], [1, 3]].forEach(([a, b]) => d.line([C[a][0] * 100, C[a][1] * 100], [C[b][0] * 100, C[b][1] * 100], "DIM")); } // two-way: diagonals
     d.text(`P${i + 1}`, m[0], m[1] + 14); d.text(`${kind}${p.open || p.stairWell ? "" : ` t=${num(p.t * 100, 0)}`}`, m[0], m[1] - 14);
   });
   floor.beams.forEach((b, i) => {
