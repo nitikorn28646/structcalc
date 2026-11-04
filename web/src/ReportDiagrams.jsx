@@ -3,7 +3,7 @@
 import { solveBeam } from "../engine/contBeam.js";
 import { fmt } from "./beamModel.js";
 
-const W = 680, X0 = 58, X1 = W - 18, INK = "#344054", MUTE = "#98a2b3", LOAD = "#b54708", SHEAR = "#0e9384", MOM = "#465fff", ENV = "#9cb9ff", F3 = "#d92d20";
+const W = 680, X0 = 58, X1 = W - 18, INK = "#344054", MUTE = "#98a2b3", LOAD = "#b54708", SHEAR = "#0e9384", MOM = "#1f3a5f", ENV = "#9cb9ff", F3 = "#d92d20";
 const T = ({ x, y, a = "middle", c = INK, s = 10, w, children }) => <text x={x} y={y} textAnchor={a} fill={c} fontSize={s} fontWeight={w}>{children}</text>;
 const path = (pts) => pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("");
 const wAt = (loads, t) => loads.reduce((s, l) => (l.P === undefined && t >= l.a - 1e-9 && t <= l.b + 1e-9 ? s + l.wa + ((l.wb - l.wa) * (t - l.a)) / (l.b - l.a || 1) : s), 0);
@@ -84,7 +84,7 @@ export function MemberDiagram({ x, sup, loads }) {
 
 // column axial loads (bars per floor, accumulated) and 3D-frame moments for every column stack
 export function ColumnChart({ stacks, floors }) {
-  const n = stacks.length, bw = (X1 - X0) / Math.max(1, n), nf = floors.length, cols = ["#9cb9ff", "#465fff", "#2a31d8", "#1b1f8c"];
+  const n = stacks.length, bw = (X1 - X0) / Math.max(1, n), nf = floors.length, cols = ["#b7c4d6", "#5b7aa3", "#1f3a5f", "#0f1d30"];
   const P = stacks.map((st) => floors.map((_, k) => st.list.find((c) => c.floor === k))), Pm = Math.max(1, ...P.flat().filter(Boolean).map((c) => c.Pd ?? c.Pbot));
   const Mm = Math.max(1, ...P.flat().filter(Boolean).map((c) => Math.max(c.M3?.Mx ?? 0, c.M3?.My ?? 0)));
   const yP = 150, yMb = 290, H = 330;

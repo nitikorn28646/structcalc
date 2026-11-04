@@ -55,7 +55,7 @@ const NOT_CHECKED = [
 export function StatusChapter({ st, n }) {
   const crit = st.items.filter((x) => x.util != null && x.util < 8.99 && x.status !== "NC").sort((a, b) => b.util - a.util).slice(0, 15);
   return (
-    <Sec id="c-status" n={n} th="สรุปผลการตรวจสอบ" en="Check status"
+    <Sec id="c-status" n={n} th="สรุปผลการออกแบบ" en="Design summary"
       intro="นับจากผลตรวจของทุกชิ้นส่วนในเล่ม: ผ่าน · ไม่ผ่าน · ไม่ได้ตรวจ (ใช้ตารางผู้ผลิต / ไม่อยู่ในขอบเขต) · ไม่ครบ (คำนวณไม่ได้ ข้อมูลขาด) — ถ้ามีรายการไม่ผ่านแม้รายการเดียว ผลรวมเป็น “ไม่ผ่าน”">
       <div className="mb-2 rounded-lg border-2 px-3 py-2 text-[11pt] font-semibold" style={{ borderColor: ST[st.status][1], color: ST[st.status][1] }}>ผลการตรวจสอบรวมของโครงการ: {st.text}</div>
       <table className="w-full border-collapse text-[9pt]"><thead><tr className="border-b border-gray-300 text-left">{["หมวด", "ตรวจทั้งหมด", "ผ่าน", "ไม่ผ่าน", "ไม่ได้ตรวจ", "ไม่ครบ", "สถานะ"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>

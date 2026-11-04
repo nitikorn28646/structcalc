@@ -1,6 +1,7 @@
 ﻿// Thai calculation report for the steel roof: geometry, loads, member-by-member ASD checks, framing plan and schedule.
 import { Doc, Sub, Figure, Item, Note, Sec, SummaryBox } from "./ReportKit.jsx";
 import { MemberDiagram } from "./ReportDiagrams.jsx";
+import { RoofSheet } from "./CheckSheets.jsx";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { plateModel, plateText, roofPlanModel } from "./drawings.js";
@@ -25,15 +26,9 @@ function schedule(dz) {
   });
 }
 
-// stress and deflection items shared by all bending members
+// bending members: the standard check sheet (ReportKit CheckSheet via CheckSheets RoofSheet) — section, M, fb ≤ Fb, deflection (มม.)
 function Bending({ x, f }) {
-  const r = x.r, k = x.count > 1 ? "2·" : "";
-  return (<>
-    <Item th="หน้าตัดที่ใช้" v={secText(x)} note={`${SECTION_TYPES[r.section.type]} · Ix ${fmt(r.section.Ix, 1)} ซม.⁴ · Sx ${fmt(r.section.Sx, 2)} ซม.³ · ${fmt(r.section.w, 2)} กก./ม.`} />
-    <Item th="โมดูลัสหน้าตัดที่ต้องการ" f="Sx = M / Fb" v={fmt(r.SxReq, 2)} u="ซม.³" ok={r.SxReq <= (x.count || 1) * r.section.Sx} />
-    <Item th="หน่วยแรงดัดที่เกิดขึ้น" f={f ?? `fb = M / ${k}Sx`} v={`${fmt(r.fb, 0)} ≤ ${fmt(r.Fb, 0)}`} u={ksc} ok={r.fb <= r.Fb} />
-    <Item th="ระยะแอ่นตัว" f={r.mode ? `Δ ≤ L/${Math.round((r.Ld * 100) / r.dAllow)}` : "Δ ≤ L/360"} v={`${fmt(r.d ?? r.dy, 3)} ≤ ${fmt(r.dAllow ?? r.dyAllow, 3)}`} u="ซม." ok={(r.d ?? r.dy) <= (r.dAllow ?? r.dyAllow)} />
-  </>);
+  return <RoofSheet f={f} id={`R-${x.key ?? x.id ?? x.label}`} title={`การตรวจสอบ ${x.label ?? ""}${x.tag ? ` ${x.tag}` : ""}`} x={x} secText={secText(x)} />;
 }
 
 export function RoofReport({ roof, project , bare = false, nb = null }) {

@@ -412,3 +412,12 @@ same text in the criteria summary (the book said "ผ่านทุกข้อ
 force table P / N3D / Mx My 3D / e min / design basis / util. Spread footings: corner soil pressure with both moments (frame.js designSpread,
 outside the frozen spreadFooting: q + 6Mx/(Bx·By²) + 6My/(By·Bx²) ≤ qa → r.qCornerOk, in ok/util) + breakdown table (P, Wf, Ws, A, q, terms).
 Standalone print file: empty Paged.js running strings closed (headers showed "--pagedjs-string…").
+REPORT ROUND 1 (2026-11-04, user's "Professional Structural Engineering Report" proposal): theme Minimal Engineering (navy #1f3a5f / white /
+light gray; ReportKit Sec / Sub / Note / Chip / SummaryBox / Toc restyled, A4 margins 18/17/24/23 mm, navy cover band with a faint grid).
+Book order (WorkReport): 1 ข้อมูลโครงการ (ProjectInfo: data, scope, standards, unit system, overall result) · 2 เกณฑ์ (+2.1 lateral) · 3 ผัง ·
+4 การวิเคราะห์ (FrameReport key "analysis": model text, FrameIso, base reactions, 10 worst deflections) · 5 หลังคา · 6 พื้นรายชั้น (6.k, Sec pre =
+chapter heading) · 7 คาน · 8 เสา · 9 ฐานราก · 10 สรุปผลการออกแบบ (StatusChapter) + 10.1 schedules · 11 ภาคผนวก. FrameReport part may be an
+array of section keys. Member pages = ReportKit CheckSheet (6 parts: member info · design input · analysis results · equations symbolic +
+substituted · verification with ratios · final result + UtilBar, CALC ID anchors calc-<id>) built in src/CheckSheets.jsx: BeamTypeSheet,
+ColumnLevelSheet, FootingSheet, RoofSheet (RoofReport Bending → RoofSheet). Units one system (กก., กก.-ม., กก./ซม.², ซม.², ม./ซม., deflection มม.).
+Round 2 (agreed, not built): calc-ID cross links from tables, revision table, report-integrity stamp (input hash + time on every page), input/unit validation list.
