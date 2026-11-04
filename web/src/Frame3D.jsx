@@ -19,8 +19,8 @@ const CONC = "#b8bcc6", SLAB = { S: "#c9ccd4", PS: "#a9c4b0", GS: "#b5a58f" };
 // flashing marker for a highlighted warning: red emissive, opacity pulsing
 function Blink({ children }) {
   const m = useRef();
-  useFrame(({ clock }) => { if (m.current) m.current.opacity = 0.35 + 0.6 * Math.abs(Math.sin(clock.elapsedTime * 4)); });
-  return <mesh>{children}<meshStandardMaterial ref={m} color="#d92d20" emissive="#d92d20" emissiveIntensity={0.8} transparent depthTest={false} /></mesh>;
+  useFrame(({ clock }) => { if (m.current) m.current.opacity = 0.35 + 0.5 * Math.abs(Math.sin(clock.elapsedTime * 3)); });
+  return <mesh>{children}<meshStandardMaterial ref={m} color="#d92d20" emissive="#d92d20" emissiveIntensity={0.5} transparent depthWrite={false} /></mesh>;
 }
 // box from plan point p to q, width w (across), bottom z0, height h
 function Box({ p, q, w, z0, h, color, opacity = 1, edges }) {
@@ -107,6 +107,17 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
   const shown = (k) => floorsShown === "all" || (floorsShown === "upto" ? k <= cur : k === cur);
   const wt = frame.wallTypes ?? DEFAULT_WALL_TYPES, base0 = (frame.floors[0]?.name ?? "").includes("+0.40") ? 0.4 : 0.4; // footing top at −0.40 in the drawings
   const fo = frame.footing ?? { t: 0.4 }, hl = useHighlight(), hz = hl?.floor !== undefined ? Z[hl.floor] ?? top : Z[frame.roofLink?.floor ?? frame.floors.length - 1] ?? top; // highlighted point: at the linked (roof) floor
+  // size (b, h) of the largest beam of the highlighted floor lying along a segment (default 0.20 × 0.40)
+  const segSize = (a, b) => {
+    const fl = frame.floors[hl?.floor], an = res.floors?.[hl?.floor]; let w = 0, h = 0;
+    for (const [i, bm] of (fl?.beams ?? []).entries()) {
+      const d = [b[0] - a[0], b[1] - a[1]], L = Math.hypot(...d) || 1, u = [d[0] / L, d[1] / L], off = (p) => Math.abs(u[0] * (p[1] - a[1]) - u[1] * (p[0] - a[0]));
+      if (off(bm.a) > 0.05 || off(bm.b) > 0.05) continue;
+      const sp = an?.spans.find((x) => (x.members ?? [x.member]).includes(i)), t = frame.beamTypes[sp?.typeIdx ?? bm.type ?? 0] ?? frame.beamTypes[0];
+      w = Math.max(w, t?.b ?? 0); h = Math.max(h, t?.h ?? 0);
+    }
+    return [w || 0.2, h || 0.4];
+  };
   const scene = (
     <Canvas dpr={[1, 2]} camera={{ position: [span, span * 0.8, span * 1.1], fov: 35, near: 0.1, far: 500 }}>
       <color attach="background" args={[dark ? "#0f1222" : "#f4f5f7"]} />
@@ -120,12 +131,15 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
               {(f.r.piles ?? []).map(([px, py], j) => <Box key={j} p={[f.p[0] + px - 0.09, f.p[1] + py]} q={[f.p[0] + px + 0.09, f.p[1] + py]} w={0.18} z0={-(f.inp?.t ?? fo.t ?? 0.4) - 1.5} h={1.5} color="#7c828f" />)}
             </group>
           ))}
-          {hl && <group renderOrder={10}>
-            {(hl.segs ?? []).map(([a, b], j) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 0.01; return (
-              <group key={`hs${j}`} position={[(a[0] + b[0]) / 2, hz, -(a[1] + b[1]) / 2]} rotation={[0, Math.atan2(b[1] - a[1], b[0] - a[0]), 0]}>
-                <Blink><boxGeometry args={[L + 0.1, 0.5, 0.35]} /></Blink></group>); })}
-            {(hl.pts ?? []).slice(1).map((q, j) => <group key={`hp${j}`} position={[q[0], hz + 0.35, -q[1]]}><Blink><sphereGeometry args={[0.22, 20, 14]} /></Blink></group>)}
-            {hl.p && <mesh position={[hl.p[0], hz + 0.35, -hl.p[1]]}><sphereGeometry args={[0.28, 24, 16]} /><meshStandardMaterial color={hl.bad ? "#d92d20" : "#12b76a"} emissive={hl.bad ? "#d92d20" : "#12b76a"} emissiveIntensity={0.6} /></mesh>}
+          {hl && <group>
+            {(hl.segs ?? []).map(([a, b], j) => { // a warning on a beam line: a red sleeve just around the beam itself, pulsing
+              const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 0.01, [bw, bh] = segSize(a, b);
+              return (<group key={`hs${j}`} position={[(a[0] + b[0]) / 2, hz - bh / 2, -(a[1] + b[1]) / 2]} rotation={[0, Math.atan2(b[1] - a[1], b[0] - a[0]), 0]}>
+                <Blink><boxGeometry args={[L, bh + 0.03, bw + 0.03]} /></Blink></group>); })}
+            {(hl.pts ?? []).slice(1).map((q, j) => <group key={`hp${j}`} position={[q[0], hz - 0.2, -q[1]]}><Blink><sphereGeometry args={[0.16, 20, 14]} /></Blink></group>)}
+            {hl.p && (hl.floor !== undefined
+              ? <group position={[hl.p[0], hz - 0.2, -hl.p[1]]}><Blink><sphereGeometry args={[0.18, 24, 16]} /></Blink></group>
+              : <mesh position={[hl.p[0], hz + 0.35, -hl.p[1]]}><sphereGeometry args={[0.28, 24, 16]} /><meshStandardMaterial color={hl.bad ? "#d92d20" : "#12b76a"} emissive={hl.bad ? "#d92d20" : "#12b76a"} emissiveIntensity={0.6} /></mesh>)}
             {hl.to && <mesh position={[hl.to[0], hz + 0.35, -hl.to[1]]}><sphereGeometry args={[0.16, 16, 12]} /><meshStandardMaterial color="#d92d20" /></mesh>}
           </group>}
           {frame.floors.map((fl, k) => {
