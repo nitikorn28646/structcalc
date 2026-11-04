@@ -72,7 +72,7 @@ export function BeamDetail({ t, mat, at = "sup", className = "" }) {
 
 // ---------------------------------------------------------------- column section (one level of a type)
 export function ColumnDetail({ lv, cover = 3, className = "" }) {
-  const id = ++uid, Bx = lv.Bx, By = lv.By, [nx, ny] = faceBars(lv.n), db = SLAB_BARS[lv.mainBar]?.d ?? BARS[lv.mainBar]?.d ?? 1.2, td = SLAB_BARS[lv.tieBar]?.d ?? 0.6;
+  const id = ++uid, Bx = lv.Bx, By = lv.By, [nx, ny] = faceBars(lv.n).map((v) => Math.max(2, v / 2)), db = SLAB_BARS[lv.mainBar]?.d ?? BARS[lv.mainBar]?.d ?? 1.2, td = SLAB_BARS[lv.tieBar]?.d ?? 0.6;
   const fs = Math.max(3.4, Math.max(Bx, By) / 6.5), M = fs * 5, W = Bx + M + fs * 13, Hh = By + 2 * M, x0 = M + cover + td + db / 2, x1 = M + Bx - cover - td - db / 2, y0 = M + cover + td + db / 2, y1 = M + By - cover - td - db / 2;
   const pts = []; for (let i = 0; i < nx; i++) { const x = nx > 1 ? x0 + ((x1 - x0) * i) / (nx - 1) : (x0 + x1) / 2; pts.push([x, y0], [x, y1]); }
   for (let j = 1; j < ny - 1; j++) { const y = y0 + ((y1 - y0) * j) / (ny - 1); pts.push([x0, y], [x1, y]); }

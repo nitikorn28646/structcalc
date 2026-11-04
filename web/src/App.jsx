@@ -25,6 +25,7 @@ import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
 import { applyStandard } from "./DesignCriteria.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { WorkReport } from "./WorkReport.jsx";
+import { projectStamp, validateInput } from "./reportQA.js";
 import { analyzeFrame } from "../engine/frame.js";
 import { roofFromFrame, roofPoints } from "./roofLink.js";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
@@ -167,6 +168,21 @@ function SectionCard({ title, sec, st, set, res }) {
   );
 }
 
+// step 9: checks before printing (report round 2) — data stamp, input values that look wrong, revision
+function ReportQA({ frame, roof, project, onProject }) {
+  const list = validateInput(frame, (roof?.pts?.length ?? 0) >= 3 ? roof : null), stamp = projectStamp(frame, roof, project), revs = project.revisions ?? [];
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-[13px]">
+      <div className="flex flex-wrap items-center gap-3"><b className="text-gray-800">ตรวจก่อนพิมพ์</b>
+        <span className="text-gray-600">รหัสข้อมูล <b className="font-mono">{stamp}</b> (พิมพ์ท้ายทุกหน้า — แก้ข้อมูลแล้วรหัสเปลี่ยน)</span>
+        <span className="text-gray-600">ฉบับ {revs.length ? revs[revs.length - 1].rev : "0"}</span>
+        <button onClick={onProject} className="text-brand-600">แก้ข้อมูลโครงการ / ประวัติการแก้ไข</button></div>
+      {list.length ? <ul className="mt-2 space-y-0.5">{list.map((x, i) => <li key={i} className={x.lvl === "error" ? "text-red-700" : "text-amber-700"}>{x.lvl === "error" ? "✕" : "!"} {x.where}: {x.text}</li>)}</ul>
+        : <p className="mt-1 text-green-700">✓ ไม่พบค่าที่ผิดปกติในข้อมูลนำเข้า (ค่าศูนย์ ค่านอกช่วงปกติ หรือหน่วยที่อาจกรอกผิด)</p>}
+    </div>
+  );
+}
+
 function ProjectDialog({ st, set, onClose }) {
   return (
     <div className="fixed inset-0 z-30 grid place-items-center bg-black/50 p-4" onClick={onClose}>
@@ -183,6 +199,14 @@ function ProjectDialog({ st, set, onClose }) {
             </div>
           ))}
         </div>
+        {/* document control (report round 2): document number and the revision history printed in chapter 1 */}
+        <div className="mt-4"><Field label="เลขที่เอกสาร (ว่าง = ใช้รหัสข้อมูล)"><TextInput value={st.project.docNo ?? ""} onChange={(v) => set("project.docNo", v)} /></Field></div>
+        <div className="mt-3 text-sm font-semibold text-gray-700">ประวัติการแก้ไขเอกสาร</div>
+        <table className="mt-1 w-full text-[12px]"><thead><tr className="text-left text-gray-500"><th className="w-12 font-normal">ฉบับ</th><th className="w-28 font-normal">วันที่</th><th className="font-normal">รายละเอียด</th><th /></tr></thead>
+          <tbody>{(st.project.revisions ?? []).map((r, i) => { const put = (k, v) => set("project.revisions", st.project.revisions.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+            return <tr key={i}>{["rev", "date", "desc"].map((k) => <td key={k} className="pr-1"><input value={r[k] ?? ""} onChange={(e) => put(k, e.target.value)} className="h-7 w-full rounded border border-gray-200 px-1" /></td>)}
+              <td><button onClick={() => set("project.revisions", st.project.revisions.filter((_, j) => j !== i))} className="text-red-500">ลบ</button></td></tr>; })}</tbody></table>
+        <button onClick={() => { const l = st.project.revisions ?? []; set("project.revisions", [...l, { rev: String(l.length), date: st.project.date ?? "", desc: l.length ? "" : "ออกครั้งแรก" }]); }} className="mt-1 text-[12px] text-brand-600">+ เพิ่มฉบับแก้ไข</button>
         <div className="mt-5 text-right"><Button onClick={onClose}>เสร็จ</Button></div>
       </div>
     </div>
@@ -560,7 +584,8 @@ export default function App() {
           <ErrorBoundary resetKey={mod}>
           {mod === "work" ? (step === "roof" ? <div className="flex min-h-0 flex-1 flex-col"><div className="px-4 pt-3"><RoofLinkCard frame={frame} roof={roof} onFromFrame={roofFromStructure} set={setFrame} /></div><RoofPage roof={roof} set={setRoof} dark={dark} onFromFrame={roofFromStructure} frame={frame} res={fres} focus={focus} /></div> : step === "report" ? (
             <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="report-preview mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
-              <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง (หลังคา → โครงสร้าง → ฐานราก) · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
+              <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
+              <ReportQA frame={frame} roof={roof} project={st.project} onProject={() => setProjOpen(true)} />
               <WorkReport frame={frame} roof={roof} project={st.project} />
             </div></main>
           ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} focus={focus} onProjectInfo={() => setProjOpen(true)}  onRoofFromFrame={roofFromStructure} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (

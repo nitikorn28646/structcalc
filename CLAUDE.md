@@ -421,3 +421,11 @@ array of section keys. Member pages = ReportKit CheckSheet (6 parts: member info
 substituted · verification with ratios · final result + UtilBar, CALC ID anchors calc-<id>) built in src/CheckSheets.jsx: BeamTypeSheet,
 ColumnLevelSheet, FootingSheet, RoofSheet (RoofReport Bending → RoofSheet). Units one system (กก., กก.-ม., กก./ซม.², ซม.², ม./ซม., deflection มม.).
 Round 2 (agreed, not built): calc-ID cross links from tables, revision table, report-integrity stamp (input hash + time on every page), input/unit validation list.
+REPORT ROUND 2 (2026-11-04): src/reportQA.js — projectStamp (FNV-1a of frame/roof/project without UI state → 8 hex; printed in every page
+footer with revision + time via string rp-stamp, and in chapter 1 "การควบคุมเอกสาร"), calcAnchor (CALC ID → element id), validateInput
+(zero / out-of-range / unit mix-ups: MPa, kN, ton entered for kg). project.revisions [{rev,date,desc,by}] + project.docNo edited in
+ProjectDialog; cover shows doc no + revision; chapter 1 revision table. Status tables and schedules link to the check sheets (CalcLink /
+PageRef with page numbers). Step 9 ReportQA card (stamp, revision, input checks). Fixes: column section 2D/3D drew faceBars per face
+(8 bars → 20 dots) — faceBars counts both opposite faces, per face = half (calc was always right); beam sheets show support + mid-span sections.
+PENDING (user 2026-11-04, confirm asked): second-layer bars only in pairs at the stirrup legs (4 → 2+2, 5 → 3+2), in barLayers (d), drawings,
+auto beam types, and a warning for typed types like 3+1.

@@ -7,6 +7,7 @@ import { RoofReport } from "./RoofReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
 import { runRoof, useSkeleton } from "./RoofPage.jsx";
 import { StatusChapter, projectStatus } from "./StatusSummary.jsx";
+import { projectStamp } from "./reportQA.js";
 
 const STANDARDS = [
   "พระราชบัญญัติควบคุมอาคาร พ.ศ. 2522 และที่แก้ไขเพิ่มเติม",
@@ -19,7 +20,7 @@ const UNITS = [["แรง / น้ำหนัก", "กก. (kgf) · ตัน
   ["พื้นที่เหล็กเสริม", "ซม.²"], ["ระยะ ขนาดหน้าตัด", "ม. · ซม. (หน้าตัด) · มม. (เหล็กขึ้นรูปเย็น)"], ["ระยะแอ่น / การเสียรูป", "มม."], ["น้ำหนักแผ่", "กก./ม. (ตามแนวยาว) · กก./ม.² (ต่อพื้นที่)"]];
 
 // chapter 1: project data, scope of this book, standards, the unit system, the overall result (details in chapter 10)
-function ProjectInfo({ project, frame, res, st, hasRoof, n, statusN }) {
+function ProjectInfo({ project, frame, res, st, hasRoof, n, statusN, stamp, made, revs }) {
   const spans = res.floors.reduce((t, a) => t + a.spans.length, 0);
   const rows = [["โครงการ", project.name], ["เจ้าของโครงการ", project.owner], ["สถานที่ก่อสร้าง", project.location], ["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`], ["วันที่", project.date],
     ["ระดับอาคาร", `${frame.floors.length} ระดับคาน (${frame.floors.map((f) => f.name).join(" · ")})`]].filter(([, v]) => v);
@@ -39,6 +40,14 @@ function ProjectInfo({ project, frame, res, st, hasRoof, n, statusN }) {
       <p className="rp-sub mt-3 text-[12pt] font-semibold text-[#1f3a5f]">ระบบหน่วยในเล่ม</p>
       <table className="w-full text-[9.5pt]"><tbody>{UNITS.map(([k, v]) => <tr key={k} className="border-b border-[#eaecf0]"><td className="w-[32%] py-[3px] text-[#667085]">{k}</td><td>{v}</td></tr>)}</tbody></table>
       <p className="mt-1 text-[8.5pt] text-[#667085]">ตัวเลขแสดง 0–3 ตำแหน่งตามขนาดค่า (คำนวณภายในด้วยความละเอียดเต็ม) · ทุกสมการแสดงรูปสมการก่อนแทนค่า · เครื่องหมาย × ÷ ² ใช้แบบเดียวกันทั้งเล่ม</p>
+      <p className="rp-sub mt-3 text-[12pt] font-semibold text-[#1f3a5f]">ประวัติการแก้ไขเอกสาร</p>
+      <table className="w-full text-[9.5pt]"><thead><tr className="border-b border-[#d0d5dd] text-left text-[8.5pt] text-[#667085]"><th className="py-[2px] font-normal">ฉบับ</th><th className="font-normal">วันที่</th><th className="font-normal">รายละเอียด</th><th className="font-normal">โดย</th></tr></thead>
+        <tbody>{revs.map((r, i) => <tr key={i} className="border-b border-[#eaecf0]"><td className="py-[3px] font-semibold">{r.rev}</td><td>{r.date || "-"}</td><td>{r.desc || "-"}</td><td>{r.by || project.engineer || "-"}</td></tr>)}</tbody></table>
+      <p className="rp-sub mt-3 text-[12pt] font-semibold text-[#1f3a5f]">การควบคุมเอกสาร</p>
+      <table className="w-full text-[9.5pt]"><tbody>
+        {[["รหัสข้อมูลคำนวณ", `${stamp} — คำนวณจากข้อมูลโครงการชุดนี้ ถ้าแก้ข้อมูลใด ๆ รหัสจะเปลี่ยน (พิมพ์ไว้ท้ายทุกหน้า)`], ["สร้างรายงานเมื่อ", made], ["เลขที่เอกสาร", project.docNo || `SC-${stamp}`],
+          ["การตรวจข้อมูลนำเข้า", st.inputs.length ? `พบ ${st.inputs.length} รายการที่ควรตรวจ — ดูบท ${statusN}` : "ไม่พบค่าที่ผิดปกติ"], ["รหัสอ้างอิงการคำนวณ", "ทุกหน้าคำนวณมี CALC ID (เช่น B-B1, C-C1-ชั้น 1, F-F1) ตารางสรุปลิงก์ไปยังหน้านั้นพร้อมเลขหน้า"]]
+          .map(([k, v]) => <tr key={k} className="border-b border-[#eaecf0]"><td className="w-[32%] py-[3px] text-[#667085]">{k}</td><td>{v}</td></tr>)}</tbody></table>
       <div className="mt-4 border-l-[3pt] px-3 py-2 text-[11pt] font-semibold" style={{ borderColor: st.status === "PASS" ? "#067647" : "#b42318", color: st.status === "PASS" ? "#067647" : "#b42318" }}>
         ผลการตรวจสอบรวม: {st.text} <span className="text-[9pt] font-normal text-[#667085]">— รายละเอียดบท {statusN} สรุปผลการออกแบบ</span></div>
     </section>
@@ -48,7 +57,10 @@ function ProjectInfo({ project, frame, res, st, hasRoof, n, statusN }) {
 export function WorkReport({ frame, roof, project }) {
   const res = analyzeFrame(frame), hasRoof = (roof?.pts?.length ?? 0) >= 3, lateral = !!res.lateral;
   // one status for the whole book (roof + structure), the same numbers in the summary chapter and the criteria summary line
-  const sk = useSkeleton(), rr = hasRoof && sk ? runRoof(roof, sk) : null, st = projectStatus(frame, res, rr?.dz ?? null);
+  const sk = useSkeleton(), rr = hasRoof && sk ? runRoof(roof, sk) : null, st = projectStatus(frame, res, rr?.dz ?? null, hasRoof ? roof : null);
+  // report integrity: a code of the input data (any edit of structure / roof / project data changes it) + the time the book was made
+  const stamp = projectStamp(frame, roof, project), made = new Date().toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" });
+  const revs = project.revisions?.length ? project.revisions : [{ rev: "0", date: project.date, desc: "ออกครั้งแรก" }], rev = revs[revs.length - 1];
   // book order (user 2026-11-04): project → criteria → layout → analysis → roof → slabs → beams → columns → footings → summary → appendix;
   // chapters 1…, sub-chapters n.m (lateral loads, each floor, schedules)
   const num = {}, toc = []; let ch = 0;
@@ -67,11 +79,11 @@ export function WorkReport({ frame, roof, project }) {
   const floorsText = `${frame.floors.length} ระดับคาน (${frame.floors.map((f) => f.name).join(" · ")})`;
   return (
     <div className="report">
-      <span className="rp-str-project hidden">{project.name}</span><span className="rp-str-method hidden">WSD / ASD</span>
       <Cover project={project} title="รายการคำนวณออกแบบโครงสร้าง" subtitle="อาคารคอนกรีตเสริมเหล็ก และโครงหลังคาเหล็ก"
-        items={[["ระดับอาคาร", floorsText], ["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`]]} standards={STANDARDS} />
+        items={[["ระดับอาคาร", floorsText], ["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`]]} standards={STANDARDS} docNo={project.docNo || `SC-${stamp}`} rev={rev.rev} />
+      <span className="rp-str-project hidden">{project.name}</span><span className="rp-str-method hidden">WSD / ASD</span><span className="rp-str-stamp hidden">{`รหัสข้อมูล ${stamp} · ฉบับ ${rev.rev} · ${made}`}</span>
       <Toc items={toc} />
-      <ProjectInfo project={project} frame={frame} res={res} st={st} hasRoof={hasRoof} n={num["c-project"]} statusN={num["c-status"]} />
+      <ProjectInfo project={project} frame={frame} res={res} st={st} hasRoof={hasRoof} n={num["c-project"]} statusN={num["c-status"]} stamp={stamp} made={made} revs={revs} />
       <FrameReport frame={frame} project={project} part={["criteria", "lateral", "plans", "analysis"]} nOf={nOf} res={res} overall={st} />
       {hasRoof && <RoofReport roof={roof} project={project} bare nb={num["c-roof"]} />}
       <FrameReport frame={frame} project={project} part={["floors", "beams", "columns", "footings"]} nOf={nOf} res={res} overall={st} />

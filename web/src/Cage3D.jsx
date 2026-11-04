@@ -36,7 +36,7 @@ const tie = (y, w, h, d) => { const hw = w / 2, hh = h / 2, k = Math.max(6 * d, 
 
 export function ColumnCageParts({ lv, cover = 3, H = 1.6, dark = false }) {
   const parts = useMemo(() => {
-    const Bx = lv.Bx / 100, By = lv.By / 100, db = dOf(lv.mainBar), td = dOf(lv.tieBar, 0.6), c = cover / 100, [nx, ny] = faceBars(lv.n);
+    const Bx = lv.Bx / 100, By = lv.By / 100, db = dOf(lv.mainBar), td = dOf(lv.tieBar, 0.6), c = cover / 100, [nx, ny] = faceBars(lv.n).map((v) => Math.max(2, v / 2)); // per face (faceBars counts both opposite faces: 8 bars → 6 / 6)
     const ix = Bx / 2 - c - td - db / 2, iy = By / 2 - c - td - db / 2, pts = [];
     for (let i = 0; i < nx; i++) { const x = nx > 1 ? -ix + (2 * ix * i) / (nx - 1) : 0; pts.push([x, -iy], [x, iy]); }
     for (let j = 1; j < ny - 1; j++) { const z = -iy + (2 * iy * j) / (ny - 1); pts.push([-ix, z], [ix, z]); }

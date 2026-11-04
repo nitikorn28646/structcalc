@@ -51,7 +51,8 @@ export function BeamTypeSheet({ t, g, count, floorName, mat }) {
       eqs={[["ค่าคงที่หน้าตัด", "k = 1/(1 + fs/(n·fc)), j = 1 − k/3, R = ½·fc·k·j", "", `R = ${n2(r0.R)}`, "กก./ซม.²"], ...mid.eqs, ...sup.eqs]}
       checks={[...mid.checks, ...sup.checks, ...(defl ?? [])]}
       note={c.error ?? (g.kind === "cantilever" ? "คานยื่น: เหล็กบนยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลัง" : undefined)}
-      figure={<BeamDetail t={t} mat={mat} at={g.Mneg > g.Mpos ? "sup" : "mid"} className="h-[44mm] w-full" />} />
+      figure={<div className="grid gap-1">{[["sup", g.kind === "cantilever" ? "โคนคานยื่น" : "ปลายคาน (หัวเสา)", t.sSup], ["mid", g.kind === "cantilever" ? "ปลายคานยื่น" : "กลางคาน", t.sMid]].map(([at, cap, sp]) => (
+        <div key={at} className="text-center"><BeamDetail t={t} mat={mat} at={at} className="h-[36mm] w-full" /><div className="text-[7.5pt] text-[#667085]">{cap} · ปลอก @{n2(sp)}</div></div>))}</div>} />
   );
 }
 

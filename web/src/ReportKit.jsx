@@ -1,6 +1,7 @@
 ﻿// Building blocks for the calculation reports (Thai-first, paginated by Paged.js when printing).
 import { Previewer } from "pagedjs";
 import { BRAND, loadBrand } from "./brand.js";
+import { calcAnchor } from "./reportQA.js";
 
 // @page rules and running header/footer; Tailwind classes in the report body come from the app stylesheet.
 const PAGE_CSS = `
@@ -9,7 +10,7 @@ const PAGE_CSS = `
   @top-left { content: string(rp-project); font: 8pt Sarabun, sans-serif; color: #667085; border-bottom: 0.5pt solid #d0d5dd; }
   @top-center { content: string(rp-sec); font: 8pt Sarabun, sans-serif; color: #1f3a5f; border-bottom: 0.5pt solid #d0d5dd; }
   @top-right { content: "รายการคำนวณออกแบบโครงสร้าง (" string(rp-method) ")"; font: 8pt Sarabun, sans-serif; color: #667085; border-bottom: 0.5pt solid #d0d5dd; }
-  @bottom-left { content: "โครงสร้างไทย · " string(rp-member); font: 7.5pt Sarabun, sans-serif; color: #98a2b3; vertical-align: top; padding-top: 3mm; width: 40mm; }
+  @bottom-left { content: "โครงสร้างไทย · " string(rp-member) "\\A" string(rp-stamp); white-space: pre-wrap; font: 7pt Sarabun, sans-serif; color: #98a2b3; vertical-align: top; padding-top: 3mm; width: 42mm; }
   /* every sheet signed by the engineer (user 2026-11-04) — one line (user: the registration number wrapped to a second line) */
   @bottom-center { content: element(rpSig); text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.6pt solid #98a2b3; }
   @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 8pt Sarabun, sans-serif; color: #667085; vertical-align: top; padding-top: 3mm; width: 24mm; }
@@ -21,6 +22,7 @@ const PAGE_CSS = `
 .rp-str-project { string-set: rp-project content(text); }
 .rp-str-member { string-set: rp-member content(text); }
 .rp-str-method { string-set: rp-method content(text); }
+.rp-str-stamp { string-set: rp-stamp content(text); }
 .rp-str-eng { string-set: rp-eng content(text); }
 .rp-sig-run { position: running(rpSig); display: block !important; white-space: nowrap; font: 8pt Sarabun, sans-serif; color: #344054; }
 .rp-sig-run img { display: inline-block; height: 9mm; vertical-align: middle; margin: -3mm 1mm 0; }
@@ -296,13 +298,13 @@ export function CheckSheet({ id, title, sub, info = [], input = [], forces = [],
   const valid = rat.map((r, i) => (r == null ? -1 : r)), gi = valid.length ? valid.indexOf(Math.max(...valid)) : -1;
   const u = gi >= 0 ? rat[gi] : null, ok = checks.every((c) => c[4] !== false);
   return (
-    <div id={id ? `calc-${id}` : undefined} className="rp-sheet mb-4 border-t-[1.5pt] border-[#1f3a5f] pt-1">
+    <div id={id ? calcAnchor(id) : undefined} className="rp-sheet mb-4 border-t-[1.5pt] border-[#1f3a5f] pt-1">
       <div className="flex items-baseline gap-3 break-after-avoid">
         <span className="text-[12pt] font-semibold text-[#1f3a5f]">{title}</span>
         {sub && <span className="text-[9pt] text-[#475467]">{sub}</span>}
         {id && <span className="ml-auto font-mono text-[8pt] text-[#667085]">CALC ID {id}</span>}
       </div>
-      <div className={figure ? "grid grid-cols-[1fr_46mm] gap-3" : ""}>
+      <div className={figure ? "grid grid-cols-[1fr_44mm] gap-3" : ""}>
         <div>
           {info.length > 0 && <Part k="1" th="ข้อมูลชิ้นส่วน" en="Member information"><KV rows={info} /></Part>}
           {input.length > 0 && <Part k="2" th="ข้อมูลออกแบบ" en="Design input"><KV rows={input} /></Part>}
@@ -333,3 +335,6 @@ export function CheckSheet({ id, title, sub, info = [], input = [], forces = [],
     </div>
   );
 }
+
+// link to a calculation sheet with its page number (Paged.js target-counter)
+export const CalcLink = ({ id, children }) => <a href={`#${calcAnchor(id)}`} className="rp-pref text-[#1f3a5f] no-underline">{children ?? id} · น. </a>;

@@ -6,7 +6,7 @@ import { FootingCageParts } from "./Cage3D.jsx";
 import { BeamCageParts } from "./BeamCage3D.jsx";
 import { Still3D } from "./Snapshot3D.jsx";
 import { beamLayersOf } from "./DesignFigures.jsx";
-import { Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
+import { CalcLink, Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { beamSectionModel, columnSectionModel, footingModel, framePlanModel, pileCapModel } from "./drawings.js";
@@ -262,16 +262,16 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
 
         {show("back", "schedules") && <Sec id="c-schedules" n={N("c-schedules")} th="ตารางหน้าตัดและเหล็กเสริม" en="Schedules" intro="ขนาดและเหล็กเสริมที่ใช้ ความยาวคานรวมวัดตามแนวศูนย์กลาง ยังไม่รวมระยะทาบและเศษเหล็ก">
           <Table head={["Type", "b × h (ซม.)", "เหล็กบน (+ เสริมหัวเสา L/4 · คานยื่น: ยาวตลอด)", "เหล็กล่าง (+ เสริมกลางคาน 3L/5)", "ปลอก หัวเสา / กลาง", "จำนวน", "ยาวรวม (ม.)"]}
-            rows={types.map((t, i) => { const l = spans.filter((s) => s.typeIdx === i && s.kind !== "cantilever"); return [t.name, `${fmt(t.b * 100, 0)} × ${fmt(t.h * 100, 0)}`, bars(t), [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" "),
+            rows={types.map((t, i) => { const l = spans.filter((s) => s.typeIdx === i && s.kind !== "cantilever"); return [spans.some((s) => s.typeIdx === i) ? <CalcLink id={`B-${t.name}`}>{t.name}</CalcLink> : t.name, `${fmt(t.b * 100, 0)} × ${fmt(t.h * 100, 0)}`, bars(t), [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" "),
               `${stLabel(t)} @${fmt(t.sSup, 2)} / @${fmt(t.sMid, 2)}`, `${l.length} ช่วง`, fmt(l.reduce((s, x) => s + x.len, 0), 2)]; }).flatMap((row, i) => {
                 // cantilever variant: same section and support bars, the top bars run the whole cantilever (B1A …)
                 const c = spans.filter((s) => s.typeIdx === i && s.kind === "cantilever"), t = types[i];
                 return c.length ? [row, [`${t.name}A`, row[1], `${[t.top, t.topX].filter(Boolean).join(" + ")} ยาวตลอดคานยื่น + งอขอ`, t.bot, row[4], `${c.length} ช่วง (คานยื่น)`, fmt(c.reduce((s, x) => s + x.len, 0), 2)]] : [row]; })} />
           <Table head={["Type", "ระดับ", "ขนาด (ซม.)", "เหล็กยืน", "ปลอก", "จำนวน"]}
-            rows={colTypes.flatMap((t, i) => t.levels.map((lv) => [t.name, lv.level, `${lv.Bx} × ${lv.By}`, `${lv.n}-${lv.mainBar}`, `${lv.tieBar} @${fmt(lv.s, 2)}`, `${res.columns.filter((c) => c.typeIdx === i && c.lv === lv).length} ต้น`]))} />
+            rows={colTypes.flatMap((t, i) => t.levels.map((lv) => [res.columns.some((c) => c.typeIdx === i && c.lv === lv) ? <CalcLink id={`C-${t.name}-${lv.level}`}>{t.name}</CalcLink> : t.name, lv.level, `${lv.Bx} × ${lv.By}`, `${lv.n}-${lv.mainBar}`, `${lv.tieBar} @${fmt(lv.s, 2)}`, `${res.columns.filter((c) => c.typeIdx === i && c.lv === lv).length} ต้น`]))} />
           <Table head={["ฐานราก", "ชนิด", "ขนาด Bx × By × t (ม.)", "เหล็กแนวยาว", "เหล็กแนวสั้น", "จำนวน"]}
             rows={[...fNames.entries()].map(([key, name]) => { const l = res.footings.filter((x) => fKey(x) === key), f = l[0];
-              return [name, f.kind === "spread" ? "ฐานแผ่" : `เข็ม ${f.n} × ${f.pile}`, f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp?.t ?? 0, 2)}` : "-", f.r?.longText ?? `${f.inp?.longBar ?? "-"} @${fmt(f.inp?.sLong ?? 0, 2)}`, f.r?.shortText ?? `${f.inp?.shortBar ?? "-"} @${fmt(f.inp?.sShort ?? 0, 2)}`, `${l.length} ฐาน`]; })} />
+              return [f.r && f.inp ? <CalcLink id={`F-${name}`}>{name}</CalcLink> : name, f.kind === "spread" ? "ฐานแผ่" : `เข็ม ${f.n} × ${f.pile}`, f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp?.t ?? 0, 2)}` : "-", f.r?.longText ?? `${f.inp?.longBar ?? "-"} @${fmt(f.inp?.sLong ?? 0, 2)}`, f.r?.shortText ?? `${f.inp?.shortBar ?? "-"} @${fmt(f.inp?.sShort ?? 0, 2)}`, `${l.length} ฐาน`]; })} />
           {/* cantilevers: their own bar run (not the L/4 cut-off of the schedule) — user 2026-11-03 */}
           {(() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.detail).map((sp) => ({ sp, k }))); return cs.length ? (<>
             <Sub>คานยื่น — เหล็กบนยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลัง (แทนเหล็กเสริม L/4 ในตาราง)</Sub>
