@@ -1,5 +1,5 @@
 // Floor engine smoke/equilibrium check. Usage: node floor-check.mjs → summary lines, exit 1 when a check fails.
-import { analyzeFloor, DEFAULT_BEAM_TYPES, CONC } from "../web/engine/floor.js";
+import { analyzeFloor, DEFAULT_BEAM_TYPES, CONC, findOverlaps, mergeOverlaps } from "../web/engine/floor.js";
 
 const mat = { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 };
 const grid = (xs, ys) => {
@@ -49,5 +49,10 @@ check("edge beam rests on the 3 tips", edge.carriers.length === 3 && rcb.lines.f
 check("cantilever tips carry the edge beam", rcb.spans.filter((s) => s.kind === "cantilever").length === 3 && rcb.spans.filter((s) => s.kind === "cantilever").every((s) => s.Mneg > 0), "");
 const cb1 = JSON.parse(JSON.stringify(cb)); cb1.beams = cb1.beams.map((b) => (b.a[0] === 3 && b.a[1] === 5 ? { ...b, a: [3, 0] } : b)); cb1.columns = cb1.columns.filter((c) => !(c[0] === 3 && c[1] === 5));
 run("cantilever with one column only (no back span): nothing lost", cb1); // equilibrium checked in run()
+// overlapping beams (user 2026-11-04): drawn twice / one inside another → found, merged into one beam over the union
+const ovB = [{ a: [0, 0], b: [4, 0], type: 2 }, { a: [3, 0], b: [6, 0], type: null }, { a: [1, 0], b: [2, 0], type: null }, { a: [6, 0], b: [8, 0], type: null }, { a: [0, 0], b: [0, 4], type: null }];
+const ov = findOverlaps(ovB), mg = mergeOverlaps(ovB);
+check("overlaps found (touching end to end is not an overlap)", ov.length === 2 && ov.every((o) => o.i === 0) && Math.abs(ov[0].len - 1) < 1e-9, JSON.stringify(ov.map((o) => [o.i, o.j, o.len])));
+check("overlaps merged", mg.length === 3 && mg[0].a[0] === 0 && mg[0].b[0] === 6 && mg[0].type === 2 && findOverlaps(mg).length === 0, JSON.stringify(mg.map((b) => [b.a, b.b])));
 function dist2(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
 process.exit(bad ? 1 : 0);

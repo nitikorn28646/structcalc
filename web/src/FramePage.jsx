@@ -17,6 +17,7 @@ import { BrickWall, Building2, Columns3, Grid3x3, Layers, Plus, Ruler, Trash2, T
 import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import { beamCost, generateBeamTypes } from "../engine/beamTypes.js";
+import { findOverlaps, mergeOverlaps } from "../engine/floor.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, spanReasons, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { analyzeFrame, stackKey } from "../engine/frame.js";
@@ -581,6 +582,16 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <td className="px-1">{fmt(x.check.util * 100, 0)}%</td><td className={`px-1 ${x.ok ? "text-[#12b76a]" : "font-semibold text-[#d92d20]"}`}>{x.ok ? "ผ่าน" : "ไม่ผ่าน"}</td></tr>)}</tbody>
       </table>
     </div>);
+  // overlapping beams on any floor (user 2026-11-04: beams drawn twice without noticing) — one bar above the centre, every step
+  const ovAll = frame.floors.map((f) => findOverlaps(f.beams ?? [])), ovN = ovAll.reduce((s, o) => s + o.length, 0);
+  const fixOverlaps = () => set("floors", frame.floors.map((f, k) => (ovAll[k].length ? { ...f, beams: mergeOverlaps(f.beams) } : f)));
+  const overlapBar = ovN > 0 && (
+    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">
+      <TriangleAlert className="h-4 w-4 shrink-0" />
+      <span><b>คานซ้อนกัน {ovN} คู่</b> — {frame.floors.map((f, k) => ovAll[k].length ? `${f.name}: ${ovAll[k].map((o) => `คาน ${o.i + 1}/${o.j + 1} (${fmt(o.len, 2)} ม.)`).join(", ")}` : null).filter(Boolean).join(" · ")} · น้ำหนักคานคิดซ้ำ (เส้นแดงประบนแปลน)</span>
+      {ovAll[cur].length > 0 && <button onClick={() => setSel({ kind: "beam", i: ovAll[cur][0].j })} className="rounded-md px-2 py-0.5 ring-1 ring-red-300 hover:bg-red-100">ดูคู่แรก</button>}
+      <button onClick={() => { setSel(null); fixOverlaps(); }} className="rounded-md bg-red-600 px-2 py-0.5 font-medium text-white hover:bg-red-700">รวมคานซ้อนทุกชั้น</button>
+    </div>);
   const center = page ? <div className="min-h-0 flex-1 overflow-auto p-1">{page}</div>
     : step === "stair" && stair && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,1fr)_1fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>
       <StairDetail st={stair} i={sel.i} H={fl.h} r0={an.stairs?.[sel.i]} row={designSlabs(an, fl, frame.mat).find((x) => x.kind === "ST" && x.si === sel.i)} /></div>
@@ -597,7 +608,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             {subs && <Tabs value={sub} onValueChange={(k) => { setSubState(k); setSel(null); }}><TabsList>{subs.map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
             {!page && step !== "footing" && <Tabs value={view} onValueChange={setView} className="ml-auto"><TabsList>{[["2d", "แปลน 2D"], ["3d", "3D"], ["split", "2D + 3D"]].map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-3">{center}</div>
+          <div className="flex min-h-0 flex-1 flex-col p-3">{overlapBar}{center}</div>
         </section>
         </Panel>
         {dTab && <><Handle /><Panel id="side" order={2} defaultSize={34} minSize={20} className="flex min-w-0 flex-col border-l border-gray-200 bg-white">

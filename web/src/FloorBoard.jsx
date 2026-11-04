@@ -12,7 +12,7 @@ import { TextSizeControl, useTextScale } from "./uiPrefs.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "./beamModel.js";
 import { dist, gridAxes, round3, segCross, segDist } from "./planKit.js";
-import { GROUPS, STAIR_KINDS, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
+import { findOverlaps, GROUPS, STAIR_KINDS, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
 
 // type colours (user 2026-11-03: different types had the same colour — 8 colours repeated, two blues alike): 12 distinct hues,
 // then more by the golden angle so a long type list does not repeat
@@ -325,6 +325,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               </g>
             );
           })}
+          {findOverlaps(beams).map((o, j) => ( // overlapping beams: red dashed band over the shared piece
+            <line key={`ov${j}`} x1={o.a[0]} y1={-o.a[1]} x2={o.b[0]} y2={-o.b[1]} stroke="#d92d20" strokeWidth={9 * k} strokeOpacity={0.55} strokeDasharray={`${8 * k} ${5 * k}`} pointerEvents="none"><title>{`คาน ${o.i + 1} และ ${o.j + 1} ซ้อนกัน ${o.len.toFixed(2)} ม.`}</title></line>))}
           {(step === "frame" || result) && (an?.lines ?? []).flatMap((ln) => ln.carriers.map((c) => { // △ = end of a secondary beam resting on a main beam
             // at an end the triangle points into the beam; at an interior support (a beam resting on a cantilever tip) it sits across it
             const end0 = c.t < 1e-6, end1 = c.t > ln.L - 1e-6, at = [ln.A[0] + ln.u[0] * c.t, ln.A[1] + ln.u[1] * c.t];

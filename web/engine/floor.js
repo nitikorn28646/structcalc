@@ -102,6 +102,38 @@ function along(ln, p, inside = false) {
   return Math.min(ln.L, Math.max(0, t));
 }
 
+// Overlapping beams (user 2026-11-04: beams drawn twice on top of each other without noticing — the 3D view showed two beams in one
+// place). Two straight drawn beams overlap when they are collinear (within TOL) and share more than TOL of length. Returns
+// [{ i, j, len, a, b }] (a–b = the shared piece); mergeOverlaps joins every overlapping group into one beam spanning their union,
+// keeping the first beam's type / role (arc beams are left alone).
+export function findOverlaps(beams = []) {
+  const out = [];
+  for (let i = 0; i < beams.length; i++) for (let j = i + 1; j < beams.length; j++) {
+    const p = beams[i], q = beams[j]; if (p.arc?.s || q.arc?.s) continue;
+    const L = dist(p.a, p.b); if (L < TOL) continue;
+    const u = [(p.b[0] - p.a[0]) / L, (p.b[1] - p.a[1]) / L], off = (x) => Math.abs(cross(u, sub(x, p.a))), t = (x) => (x[0] - p.a[0]) * u[0] + (x[1] - p.a[1]) * u[1];
+    if (off(q.a) > TOL || off(q.b) > TOL) continue;
+    const s0 = Math.max(0, Math.min(t(q.a), t(q.b))), s1 = Math.min(L, Math.max(t(q.a), t(q.b)));
+    if (s1 - s0 > TOL) out.push({ i, j, len: s1 - s0, a: [p.a[0] + u[0] * s0, p.a[1] + u[1] * s0], b: [p.a[0] + u[0] * s1, p.a[1] + u[1] * s1] });
+  }
+  return out;
+}
+export function mergeOverlaps(beams = []) {
+  const ov = findOverlaps(beams); if (!ov.length) return beams;
+  const root = beams.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+  for (const o of ov) { const a = find(o.i), b = find(o.j); if (a !== b) root[Math.max(a, b)] = Math.min(a, b); }
+  const groups = new Map(); beams.forEach((_, i) => { const r = find(i); groups.set(r, [...(groups.get(r) ?? []), i]); });
+  const out = [];
+  beams.forEach((bm, i) => {
+    const g = groups.get(find(i)); if (g[0] !== i) return; if (g.length === 1) { out.push(bm); return; }
+    const L = dist(bm.a, bm.b), u = [(bm.b[0] - bm.a[0]) / L, (bm.b[1] - bm.a[1]) / L], t = (x) => (x[0] - bm.a[0]) * u[0] + (x[1] - bm.a[1]) * u[1];
+    const ts = g.flatMap((k) => [t(beams[k].a), t(beams[k].b)]), t0 = Math.min(...ts), t1 = Math.max(...ts), P = (s) => [bm.a[0] + u[0] * s, bm.a[1] + u[1] * s].map((v) => Math.round(v * 1e4) / 1e4);
+    const typed = g.map((k) => beams[k]).find((x) => x.type !== null && x.type !== undefined);
+    out.push({ ...bm, a: P(t0), b: P(t1), type: bm.type ?? typed?.type ?? null });
+  });
+  return out;
+}
+
 // Beam lines and which beam carries which (user 2026-11-03: the result must not depend on how the beams were drawn).
 // 1. drawn beams that are collinear and share an end become one straight run (arc beams stay lines of their own);
 // 2. where two runs cross inside both with no column there, one is the main beam (คานหลัก) and the other (คานซอย) is cut at
@@ -334,6 +366,8 @@ export function spanReasons(c) {
 export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = [], minTypes = null) {
   const warnings = [], cols = floor.columns ?? [];
   const lines = buildLines(floor.beams ?? [], cols);
+  const overlaps = findOverlaps(floor.beams ?? []);
+  if (overlaps.length) warnings.push(`คานซ้อนกัน ${overlaps.length} คู่ (${overlaps.slice(0, 4).map((o) => `คาน ${o.i + 1}/${o.j + 1} ทับกัน ${o.len.toFixed(2)} ม.`).join(" · ")}${overlaps.length > 4 ? " …" : ""}) — น้ำหนักคานคิดซ้ำ · กด "รวมคานซ้อน" ที่ขั้น 2 โครง`);
   // members along each line (t range) and supports
   for (const ln of lines) {
     // a drawn beam may run past the end of this line (a secondary cut at a crossing): its part is clipped to the line
@@ -591,7 +625,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     for (const e of ln.extra ?? []) groups[e.g ?? "SP"] += e.P;
   }
   for (const sp of result.spans) groups.DL += CONC * sp.type.b * sp.type.h * sp.len;
-  return { ...result, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
+  return { ...result, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
 }
 
 // largest |deflection| (m) of each element: v'' = −M/EI integrated twice, matched to the nodal deflections
