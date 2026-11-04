@@ -349,6 +349,14 @@ REVIEW FIXES (2026-11-03, cloud session, branch feature/review-fixes; findings i
 - Baselines re-saved (regress + E2E). PyNite / Excel diffs NOT re-run here (cloud): re-run frame3d/contBeam PyNite and the beam Excel
   diff on the Windows PC (only V input changed for beams; beam.js untouched).
 
+2026-11-04 (cloud, branch feature/review-fixes): overlapping beams (floor.js findOverlaps/mergeOverlaps, red bar + merge button);
+warnings locate their place (src/warnLocate.js → highlight {floor, p, segs}); 3D clean joints (src/joints3d.js: deepest direction runs
+through, others stop at its face, beams stop at column faces, slabs inset to beam faces); plan beams at true type width + column tags;
+pile safe loads default PILE_SAFE (I-18 18 t, I-22 22 t, I-26 26 t); footing auto with types and none passing → noType + suggest;
+column-type levels vs floors warning + fill. LOAD CASES page (src/LoadCases.jsx, step 6 first tab, board step "assign"): tree DL/LL/DL+LL
+from panels finish/live, lineLoads (g SDL|WALL|LL, none = SP), pointLoads (g label only, solved as SP), walls read-only; Add → Assign
+to selection (FloorBoard onMulti/pickSet, panels boxable in "assign") or cursor (onPick). Not built yet: landing beams at mid level, load arrows in 3D.
+
 OPEN ITEMS for the next session: (1) web copy published 2026-11-03 (Artifact version 3, without project files — open a .json with เปิด); (2) E2E expected re-saved; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
 torsion — likely the type list has no 20×40 with RB9 @0.10; check per-span reasons on the user's project); (4) Ole: 28 beams fail only on
 stirrup spacing d/2 (shallow GB 20×20, tiny shear) — ask whether to apply the ACI exemption (h ≤ 25 cm or v ≤ vc/2); columns RB6 @0.20 > 16db.
