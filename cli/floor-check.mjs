@@ -39,6 +39,11 @@ check("crossing: guess is warned", rx1.warnings.some((w) => w.startsWith("คา
 const st = room(); st.beams.push({ a: [3, 0], b: [3, 6.2], type: null }); // crosses the y = 5 edge beam, 1.2 m stub
 const rst = run("secondary with a stub past the edge beam", st), stub = rst.spans.find((s) => s.kind === "cantilever");
 check("stub: cantilever span with forces", !!stub && Math.abs(stub.len - 1.2) < 1e-6 && stub.Mneg > 0 && !rst.lines.some((l) => l.error), stub ? `L ${stub.len.toFixed(2)} M- ${Math.round(stub.Mneg)} ${stub.typeName}` : "none");
+// corner without a column past the last column (user 2026-11-04): the y-line runs 0.6 m past its column and the edge beam ends on its tip
+const cn = { columns: [[0, 0], [4, 0], [0, 4], [4, 4], [0, 4.6]], beams: [{ a: [0, 0], b: [4, 0] }, { a: [0, 0], b: [0, 4] }, { a: [4, 0], b: [4, 4.6] }, { a: [0, 4], b: [4, 4] },
+  { a: [0, 4], b: [0, 4.6] }, { a: [0, 4.6], b: [4, 4.6] }].map((b) => ({ ...b, type: null })), t: 0.12, finish: 100, live: 200, panels: {} };
+const rcn = run("corner on a cantilever tip", cn), tip = rcn.spans.find((s) => s.kind === "cantilever");
+check("corner: stub is a cantilever carrying the edge beam", !!tip && Math.abs(tip.len - 0.6) < 1e-6 && tip.Mneg > 0 && !rcn.warnings.some((w) => w.startsWith("มุมคานไม่มีเสา")), tip ? `M- ${Math.round(tip.Mneg)} ${tip.typeName}` : "none");
 const x3 = room(); x3.beams.push({ a: [3, 0], b: [3, 5], type: null }, { a: [0, 2.5], b: [6, 2.5], type: null, role: "main" });
 const rx3 = run("X crossing, role main on the long beam", x3);
 check("crossing: role main wins", rx3.lines.some((l) => Math.abs(l.L - 6) < 1e-6 && l.carriers.length === 2) && rx3.lines.filter((l) => Math.abs(l.L - 2.5) < 1e-6 && l.carriers.length === 2).length === 2 && !rx3.warnings.some((w) => w.startsWith("คานตัดกัน")), "");

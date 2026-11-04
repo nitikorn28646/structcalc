@@ -407,6 +407,19 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       else if (!host.carriers.some((x) => x.rev && x.host === ln.id && Math.abs(x.at - t) < TOL)) addCarrier(ln, { t, host: host.id, at: along(host, p) }); // not when that line already rests here on this one
     }
   }
+  // corner without a column where two lines rest on each other (user 2026-11-04: the 0.60 m piece past the last column was not a
+  // cantilever): the line whose end is a stub past a column, with a back span (≥ 2 columns), is a cantilever and carries the other
+  // one at its tip; both such → the shorter stub carries; neither → left as before (warned below)
+  const stub = (l, t) => (l.cols.length >= 2 ? Math.min(...l.cols.map((c) => Math.abs(c.t - t))) : Infinity);
+  for (const ln of lines) for (const c of [...ln.carriers]) {
+    const h = lines.find((o) => o.id === c.host); if (!h || c.rev) continue;
+    const back = h.carriers.find((d) => d.host === ln.id && !d.rev && Math.abs(d.t - c.at) < TOL && Math.abs(d.at - c.t) < TOL);
+    if (!back || !(c.t < TOL || c.t > ln.L - TOL) || !(back.t < TOL || back.t > h.L - TOL)) continue; // both must be line ends
+    const sL = stub(ln, c.t), sH = stub(h, back.t);
+    if (sL === Infinity && sH === Infinity) continue;
+    const [cant, rest] = sL <= sH ? [ln, h] : [h, ln];
+    cant.carriers = cant.carriers.filter((x) => x.host !== rest.id || Math.abs(x.t - (cant === ln ? c.t : back.t)) > TOL);
+  }
   // secondaries kept whole over a main beam (a cantilever stub past it): interior support where they cross
   for (const ln of lines) for (const J of ln.through ?? []) {
     const host = lines.find((o) => o !== ln && along(o, J) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
