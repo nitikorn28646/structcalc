@@ -1,5 +1,6 @@
 // Roof → structure link: wall-plate (and interior-plate / post) reactions of the roof module as point loads where they bear.
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
+import { elevations } from "./StoreyTable.jsx";
 
 // host: the linked floor of the structure { columns, beams } — a reaction where no column stands but a beam passes stays there as a
 // point load on that beam (the plate bears on the RC beam); only a point on neither goes to the nearest column (named, warned)
@@ -80,7 +81,8 @@ export function roofFromFrame(frame, res) {
   let P = loop.map((i) => V[i]);
   P = P.filter((p, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length]; return Math.abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) > 1e-6; }); // drop collinear points
   if (P.reduce((s, p, i) => { const q = P[(i + 1) % P.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) < 0) P.reverse(); // counter-clockwise
-  const top = frame.floors.length - 1, Z = frame.floors.reduce((s, f) => s + (f.h ?? 3), 0) - (frame.floors[0]?.h ?? 0);
+  // plate level = elevation of the top floor (base level + storey heights) — it assumed the ground beam at ±0.00 (0.40 m low on Yasothon)
+  const top = frame.floors.length - 1, Z = elevations(frame)[top];
   const g = frame.floors[top].grid ?? frame.floors[0].grid;
   return { pts: P, edges: P.map(() => ({ type: "hip" })), columns: frame.floors[top].columns.map((c) => [...c]), plates: P.map((a, i) => ({ a, b: P[(i + 1) % P.length] })),
     innerPlates: [], dang: null, supports: null, H: +Z.toFixed(2), ...(g ? { grid: { x0: g.x0 ?? 0, y0: g.y0 ?? 0, dx: g.dx, dy: g.dy, sub: g.sub ?? 1 } } : {}), linkFloor: top };

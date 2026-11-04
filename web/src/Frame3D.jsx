@@ -11,6 +11,7 @@ import { TYPE_COLORS } from "./FloorBoard.jsx";
 import { DEFAULT_WALL_TYPES, resolveWall, wallThick, wallsOf } from "../engine/floor.js";
 import { useHighlight } from "./highlight.js";
 import { RoofFrameMembers } from "./Roof3D.jsx";
+import { baseLevel } from "./StoreyTable.jsx";
 import { beamPieces, edgeWidth, insetPolygon } from "./joints3d.js";
 
 const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"], ["roofFrame", "โครงหลังคา"]];
@@ -112,7 +113,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
   let z = 0;
   const Z = frame.floors.map((f) => (z += f.h ?? 3)), top = z, span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), top, 4);
   const shown = (k) => floorsShown === "all" || (floorsShown === "upto" ? k <= cur : k === cur);
-  const wt = frame.wallTypes ?? DEFAULT_WALL_TYPES, base0 = (frame.floors[0]?.name ?? "").includes("+0.40") ? 0.4 : 0.4; // footing top at −0.40 in the drawings
+  const wt = frame.wallTypes ?? DEFAULT_WALL_TYPES, base0 = -baseLevel(frame); // model z = 0 at the column base: a roof at elevation H sits at H − base level (was fixed at 0.40)
   const fo = frame.footing ?? { t: 0.4 }, hl = useHighlight(), hz = hl?.floor !== undefined ? Z[hl.floor] ?? top : Z[frame.roofLink?.floor ?? frame.floors.length - 1] ?? top; // highlighted point: at the linked (roof) floor
   // size (b, h) of the largest beam of the highlighted floor lying along a segment (default 0.20 × 0.40)
   const segSize = (a, b) => {

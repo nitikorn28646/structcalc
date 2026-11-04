@@ -4,11 +4,12 @@
 import { useState } from "react";
 import { carrierBeam } from "./roofLink.js";
 import { highlight } from "./highlight.js";
+import { elevations, levelText } from "./StoreyTable.jsx";
 
 const f2 = (v) => (+v).toFixed(2), near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
 const TO = { col: ["ลงเสา", "text-[#067647]"], beam: ["ลงคาน", "text-[#067647]"], moved: ["ไม่มีที่รับ → ย้ายไปเสาใกล้สุด", "font-semibold text-[#d92d20]"] };
 
-export function RoofLinkCard({ frame, roof, onFromFrame, set }) {
+export function RoofLinkCard({ frame, roof, onFromFrame, set, setRoof = null }) {
   const link = frame.roofLink, pts = frame.roofPoints ?? [], total = pts.reduce((s, p) => s + p.P, 0);
   const moved = pts.filter((p) => p.to === "moved" || String(p.name).includes("ย้าย")), ready = roof?.fromFrame && link?.on;
   const [open, setOpen] = useState(null), k = link?.floor ?? frame.floors.length - 1, fl = frame.floors[k];
@@ -18,6 +19,8 @@ export function RoofLinkCard({ frame, roof, onFromFrame, set }) {
     if (n) setFloor({ beams }); return n; };
   const addCol = (p) => setFloor({ columns: [...fl.columns.filter((c) => !near(c, p.at ?? p.p)), (p.at ?? p.p).map((v) => +(+v).toFixed(3))] });
   const show = open ?? false; // closed until asked (the header line already counts the unsupported points)
+  // level check (user 2026-11-04): the wall plate should sit on the floor the roof loads go to
+  const topZ = elevations(frame)[k], dH = roof?.H != null && (roof.pts?.length ?? 0) >= 3 ? roof.H - topZ : 0, offLevel = link?.on && Math.abs(dH) > 0.02;
   return (
     <div className={`rounded-xl px-3 py-2 text-[12px] ring-1 ${ready && !moved.length ? "bg-[#ecfdf3] text-[#067647] ring-[#abefc6]" : "bg-[#fffaeb] text-[#b54708] ring-[#fdb022]"}`}>
       <div className="flex flex-wrap items-center gap-3">
@@ -26,6 +29,8 @@ export function RoofLinkCard({ frame, roof, onFromFrame, set }) {
           : ready ? <span>แรงหลังคา {(total / 1000).toFixed(2)} ตัน ลง {pts.length} จุด ที่ {fl?.name}{moved.length ? ` · ${moved.length} จุดไม่มีเสา/คานรับ (กด "ดูตารางจุดถ่ายแรง" แล้วชี้แถวเพื่อดูตำแหน่งบนแปลน)` : " · ทุกจุดมีเสาหรือคานรับ"}</span>
           : <span>{roof?.fromFrame ? "นำเข้าเสาแล้วแต่ยังไม่ได้ส่งแรงลงโครงสร้าง" : "หลังคายังไม่ได้เชื่อมกับโครงสร้าง — กดปุ่มเพื่อนำเข้าเสา + แปลนชั้นบนสุด (วาดหลังคาและอะเสเอง) แล้วแรงหลังคาจะลงเสา/คานอัตโนมัติ"}</span>}
         {ready && pts.length > 0 && <button onClick={() => setOpen(!show)} className="rounded-lg bg-[#fff] px-3 py-1 font-medium ring-1 ring-current hover:bg-[#fff8eb]">{show ? "▲ ซ่อนตารางจุดถ่ายแรง" : "▼ ดูตารางจุดถ่ายแรง"}</button>}
+        {offLevel && <span className="w-full rounded-md bg-[#fff] px-2 py-1 text-[#b54708] ring-1 ring-[#fdb022]">ระดับอะเส {levelText(roof.H)} {dH > 0 ? "สูงกว่า" : "ต่ำกว่า"}ระดับ {fl?.name} ({levelText(topZ)}) {Math.abs(dH).toFixed(2)} ม. — อะเสลอย{dH > 0 ? "เหนือ" : "ต่ำกว่า"}หัวเสา/คานในภาพ 3D{dH > 0 ? " (ถ้าจริงมีเสาตอม่อหลังคา ให้วางเสาชั้นบนเพิ่ม)" : ""}
+          {setRoof && <button onClick={() => setRoof("H", +topZ.toFixed(2))} className="ml-2 rounded bg-[#b54708] px-2 py-0.5 font-medium text-[#fff]">ตั้งระดับอะเส = {levelText(topZ)}</button>}</span>}
         <button onClick={onFromFrame} className={`ml-auto rounded-lg px-3 py-1 font-medium ${ready ? "ring-1 ring-current" : "bg-brand-500 text-[#fff]"}`}>{ready ? "นำเข้าเสาใหม่จากโครงสร้าง" : "นำเข้าเสา + แปลนจากโครงสร้าง"}</button>
       </div>
       {ready && show && pts.length > 0 && <div className="mt-2 rounded-lg bg-[#fff] p-2 text-[#344054] ring-1 ring-[#eaecf0]">
