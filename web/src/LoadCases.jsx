@@ -45,10 +45,24 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
       del: () => setFloor({ pointLoads: points.filter((_, i) => !qs.some((x) => x.i === i)) }) };
   });
   const walls = wallsOf(fl), wallItems = walls.length ? [{ id: "walls", text: `ผนังที่วาดไว้ ${walls.length} แนว`, note: `${fmt(walls.reduce((s, w) => s + wallLoad(w, wt), 0) / Math.max(1, walls.length), 0)} kg/m เฉลี่ย · แก้ที่แท็บ "ผนัง (แบบวาด)"`, segs: walls.map((w) => [w.a, w.b]), ro: true }] : [];
-  const tree = {
+  // load items defined with "Add" but not assigned yet (STAAD: Add puts the item in the tree, Assign gives it to members).
+  // Kept on the floor as floor.loadItems (the engine ignores them); an item that matches assigned loads shows as that group.
+  const KTXT = { floor: (f) => `FLOOR −${fmt(Number(f.v), 0)} kg/m²`, uni: (f) => `UNI GY −${fmt(Number(f.v), 0)} kg/m`, con: (f) => `CON GY −${fmt(Number(f.v), 0)} kg`, node: (f) => `NODE FY −${fmt(Number(f.v), 0)} kg` };
+  const same = (a, b) => a.kind === b.kind && a.lc === b.lc && Number(a.v) === Number(b.v) && (a.kind === "floor" || ((a.name ?? "") === (b.name ?? "") && (a.kind !== "uni" || a.lc === "LL" || (a.g ?? "SP") === (b.g ?? "SP"))));
+  const defs = fl.loadItems ?? [];
+  const defItems = (lc, assigned) => defs.filter((d) => d.lc === lc && !assigned.some((it) => it.form && same(it.form, d))).map((d) => ({
+    id: `d-${d.id}`, text: KTXT[d.kind](d), note: `${d.name || ""}${d.name ? " · " : ""}ยังไม่ได้ Assign — คลิกรายการ แล้วเลือกบนแปลน กด Assign`, form: { kind: d.kind, lc: d.lc, ...(d.kind === "uni" ? { g: d.g ?? "SP" } : {}), ...(d.kind !== "floor" ? { name: d.name ?? "" } : {}), v: Number(d.v) }, ro: true, empty: true,
+    del: () => setFloor({ loadItems: defs.filter((x) => x.id !== d.id) }) }));
+  const tree0 = {
     DL: [{ id: "sw", text: "SELFWEIGHT Y −1", note: `คาน พื้น เสา คิดอัตโนมัติ · ชั้นนี้ ${fmt((an?.groups?.DL ?? 0) / 1000, 1)} ตัน`, ro: true },
       ...floorItems("finish"), ...lineItems((l) => l.g !== "LL"), ...wallItems, ...pointItems((q) => q.g !== "LL")],
     LL: [...floorItems("live"), ...lineItems((l) => l.g === "LL"), ...pointItems((q) => q.g === "LL")],
+  };
+  const tree = { DL: [...tree0.DL, ...defItems("DL", tree0.DL)], LL: [...tree0.LL, ...defItems("LL", tree0.LL)] };
+  const addItem = () => {
+    const d = { id: `${Date.now()}`, kind: form.kind, lc: form.lc, v: Number(form.v) || 0, ...(form.kind === "uni" ? { g: form.lc === "LL" ? "LL" : form.g } : {}), ...(form.kind !== "floor" ? { name: form.name } : {}), ...(form.kind === "con" ? { d1: Number(form.d1) || 0 } : {}) };
+    if (defs.some((x) => same(x, d)) || [...tree0.DL, ...tree0.LL].some((it) => it.form && same(it.form, d))) { setMsg("มีรายการนี้ในต้นไม้แล้ว — คลิกรายการนั้นแล้ว Assign ได้เลย"); return; }
+    setFloor({ loadItems: [...defs, d] }); setMsg(`เพิ่ม ${KTXT[d.kind](d)} ${d.name ?? ""} เข้า ${d.lc} แล้ว — เลือกคาน/แผ่น/เสาบนแปลน แล้วกด Assign`);
   };
 
   // ---- check: slabs with no finish / no live load (user 2026-11-04: "which slab did I forget to load?") ----
@@ -110,7 +124,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
       </div>
       <p className="mt-1 text-[10.5px] text-gray-400">ชี้รายการ = ไฮไลต์บนแปลน / 3D (ยังไม่ใช่การเลือก) · คลิกรายการ = ใช้เป็นน้ำหนักในฟอร์ม Assign · "เลือก" = เลือกชิ้นของรายการนั้นบนแปลน · แก้ตัวเลขแล้ว Enter = แก้ทุกชิ้นในรายการ</p>
     </Card>
-    <Card title="เพิ่มน้ำหนัก (Add) → Assign">
+    <Card title="เพิ่มน้ำหนัก (Add) แล้ว Assign">
       <div className="grid grid-cols-2 gap-2 text-[12px]">
         <label className="col-span-2">ชนิด<select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value, ...(e.target.value === "floor" ? { name: "" } : {}) })} className={inp}>{KINDS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
         <label>Load case<select value={form.lc} onChange={(e) => setForm({ ...form, lc: e.target.value })} className={inp}>{CASES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
@@ -121,6 +135,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
       </div>
       <p className="mt-1.5 text-[11px] text-gray-500">เลือกบนแปลน: คาน {sel.beam} · เสา {sel.column} · แผ่นพื้น {sel.panel} — คลิก, Ctrl/Shift+คลิก เพิ่ม, ลากกรอบ (ซ้าย→ขวา ทั้งชิ้น / ขวา→ซ้าย แตะ), Ctrl+A ทั้งหมด</p>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
+        <button onClick={addItem} className="rounded-md px-2.5 py-1 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50" title="เพิ่มรายการนี้เข้าต้นไม้ Load Cases (ยังไม่ลงชิ้นไหน)">+ Add เข้าต้นไม้</button>
         <button onClick={() => assign(multi)} className="rounded-md bg-brand-500 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-brand-600">Assign ให้ที่เลือก</button>
         <button onClick={() => setArmed(!armed)} className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-medium ring-1 ${armed ? "bg-[#f79009] text-white ring-[#f79009]" : "text-gray-700 ring-gray-300 hover:bg-gray-50 dark:text-gray-200"}`}>
           <MousePointerClick className="h-3.5 w-3.5" />{armed ? "กำลังใช้เคอร์เซอร์ Assign (คลิกเพื่อหยุด)" : "ใช้เคอร์เซอร์ Assign"}</button>
@@ -143,7 +158,7 @@ function Item({ it, cur, setPickSet, active, onUse }) {
     <div onMouseEnter={() => highlight({ floor: cur, segs: it.segs ?? [], polys: it.polys ?? [], pts: it.pts ?? [], p: it.pts?.[0] ?? null, bad: false })} onMouseLeave={() => highlight(null)}
       onClick={(e) => { if (onUse && !["INPUT", "BUTTON"].includes(e.target.tagName)) onUse(); }} title={onUse ? "คลิก = ใช้รายการนี้ในฟอร์ม Assign" : undefined}
       className={`group flex items-center gap-1.5 rounded px-1 py-0.5 ${onUse ? "cursor-pointer" : ""} ${active ? "bg-brand-50 ring-1 ring-brand-300 dark:bg-white/10" : "hover:bg-brand-50/60 dark:hover:bg-white/5"}`}>
-      <span className="h-2 w-2 shrink-0 rounded-sm bg-[#12b76a]" />
+      <span className={`h-2 w-2 shrink-0 rounded-sm ${it.empty ? "bg-gray-300" : "bg-[#12b76a]"}`} />
       <div className="min-w-0 flex-1">
         <div className="truncate font-mono text-[11.5px] text-gray-800 dark:text-gray-200">{it.text}</div>
         <div className="truncate text-[10.5px] text-gray-500" title={it.note}>{it.note}</div>
