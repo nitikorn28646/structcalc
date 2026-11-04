@@ -492,7 +492,15 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   // a panel under a stair is its stair well: the stair replaces that slab
   for (const pn of panels) {
     const c = pn.P.reduce((s, q) => [s[0] + q[0] / pn.P.length, s[1] + q[1] / pn.P.length], [0, 0]);
-    if (stairs.some((st) => c[0] > st.P[0][0] && c[0] < st.P[2][0] && c[1] > st.P[0][1] && c[1] < st.P[2][1])) { pn.g = { DL: 0, SDL: 0, LL: 0, WALL: 0 }; pn.w = 0; pn.stairWell = true; }
+    if (stairs.some((st) => c[0] > st.P[0][0] && c[0] < st.P[2][0] && c[1] > st.P[0][1] && c[1] < st.P[2][1])) { pn.g = { DL: 0, SDL: 0, LL: 0, WALL: 0 }; pn.w = 0; pn.stairWell = true; continue; }
+    // a stair covering only part of a panel (no beams around the stair well): that slab still carries its full load → warn
+    if (pn.open) continue;
+    const xs = pn.P.map((q) => q[0]), ys = pn.P.map((q) => q[1]), X0 = Math.min(...xs), X1 = Math.max(...xs), Y0 = Math.min(...ys), Y1 = Math.max(...ys), N = 24;
+    for (const st of stairs) {
+      let inP = 0, inS = 0;
+      for (let a = 0; a < N; a++) for (let b = 0; b < N; b++) { const q = [X0 + ((a + 0.5) / N) * (X1 - X0), Y0 + ((b + 0.5) / N) * (Y1 - Y0)]; if (!insidePoly(pn.P, q)) continue; inP++; if (q[0] > st.P[0][0] && q[0] < st.P[2][0] && q[1] > st.P[0][1] && q[1] < st.P[2][1]) inS++; }
+      if (inP && inS / inP > 0.1) warnings.push(`บันได ${st.i + 1} ทับแผ่นพื้น P${panels.indexOf(pn) + 1} ${Math.round((inS / inP) * 100)} % — แผ่นนี้ยังคิดน้ำหนักพื้นเต็มแผ่น (ซ้ำกับบันได) · วาดคานรอบช่องบันได ให้ช่องบันไดเป็นแผ่นของตัวเอง`);
+    }
   }
   // railings / line loads: on a cantilever slab tip → that slab's beam (+ torsion), on a beam → the beam, else spread over the panel
   const lineLoads = (floor.lineLoads ?? []).map((l, i) => {
