@@ -34,6 +34,7 @@ import { HelpCircle, Redo2, Undo2 } from "lucide-react";
 import { StepGuide, Tour, markTourSeen, tourSeen } from "./Help.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { BRAND, imageToDataUrl, saveBrand, useBrand } from "./brand.js";
+import { SnapshotStation } from "./Snapshot3D.jsx";
 
 const BAR_OPTS = [["", "—"], ...Object.keys(BARS).map((k) => [k, k])];
 // single-member calculators (tools); the building itself is designed in the workflow
@@ -508,6 +509,7 @@ export default function App() {
             </div>
           </header>
           {mod === "work" && !focus && <StepGuide key={step} step={step} index={WORKFLOW.findIndex((w) => w[0] === step)} />}
+          <SnapshotStation />
           {brandOpen && <Dialog open onOpenChange={(o) => !o && setBrandOpen(false)}><DialogContent className="max-w-md">
             <DialogTitle>{BRAND.full}</DialogTitle>
             <p className="text-[13px] text-gray-600">รูปเจ้าของโปรแกรม (โลโก้มุมซ้ายบน หน้าแนะนำ) และลายเซ็นวิศวกร (ปกและท้ายกระดาษรายการคำนวณทุกแผ่น) — เก็บไว้ในเบราว์เซอร์นี้</p>

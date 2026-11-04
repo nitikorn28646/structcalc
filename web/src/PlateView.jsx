@@ -118,7 +118,7 @@ export function PlateInputs({ d, setD, g, plates, sizes, setInner, onAutoInner, 
 }
 
 // Plan of the wall plates: each span drawn in its size colour with its tag and size, columns at span ends.
-export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, setHover, dark }) {
+export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, setHover, dark, picked = null, onPick = null }) {
   const xs = g.eave.map((p) => p[0]), ys = g.eave.map((p) => p[1]), pad = 1.2;
   const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad, w = Math.max(...xs) - x0 + pad, h = Math.max(...ys) - y0 + pad;
   // zoom (wheel, about the pointer) and pan (drag); double-click = fit (user 2026-11-04: the plan was too small to read)
@@ -137,7 +137,9 @@ export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, s
         const L = Math.hypot(m.q[0] - m.p[0], m.q[1] - m.p[1]), nx = (m.q[1] - m.p[1]) / L, ny = -(m.q[0] - m.p[0]) / L;
         const mx = (m.p[0] + m.q[0]) / 2 - nx * sc * 1.9, my = (m.p[1] + m.q[1]) / 2 - ny * sc * 1.9, vert = Math.abs(nx) > 0.7, on = hover?.id === m.id;
         return (
-          <g key={m.id} onMouseEnter={() => setHover(m)} onMouseLeave={() => setHover(null)} className="cursor-pointer">
+          <g key={m.id} onMouseEnter={() => setHover(m)} onMouseLeave={() => setHover(null)} onClick={(e) => { e.stopPropagation(); onPick?.(m); }} className="cursor-pointer">
+            {!m.r.ok && <line x1={m.p[0]} y1={Y(m.p[1])} x2={m.q[0]} y2={Y(m.q[1])} stroke="#f04438" strokeOpacity={0.3} strokeWidth={sc * 1.6} strokeLinecap="round" />}
+            {picked?.id === m.id && <line x1={m.p[0]} y1={Y(m.p[1])} x2={m.q[0]} y2={Y(m.q[1])} stroke="#f79009" strokeOpacity={0.55} strokeWidth={sc * 1.3} strokeLinecap="round" />}
             <line x1={m.p[0]} y1={Y(m.p[1])} x2={m.q[0]} y2={Y(m.q[1])} stroke="transparent" strokeWidth={sc * 2} />
             <line x1={m.p[0]} y1={Y(m.p[1])} x2={m.q[0]} y2={Y(m.q[1])} stroke={m.color} strokeWidth={sc * (on ? 0.75 : 0.45)} strokeLinecap="butt" />
             <text x={mx} y={Y(my)} fontSize={sc * 0.72} textAnchor="middle" fill={m.r.ok ? (dark ? "#e3e6f0" : "#344054") : "#f04438"}
@@ -145,6 +147,7 @@ export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, s
               <tspan x={mx} dy={-sc * 0.15} fontWeight={700} fill={m.color}>{m.tag}{m.typeName ? ` · ${m.typeName}` : ""}</tspan>
               <tspan x={mx} dy={sc * 0.85}>{plateText({ count: m.count, type: m.r.section.type, name: m.r.section.name })}</tspan>
             </text>
+            {!m.r.ok && (() => { const bx = (m.p[0] + m.q[0]) / 2 + nx * sc * 1.6, by = (m.p[1] + m.q[1]) / 2 + ny * sc * 1.6; return <g pointerEvents="none"><rect x={bx - sc * 1.3} y={Y(by) - sc * 0.55} width={sc * 2.6} height={sc * 1.1} rx={sc * 0.3} fill="#f04438" /><text x={bx} y={Y(by)} dy="0.35em" fontSize={sc * 0.72} textAnchor="middle" fill="#fff" fontWeight={700}>✕ NG</text></g>; })()}
           </g>
         );
       })}
@@ -200,5 +203,34 @@ export function PlateTable({ plates, d, setD, setHover, warnings = [], looseN = 
         ))}
       </tbody>
     </table></>
+  );
+}
+
+// the wall plate picked on the plan (user 2026-11-04: click a plate → its details and an easy type change)
+export function PlatePick({ m, d, setD, onClose }) {
+  if (!m) return null;
+  const ok = m.r.ok, types = d.plateTypes ?? [];
+  const setType = (v) => { const t = { ...d.memberType }; if (v === "") delete t[m.id]; else t[m.id] = Number(v); setD("memberType", t); };
+  return (
+    <div className="absolute left-2 top-7 z-20 w-[300px] rounded-xl border border-gray-200 bg-white/95 p-3 text-[12px] shadow-lg backdrop-blur dark:border-gray-700 dark:bg-gray-900/95" onClick={(e) => e.stopPropagation()}>
+      <div className="mb-1 flex items-center gap-2"><b className="text-[13px]" style={{ color: m.color }}>{m.tag}</b><span className="text-gray-500">{m.label ?? ""}</span>
+        <span className={`ml-auto rounded px-1.5 py-0.5 text-[11px] font-semibold ${ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>{ok ? "ผ่าน" : "ไม่ผ่าน"}</span>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-700">✕</button></div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums text-gray-600">
+        <span>ช่วงพาด</span><b>{fmt(m.span ?? m.len, 2)} ม.</b>
+        <span>หน้าตัด</span><b>{plateText({ count: m.count, type: m.r.section.type, name: m.r.section.name })}</b>
+        <span>โมเมนต์ M</span><b>{fmt(m.r.Mx ?? 0, 1)} กก.-ม.</b>
+        <span>หน่วยแรง</span><b className={m.stress > 1 ? "text-red-600" : ""}>{fmt(m.stress * 100, 0)} %</b>
+        <span>ระยะแอ่น</span><b className={m.defl > 1 ? "text-red-600" : ""}>{fmt(m.defl * 100, 0)} %</b>
+      </div>
+      {!ok && <p className="mt-1 text-[11px] text-red-600">{[m.stress > 1 ? "หน่วยแรงเกินค่ายอมให้" : "", m.defl > 1 ? "ระยะแอ่นเกินค่ายอมให้" : ""].filter(Boolean).join(" · ") || "ไม่ผ่านการตรวจ"} — เลือกไทป์ที่ใหญ่ขึ้น หรือเปลี่ยนเป็นคู่</p>}
+      <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+        {types.length ? <select className={`${inputCls} !h-8 !px-2 text-[12px]`} value={d.memberType?.[m.id] ?? ""} onChange={(e) => setType(e.target.value)}>
+          <option value="">อัตโนมัติ (เบาสุดที่ผ่าน)</option>{types.map((t, i) => <option key={i} value={i}>{t.name} · {plateText({ count: t.count, type: t.pick.split(":")[0], name: t.pick.split(":")[1] })}</option>)}</select>
+          : <SectionSelect className="h-8 w-full text-[12px]" value={d.memberPick?.[m.id] ?? ""} onChange={(v) => { const p = { ...d.memberPick }; if (v) p[m.id] = v; else delete p[m.id]; setD("memberPick", p); }}
+              inherit={m.own ? "ตามค่าตั้งต้น" : `ตามค่าตั้งต้น → ${plateText({ count: 1, type: m.r.section.type, name: m.r.section.name })}`} />}
+        <Select className="!h-8 !w-[76px] !px-2 text-[12px]" value={m.count} onChange={(v) => setD("memberCount", { ...d.memberCount, [m.id]: Number(v) })} options={[[1, "เดี่ยว"], [2, "คู่"]]} />
+      </div>
+    </div>
   );
 }

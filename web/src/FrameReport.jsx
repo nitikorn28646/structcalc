@@ -2,8 +2,9 @@
 import { PILE_SAFE } from "../engine/frame.js";
 import FootingPlan, { FootingLegend, footingMarks } from "./FootingPlan.jsx";
 import { BeamDetail, ColumnDetail, FootingDetail } from "./Details.jsx";
-import { FootingCage3D } from "./Cage3D.jsx";
-import BeamCage3D from "./BeamCage3D.jsx";
+import { FootingCageParts } from "./Cage3D.jsx";
+import { BeamCageParts } from "./BeamCage3D.jsx";
+import { Still3D } from "./Snapshot3D.jsx";
 import { beamLayersOf } from "./DesignFigures.jsx";
 import { Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
 import { fmt } from "./beamModel.js";
@@ -229,7 +230,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           <div className="grid grid-cols-2 gap-2">{[...fNames.entries()].map(([key, name]) => {
             const f = res.footings.filter((x) => fKey(x) === key).reduce((a, x) => ((x.P ?? 0) > (a.P ?? 0) ? x : a));
             return f.inp && f.r ? <Figure key={key} caption={`${name} · ${f.kind === "spread" ? `ฐานแผ่ ${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp.t, 2)} ม.` : `เข็ม ${f.n} × ${f.pile} ฐาน ${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp.t, 2)} ม.`} · ${res.footings.filter((x) => fKey(x) === key).length} ฐาน`}>
-              <div className="grid grid-cols-[3fr_2fr] items-center gap-1"><FootingDetail f={f} mark={name} className="mx-auto h-[72mm] w-full overflow-visible" /><FootingCage3D f={f} className="h-[60mm] overflow-hidden rounded" /></div></Figure> : null; })}</div>
+              <div className="grid grid-cols-[3fr_2fr] items-center gap-1"><FootingDetail f={f} mark={name} className="mx-auto h-[72mm] w-full overflow-visible" /><Still3D id={`ft-${name}-${fmt(f.r.Bx, 2)}x${fmt(f.r.By, 2)}-${f.n}-${f.inp?.sLong}`} node={<FootingCageParts f={f} />} className="h-[60mm] w-full" /></div></Figure> : null; })}</div>
         </Sec>}
 
         {show("back") && <Sec id="c-schedules" n={N("c-schedules")} th="ตาราง type คาน เสา และฐานราก" en="Beam & column schedules" intro="ขนาดและเหล็กเสริมที่ใช้ ความยาวคานรวมวัดตามแนวศูนย์กลาง ยังไม่รวมระยะทาบและเศษเหล็ก">
@@ -262,7 +263,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
               return (
                 <Figure key={t.name} caption={`${t.name} ${fmt(t.b * 100, 0)}×${fmt(t.h * 100, 0)} ซม. · หัวเสา ${stLabel(t)} @${fmt(t.sSup, 2)} · กลางคาน @${fmt(t.sMid, 2)}`}>
                   <div className="grid grid-cols-3 items-center gap-1"><BeamDetail t={t} mat={mat} at="sup" className="h-[40mm] w-full" /><BeamDetail t={t} mat={mat} at="mid" className="h-[40mm] w-full" />
-                    {k < 8 ? <BeamCage3D b={t.b} h={t.h} L={2.4} cover={mat.cover ?? 3} stirrupBar={t.st} type="both_ends" mid={LL.mid} sup={LL.sup} sEnd={t.sSup} sMid={t.sMid} className="h-[40mm] overflow-hidden rounded" /> : <span />}</div>
+                    <Still3D id={`bt-${JSON.stringify([t.b, t.h, t.top, t.topX, t.bot, t.botX, t.st, t.sSup, t.sMid, mat.cover])}`} node={<BeamCageParts b={t.b} h={t.h} L={2.4} cover={mat.cover ?? 3} stirrupBar={t.st} type="both_ends" mid={LL.mid} sup={LL.sup} sEnd={t.sSup} sMid={t.sMid} />} className="h-[40mm] w-full" /></div>
                 </Figure>);
             })}
           </div>

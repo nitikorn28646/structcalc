@@ -22,8 +22,8 @@ function stirrup(z, w, h, d) {
     [-hw, hh, z + d], [-hw + k, hh - k, z + d]] };
 }
 
-export default function BeamCage3D({ b, h, L, cover, stirrupBar, type, mid, sup, sEnd, sMid, className = "", dark = false }) {
-  const parts = useMemo(() => {
+function useBeamParts({ b, h, L, cover, stirrupBar, type, mid, sup, sEnd, sMid }) {
+  return useMemo(() => {
     const B = b * 100, H = h * 100, sd = STIRRUPS[stirrupBar]?.d ?? 0.9;
     const toM = (p) => ({ ...p, x: (p.x - B / 2) / 100, y: (p.y - H / 2) / 100, d: p.d / 100 });
     const lay = (sec, face) => barLayout(B, H, cover, sd, sec[face], face === "top").map(toM);
@@ -43,6 +43,20 @@ export default function BeamCage3D({ b, h, L, cover, stirrupBar, type, mid, sup,
     }
     return { bars, zs, sw: b - 2 * ins, sh: h - 2 * ins, sd: sd / 100 };
   }, [b, h, L, cover, stirrupBar, type, mid, sup, sEnd, sMid]);
+}
+
+// the cage itself (concrete + bars + stirrups) without a canvas — also rendered by the snapshot station for the report
+export function BeamCageParts(props) {
+  const { b, h, L, dark = false } = props, parts = useBeamParts(props);
+  return (<group>
+    <mesh><boxGeometry args={[b, h, L]} /><meshPhysicalMaterial color={dark ? "#8a93b8" : "#c9ced6"} transparent opacity={dark ? 0.12 : 0.16} roughness={0.9} depthWrite={false} /><Edges color={dark ? "#6e7591" : "#98a2b3"} /></mesh>
+    {parts.bars.map((p, i) => <Rebar key={`b${i}`} {...longBar(p, L, h)} />)}
+    {parts.zs.map((z, i) => <Rebar key={`s${i}`} {...stirrup(z, parts.sw, parts.sh, parts.sd)} />)}
+  </group>);
+}
+
+export default function BeamCage3D({ b, h, L, cover, stirrupBar, type, mid, sup, sEnd, sMid, className = "", dark = false }) {
+  const parts = useBeamParts({ b, h, L, cover, stirrupBar, type, mid, sup, sEnd, sMid });
   const span = Math.max(L, 1);
   return (
     <div className={`relative ${className}`}>

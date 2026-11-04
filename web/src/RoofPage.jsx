@@ -14,7 +14,7 @@ import { Card, Field, NumberInput, Select, inputCls as SEL } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import Roof3D, { LINE_COLORS } from "./Roof3D.jsx";
 import { downloadDxf, plateModel, roofPlanModel } from "./drawings.js";
-import { PlateInputs, PlatePlan, PlateTable, platesOf } from "./PlateView.jsx";
+import { PlateInputs, PlatePick, PlatePlan, PlateTable, platesOf } from "./PlateView.jsx";
 import DrawBoard from "./DrawBoard.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
@@ -357,7 +357,7 @@ function SlopeFrom({ roof, g, set }) {
 
 export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, res = null, focus = false }) {
   const sk = useSkeleton(), { g, fr, dz, error, empty } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|loads|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
-  const [view, setView] = useState("2d"), [side, setSide] = useState("table");
+  const [view, setView] = useState("2d"), [side, setSide] = useState("table"), [pickP, setPickP] = useState(null);
   const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz);
   const modeBar = (
     <span className="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
@@ -447,7 +447,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
         {error ? <p className="text-sm text-red-600">{error}</p> : empty ? <p className="text-sm text-gray-500">ยังไม่มีหลังคา — ไปแท็บ "1 วาดแปลน" แล้วกด "ใช้แปลนจากโครงสร้าง" (แนะนำ), นำเข้า DXF หรือวาดผนังเอง</p> : !g ? <p className="text-sm text-gray-400">กำลังโหลดตัวคำนวณรูปทรงหลังคา…</p> : (
           mode === "plate" ? (
             <div className="flex h-full min-h-0 flex-col gap-2">
-              <div className="relative min-h-[300px] flex-[3] rounded-xl bg-gray-50 p-1"><span className="pointer-events-none absolute left-2 top-1 text-[10px] text-gray-400">ล้อเมาส์ = ซูม · ลาก = เลื่อน · ดับเบิลคลิก = พอดีจอ</span><button onClick={() => setSide(side === "table" ? null : "table")} className="absolute right-2 top-1 z-10 rounded-md bg-white px-2 py-0.5 text-[11px] text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50">{side === "table" ? "ซ่อนตาราง ▾" : "แสดงตาราง ▴"}</button><PlatePlan g={g} plates={pl.plates} posts={fr?.posts} loose={dz?.loose}columns={roof.columns?.length ? roof.columns : null} hover={hover} setHover={setHover} dark={dark} /></div>
+              <div className="relative min-h-[300px] flex-[3] rounded-xl bg-gray-50 p-1"><span className="pointer-events-none absolute left-2 top-1 text-[10px] text-gray-400">ล้อเมาส์ = ซูม · ลาก = เลื่อน · ดับเบิลคลิก = พอดีจอ</span><button onClick={() => setSide(side === "table" ? null : "table")} className="absolute right-2 top-1 z-10 rounded-md bg-white px-2 py-0.5 text-[11px] text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50">{side === "table" ? "ซ่อนตาราง ▾" : "แสดงตาราง ▴"}</button><PlatePlan g={g} plates={pl.plates} posts={fr?.posts} loose={dz?.loose}columns={roof.columns?.length ? roof.columns : null} hover={hover} setHover={setHover} dark={dark} picked={pickP} onPick={(m) => setPickP(pickP?.id === m.id ? null : m)} /><PlatePick m={pickP && pl.plates.find((x) => x.id === pickP.id)} d={roof.design} setD={setD} onClose={() => setPickP(null)} /></div>
               <div className={side === "table" ? "min-h-0 flex-[1.3] overflow-auto" : "hidden"}><PlateTable plates={pl.plates} d={roof.design} setD={setD} setHover={setHover} warnings={dz?.warnings} looseN={dz?.loose?.length ?? 0} onCarriers={() => set("innerPlates", [...(roof.innerPlates ?? []), ...carrierPlates(roof, g, dz?.loose ?? [])])} /></div>
             </div>
           ) : mode === "design" ? <MemberTable dz={dz} d={roof.design} setD={setD} setHover={setHover} /> : <div className="h-full rounded-xl bg-gray-50 p-2"><PlanEditor roof={roof} set={set} g={g} fr={fr} mode={mode} sel={sel} setSel={setSel} dark={dark} /></div>

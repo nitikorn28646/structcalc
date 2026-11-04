@@ -31,7 +31,7 @@ const Concrete = ({ size, pos, dark }) => (
 // closed tie in a horizontal plane at height y, hooks 135° at one corner
 const tie = (y, w, h, d) => { const hw = w / 2, hh = h / 2, k = Math.max(6 * d, 0.05) * 0.7; return { d, kind: "stirrup", points: [[-hw + k, y, -hh + k], [-hw, y, -hh], [hw, y, -hh], [hw, y, hh], [-hw, y, hh], [-hw, y + d, -hh], [-hw + k, y + d, -hh + k]] }; };
 
-export function ColumnCage3D({ lv, cover = 3, H = 1.6, dark = false, className = "" }) {
+export function ColumnCageParts({ lv, cover = 3, H = 1.6, dark = false }) {
   const parts = useMemo(() => {
     const Bx = lv.Bx / 100, By = lv.By / 100, db = dOf(lv.mainBar), td = dOf(lv.tieBar, 0.6), c = cover / 100, [nx, ny] = faceBars(lv.n);
     const ix = Bx / 2 - c - td - db / 2, iy = By / 2 - c - td - db / 2, pts = [];
@@ -40,17 +40,16 @@ export function ColumnCage3D({ lv, cover = 3, H = 1.6, dark = false, className =
     const ties = []; for (let y = 0.05; y < H - 0.02; y += lv.s ?? 0.15) ties.push(tie(y, Bx - 2 * c - td, By - 2 * c - td, td));
     return { Bx, By, db, pts, ties };
   }, [lv, cover, H]);
-  return (
-    <Scene span={Math.max(H, 1)} dark={dark} className={className}>
+  return (<group>
       <Concrete size={[parts.Bx, H, parts.By]} pos={[0, H / 2, 0]} dark={dark} />
       {parts.pts.map(([x, z], i) => <Rebar key={i} d={parts.db} kind="main" points={[[x, 0, z], [x, H, z]]} />)}
       {parts.ties.map((t, i) => <Rebar key={`t${i}`} {...t} />)}
-    </Scene>
-  );
+  </group>);
 }
+export const ColumnCage3D = ({ lv, cover, H = 1.6, dark = false, className = "" }) => <Scene span={Math.max(H, 1)} dark={dark} className={className}><ColumnCageParts lv={lv} cover={cover} H={H} dark={dark} /></Scene>;
 
 // spread footing / pile cap: f = a footing result (r.Bx, r.By, r.piles, inp t, cover, sLong, sShort, bars, pier bx/by, dowels)
-export function FootingCage3D({ f, dark = false, className = "" }) {
+export function FootingCageParts({ f, dark = false }) {
   const parts = useMemo(() => {
     const r = f.r, inp = f.inp, Bx = r.Bx, By = r.By, T = inp.t ?? 0.4, c = (inp.cover ?? 7.5) / 100, dl = dOf(inp.longBar), ds = dOf(inp.shortBar ?? inp.longBar);
     const sL = inp.sLong ?? 0.15, sS = inp.sShort ?? sL, hk = Math.min(T - 2 * c, 0.15), bars = [];
@@ -63,11 +62,12 @@ export function FootingCage3D({ f, dark = false, className = "" }) {
     return { Bx, By, T, bars, bx, by, Hs, pb, piles, bored: PILES[f.pile]?.bored };
   }, [f]);
   return (
-    <Scene span={Math.max(parts.Bx, parts.By, 1)} dark={dark} className={className}>
+    <group>
       <Concrete size={[parts.Bx, parts.T, parts.By]} pos={[0, parts.T / 2, 0]} dark={dark} />
       <Concrete size={[parts.bx, parts.Hs - parts.T, parts.by]} pos={[0, parts.T + (parts.Hs - parts.T) / 2, 0]} dark={dark} />
       {parts.piles.map(([x, z], i) => <mesh key={i} position={[x, -0.6, z]}>{parts.bored ? <cylinderGeometry args={[parts.pb / 2, parts.pb / 2, 1.2, 24]} /> : <boxGeometry args={[parts.pb, 1.2, parts.pb]} />}<meshStandardMaterial color="#9aa1b1" transparent opacity={0.55} /></mesh>)}
       {parts.bars.map((b, i) => <Rebar key={i} {...b} />)}
-    </Scene>
+    </group>
   );
 }
+export const FootingCage3D = ({ f, dark = false, className = "" }) => <Scene span={Math.max(f.r?.Bx ?? 1, f.r?.By ?? 1, 1)} dark={dark} className={className}><FootingCageParts f={f} dark={dark} /></Scene>;
