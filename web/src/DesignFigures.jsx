@@ -29,7 +29,7 @@ export function ColumnTypeFigures({ types, mat }) {
     <div className="mt-4"><p className="mb-1 text-sm font-semibold text-gray-800">รูปตัดเหล็กเสริม type เสา (แต่ละระดับ)</p>
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">{types.flatMap((t, i) => t.levels.map((lv, j) => { const [nx, ny] = faceBars(lv.n); return (
         <div key={`${i}-${j}`} className={card}>
-          <Drawing model={columnSectionModel({ Bx: lv.Bx, By: lv.By, cover: mat.coverCol ?? mat.cover, tieD: SLAB_BARS[lv.tieBar]?.d ?? 0.6, barD: SLAB_BARS[lv.mainBar]?.d ?? 1.2, nx, ny })} className="mx-auto h-[34mm]" fontSize={8} width={120} />
+          <Drawing model={columnSectionModel({ Bx: lv.Bx, By: lv.By, cover: (j === 0 && mat.coverPier > 0 ? mat.coverPier : mat.coverCol ?? mat.cover), tieD: SLAB_BARS[lv.tieBar]?.d ?? 0.6, barD: SLAB_BARS[lv.mainBar]?.d ?? 1.2, nx, ny })} className="mx-auto h-[34mm]" fontSize={8} width={120} />
           <p className={cap}>{t.name} {lv.level} · {lv.Bx}×{lv.By} · {lv.n}-{lv.mainBar} · {lv.tieBar} @{fmt(lv.s, 2)}</p>
         </div>); }))}</div>
     </div>

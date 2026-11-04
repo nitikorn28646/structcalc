@@ -41,7 +41,7 @@ echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
 // example: 2 × 2 bays, columns at every node, beams on the grid lines, walls on the outside beams
 // concrete cover per member kind (cm); coverCol falls back to the old single `cover` so saved projects keep their results
-const COVERS = [["cover", "คาน", 3], ["coverCol", "เสา", 3], ["coverSlab", "พื้น / บันได", 2], ["coverFoot", "ฐานราก", 7.5]];
+const COVERS = [["cover", "คาน", 3], ["coverCol", "เสา", 3], ["coverPier", "ตอม่อ (ฝังดิน)", 0], ["coverSlab", "พื้น / บันได", 2], ["coverFoot", "ฐานราก", 7.5]];
 const XS = [0, 4, 8], YS = [0, 3.5, 7.5];
 const exBeams = [...YS.flatMap((y) => XS.slice(1).map((x, i) => [[XS[i], y], [x, y]])), ...XS.flatMap((x) => YS.slice(1).map((y, i) => [[x, YS[i]], [x, y]]))]
   .map(([a, b]) => ({ a, b, type: null, wall: { h: (a[0] === b[0] && (a[0] === 0 || a[0] === 8)) || (a[1] === b[1] && (a[1] === 0 || a[1] === 7.5)) ? 2.8 : 0, kind: "brick" } }));
@@ -91,23 +91,33 @@ const Handle = () => <PanelResizeHandle className="group relative w-1.5 bg-trans
 // editable beam-type table (B1, B2, …)
 // automatic beam types, one more per press (like the spread-footing types): engine/beamTypes.js generateBeamTypes
 function AutoBeamTypes({ frame, set, res }) {
-  const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null), k0 = frame.beamAutoK ?? 0, [want, setWant] = useState(Math.max(1, k0 || 3));
+  // the count asked is a number of GROUPS of spans; groups that end with the same section merge and types no beam uses are dropped,
+  // so the result can have fewer types (user 2026-11-04: "ยิ่งเพิ่มจำนวน type ยิ่งลด"). "+1" therefore starts from the types there are
+  // now and is applied only when it really gives one type more at no higher cost; otherwise the current types stay and it says why.
+  const nNow = (frame.beamTypes ?? []).length, k0 = frame.beamAutoK ?? 0;
+  const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null), [want, setWant] = useState(Math.max(1, k0 || 3));
   const cost = res.floors.flatMap((a) => a.spans).reduce((s, x) => s + beamCost(x.type) * x.len, 0);
-  const run = (k) => { setBusy(true); setMsg(null); setTimeout(() => { // let "working…" paint first: a big house takes seconds
+  const nOk = res.floors.flatMap((a) => a.spans).filter((x) => x.ok).length;
+  const run = (k, plusOne = false) => { setBusy(true); setMsg(null); setTimeout(() => { // let "working…" paint first: a big house takes seconds
     try {
       const g = generateBeamTypes(frame, k);
       if (!g) { setMsg({ ok: false, text: "ยังไม่มีคานให้จัด type" }); return; }
-      set("beamTypes", g.beamTypes); set("floors", g.floors); set("beamAutoK", k);
-      setMsg({ ok: g.ok === g.n, text: `${g.beamTypes.length} type${g.beamTypes.length < k ? ` (ขอ ${k} — ที่เหลือไม่มีคานใช้ จึงตัดออก)` : ""} · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})${g.big.length ? ` · ⚠ คานใหญ่พิเศษ (เกินกรอบปกติ ขยายถึงกว้าง 0.40 ลึก 1.00 ม.): ช่วง ${g.big.join(", ")} → ${g.beamTypes.filter((t) => t.big).map((t) => `${t.name} ${fmt(t.b * 100, 0)}×${fmt(t.h * 100, 0)}`).join(", ")} — ตรวจว่าทำได้จริง หรือเพิ่มเสาแทน` : ""}${g.unmatched.length ? ` · ไม่มีหน้าตัดในกรอบ (กว้าง ≥ 0.20, ลึก ≤ 0.80 ม., เหล็ก ≤ 2 ชั้น) สำหรับช่วง ${g.unmatched.join(", ")} — เพิ่ม type เอง` : ""}` });
+      const n = g.beamTypes.length;
+      if (plusOne && k0 > 0 && (n <= nNow || g.cost > cost + 1) && g.ok >= nOk) {
+        setMsg({ ok: true, text: `เพิ่มเป็น ${nNow + 1} type แล้วไม่ได้ type ใหม่ที่ถูกกว่า — งานนี้ใช้หน้าตัดที่ต่างกันจริง ${nNow} แบบตามลำดับออกแบบ (20×40 → 20×50 …, DB12 → DB16) จึงคง ${nNow} type เดิมไว้` });
+        return;
+      }
+      set("beamTypes", g.beamTypes); set("floors", g.floors); set("beamAutoK", n);
+      setMsg({ ok: g.ok === g.n, text: `ได้ ${n} type${n < k ? ` (ขอ ${k} กลุ่ม — กลุ่มที่ได้หน้าตัดเดียวกันรวมกัน และ type ที่ไม่มีคานใช้ถูกตัดออก)` : ""} · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})` });
     } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(false); }
   }, 30); };
   return (
     <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-white/[0.03]">
       <div className="flex flex-wrap items-center gap-2">
-        <button disabled={busy} onClick={() => run(k0 + 1)} className="rounded-lg bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600 disabled:opacity-60">{busy ? "กำลังจัด type…" : `เพิ่ม type คานอัตโนมัติ (+1 → ${k0 + 1} type)`}</button>
+        <button disabled={busy} onClick={() => run(Math.max(nNow, k0) + 1, true)} className="rounded-lg bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600 disabled:opacity-60">{busy ? "กำลังจัด type…" : `เพิ่ม type คานอัตโนมัติ (มี ${nNow} → ลอง ${nNow + 1})`}</button>
         <span className="flex items-center gap-1 text-[12px] text-gray-600">หรือกำหนด<input type="number" min={1} max={20} value={want} onChange={(e) => setWant(Math.max(1, Math.min(20, Math.round(Number(e.target.value) || 1))))} className="h-8 w-14 rounded border border-gray-300 bg-transparent px-1 text-right" />type
           <button disabled={busy} onClick={() => run(want)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50 disabled:opacity-60">จัด {want} type</button></span>
-        {k0 > 0 && <button disabled={busy} onClick={() => run(k0)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50 disabled:opacity-60">↻ จัดใหม่ ({k0} type)</button>}
+        {k0 > 0 && <button disabled={busy} onClick={() => run(nNow)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50 disabled:opacity-60">↻ จัดใหม่ ({nNow} type)</button>}
         <span className="text-[12px] text-gray-500">ค่าคานตอนนี้ ≈ {Math.round(cost).toLocaleString()} บาท</span>
       </div>
       <p className="mt-1.5 text-[11px] text-gray-500">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ถูกที่สุดที่ผ่าน (กว้าง 0.20 / 0.30 ม. ลึก 0.30–0.80 ม. ทีละ 10 ซม. เหล็ก ≤ 2 ชั้น) เรียงตามราคาแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดถูกที่สุดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2, … เรียงตามขนาดคาน (ตัด type ที่ไม่มีคานใช้) · คานยื่นใช้ type ที่เหล็กหัวเสาพอ ชื่อ B1A (เหล็กบนยาวตลอด) · แทนที่ type คานทั้งหมดและตั้งทุกคานเป็นอัตโนมัติ (ย้อนกลับได้ Ctrl+Z) · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p>
@@ -296,7 +306,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
-  const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
+  const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : k === "coverPier" ? frame.mat.coverCol ?? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
   const coverBar = (keys, extra = null) => <div className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]"><span className="pb-2 text-xs font-medium text-gray-500">คอนกรีตหุ้ม</span>{coverFields.filter((_, i) => keys.includes(COVERS[i][0]))}{extra}</div>;
   // minimum clear spacing between beam bars: bars that do not fit in a layer go to the next layer (design + drawings)
   const clearField = <><Field label="ระยะห่างเหล็กคานขั้นต่ำ (ช่องว่าง)" unit="cm"><NumberInput value={frame.mat.barClear ?? 3.5} step="0.5" onChange={(v) => setMat("barClear", v)} /></Field>
@@ -317,7 +327,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </div>
     </div>
   ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
-    : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol"])}<ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
+    : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (() => {
       // every slab / cantilever slab / stair: this floor or all floors, bars by position, section drawing; row → flashes on the plan

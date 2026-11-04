@@ -265,10 +265,10 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           </div>
           <Sub>รูปตัดเหล็กเสริมเสา</Sub>
           <div className="grid grid-cols-4 gap-2">
-            {colTypes.flatMap((t, i) => t.levels.filter((lv) => res.columns.some((c) => c.typeIdx === i && c.lv === lv)).map((lv) => { const [nx, ny] = faceBars(lv.n);
+            {colTypes.flatMap((t, i) => t.levels.filter((lv) => res.columns.some((c) => c.typeIdx === i && c.lv === lv)).map((lv) => { const [nx, ny] = faceBars(lv.n), j = t.levels.indexOf(lv);
               return (
                 <Figure key={`${t.name}${lv.level}`} caption={`${t.name} ${lv.level} · ${lv.n}-${lv.mainBar} · ${lv.tieBar} @${fmt(lv.s, 2)}`}>
-                  <Drawing model={columnSectionModel({ Bx: lv.Bx, By: lv.By, cover: mat.coverCol ?? mat.cover, tieD: SLAB_BARS[lv.tieBar]?.d ?? 0.6, barD: SLAB_BARS[lv.mainBar]?.d ?? 1.2, nx, ny })} className="mx-auto h-[38mm]" fontSize={8} width={150} />
+                  <Drawing model={columnSectionModel({ Bx: lv.Bx, By: lv.By, cover: (j === 0 && mat.coverPier > 0 ? mat.coverPier : mat.coverCol ?? mat.cover), tieD: SLAB_BARS[lv.tieBar]?.d ?? 0.6, barD: SLAB_BARS[lv.mainBar]?.d ?? 1.2, nx, ny })} className="mx-auto h-[38mm]" fontSize={8} width={150} />
                 </Figure>
               ); }))}
           </div>

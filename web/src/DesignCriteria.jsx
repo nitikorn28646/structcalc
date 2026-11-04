@@ -37,7 +37,7 @@ export function DesignCriteria({ frame, set, setMat, defaults, onNotice }) {
         {grade("fy", "เหล็กยืน / เหล็กหลัก")}{grade("fys", "เหล็กปลอก")}
         {num("Es", "Es", "ksc", "10000", 2040000)}{num("barClear", "ช่องว่างเหล็กคานขั้นต่ำ", "cm", "0.5", 3.5)}
         <Sub>ระยะคอนกรีตหุ้มเหล็ก</Sub>
-        {num("cover", "คาน", "cm", "0.5", 3)}{num("coverCol", "เสา", "cm", "0.5", m.cover ?? 3)}{num("coverSlab", "พื้น / บันได", "cm", "0.5", 2)}{num("coverFoot", "ฐานราก", "cm", "0.5", 7.5)}
+        {num("cover", "คาน", "cm", "0.5", 3)}{num("coverCol", "เสา", "cm", "0.5", m.cover ?? 3)}{num("coverPier", "ตอม่อ (ฝังดิน)", "cm", "0.5", m.coverCol ?? m.cover ?? 3)}{num("coverSlab", "พื้น / บันได", "cm", "0.5", 2)}{num("coverFoot", "ฐานราก", "cm", "0.5", 7.5)}
         <Sub>การแอ่นตัวของคาน</Sub>
         <Field label="รวม (3·δD + δL) ≤ L /"><NumberInput value={m.deflTotal ?? 240} step="10" onChange={(v) => setMat("deflTotal", v)} /></Field>
         <Field label="น้ำหนักจร δL ≤ L /"><NumberInput value={m.deflLive ?? 360} step="10" onChange={(v) => setMat("deflLive", v)} /></Field>

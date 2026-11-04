@@ -189,10 +189,11 @@ function designColumns(frame, cols) {
   const weight = (t) => t.levels.reduce((s, lv) => s + lv.Bx * lv.By, 0);
   const order = colTypes.map((t, i) => ({ t, i })).sort((a, b) => weight(a.t) - weight(b.t));
   // every load combination of the column (gravity design forces first); the governing check is kept with its combination name
+  // ตอม่อ (columns under the lowest floor, in the ground) take their own cover mat.coverPier (user 2026-11-04) when given
   const check = (lv, c) => {
     let worst = null;
     for (const q of [{ name: "D+L", P: c.Pd ?? c.Pbot, M: c.M3 ?? {} }, ...(c.combos ?? []).map((x) => ({ name: x.name, P: x.N, M: { Mx: x.Mx, My: x.My } }))]) {
-      const chk = { ...checkColumn(lv, q.P, c.Leff ?? c.Lu ?? c.L, mat, q.M), combo: q.name, tension: q.P < 0, ...(c.Leff ? { cantilever: true, Lc: c.Lc } : {}) };
+      const chk = { ...checkColumn(lv, q.P, c.Leff ?? c.Lu ?? c.L, c.floor === 0 && mat.coverPier > 0 ? { ...mat, coverCol: mat.coverPier } : mat, q.M), combo: q.name, tension: q.P < 0, ...(c.Leff ? { cantilever: true, Lc: c.Lc } : {}) };
       if (!worst || (worst.ok && !chk.ok) || (chk.ok === worst.ok && chk.util > worst.util)) worst = chk;
     }
     return worst;
