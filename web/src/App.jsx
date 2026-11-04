@@ -341,6 +341,8 @@ export default function App() {
     [st.geom.type, st.geom.L, forces.w, forces.ML, forces.MR]);
   const [viewOpen, setViewOpen] = useState(false);
   const openRef = useRef(null), [notice, setNotice] = useState(null), [saveBox, setSaveBox] = useState(null);
+  // a notice fades after 10 s (UI test 2026-11-04: it stayed in the header through every step); errors stay until clicked
+  useEffect(() => { if (!notice?.ok) return; const t = setTimeout(() => setNotice(null), 10000); return () => clearTimeout(t); }, [notice]);
   const brand = useBrand(), [brandOpen, setBrandOpen] = useState(false);
   useEffect(() => { document.title = `${BRAND.full} — ออกแบบโครงสร้าง คสล. และหลังคาเหล็ก`; }, []);
   // screen space (user 2026-11-04): left steps folded to icons, focus = plan only (no side bars / guide), remembered per browser
@@ -416,7 +418,10 @@ export default function App() {
     const empty = applyStandard({ ...DEFAULT_FRAME, cur: 0, colPick: {}, lateral: undefined, roofLink: undefined, roofPoints: [],
       floors: DEFAULT_FRAME.floors.map((f) => ({ ...f, columns: [], beams: [], walls: [], panels: {}, cants: [], stairs: [], lineLoads: [], pointLoads: [] })) }); // the engineer's saved standard, if any
     hist.current = { undo: [], redo: [], t: 0 };
-    replaceSt({ ...DEFAULT_STATE }); setFrameState(empty); setRoofState(EMPTY_ROOF);
+    // a new project starts without the sample's names (UI test 2026-11-04: the header still read "บ้านพักอาศัย คสล. 2 ชั้น"); the
+    // engineer and licence stay (the user's own), the date is today
+    replaceSt({ ...DEFAULT_STATE, project: { ...DEFAULT_STATE.project, name: "โครงการใหม่", owner: "", location: "", engineer: st.project.engineer ?? "", license: st.project.license ?? "", date: new Date().toISOString().slice(0, 10), revisions: [] } });
+    setFrameState(empty); setRoofState(EMPTY_ROOF);
     try { localStorage.setItem("structcalc.frame", JSON.stringify(empty)); localStorage.setItem("structcalc.roof", JSON.stringify(EMPTY_ROOF)); } catch { /* ignore */ }
     fileRef.current = null; setFileName(null); setDirty(false); setAskNew(false); setStep("project");
     setNotice({ ok: true, text: "เริ่มโครงการใหม่แล้ว — ใส่ข้อมูลโครงการ แล้วไปขั้น 1 กริด / ระดับชั้น" });
@@ -524,7 +529,7 @@ export default function App() {
                   className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100">
                   {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </button>
-                {notice && <span className={`self-center text-xs ${notice.ok ? "text-green-600" : "text-red-600"}`}>{notice.text}</span>}
+                {notice && <span title={notice.text} className={`flex max-w-[360px] items-start gap-1 self-center text-xs ${notice.ok ? "text-green-600" : "text-red-600"}`}><span className="line-clamp-2">{notice.text}</span><span role="button" aria-label="ปิด" onClick={() => setNotice(null)} className="cursor-pointer px-0.5 text-gray-400 hover:text-gray-600">×</span></span>}
                 <span className="flex items-center gap-1 rounded-lg bg-gray-100 p-0.5">
                   <button onClick={() => (dirty ? setAskNew(true) : newProject())} title="โครงการใหม่ (เริ่มจากว่าง)" className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white"><FilePlus2 className="h-4 w-4" />ใหม่</button>
                   {snaps.length > 0 && <button onClick={restoreSnap} title={`กู้คืนงานที่ถูกแทนที่ล่าสุด (${snaps[0].name || "ไม่มีชื่อ"} · ${new Date(snaps[0].at).toLocaleString("th-TH")}) — เก็บไว้ ${snaps.length} ชุด`} className="flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-gray-700 hover:bg-white">กู้คืน</button>}

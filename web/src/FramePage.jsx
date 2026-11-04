@@ -75,7 +75,7 @@ function UtilBars({ items: raw, dark, height, onPick }) {
       tooltip: { trigger: "axis", valueFormatter: (v) => `${v}%` },
       grid: { left: 92, right: 16, top: 6, bottom: 24 },
       yAxis: { type: "category", inverse: true, triggerEvent: true, data: items.map((s) => s.label), axisLine: { lineStyle: { color: c.axis } }, axisLabel: { color: c.label, fontSize: 11, interval: 0 } },
-      xAxis: { type: "value", max: (v) => Math.max(120, Math.ceil(v.max / 20) * 20), axisLabel: { color: c.label, formatter: "{value}%" }, splitLine: { lineStyle: { color: c.split } } },
+      xAxis: { type: "value", max: (v) => Math.max(120, Math.ceil(v.max / 20) * 20), axisLabel: { color: c.label, formatter: "{value}%", hideOverlap: true }, splitNumber: 3, splitLine: { lineStyle: { color: c.split } } },
       series: [{ type: "bar", barMaxWidth: 10, data: items.map((s) => ({ value: +(Math.min(s.util, 3) * 100).toFixed(0), itemStyle: { color: s.ok ? s.color : c.lim, borderRadius: [0, 4, 4, 0] } })),
         markLine: { symbol: "none", silent: true, lineStyle: { color: c.lim, type: "dashed" }, label: { show: false }, data: [{ xAxis: 100 }] } }],
     });

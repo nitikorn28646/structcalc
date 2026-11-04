@@ -1,6 +1,14 @@
 # Test log (newest on top)
 Format: date · step · action · result · expected · severity (บล็อก / สำคัญ / เล็ก) · status (open / fixed in <commit>)
 
+## 2026-11-04 · hand test (cloud, Playwright clicking, new project 2 × 2 bays, 1366 × 768) — console clean, E2E 47/47 before
+- 0 โครงการใหม่ · the header kept the sample name "บ้านพักอาศัย คสล. 2 ชั้น" · expected an empty project · เล็ก · fixed (name "โครงการใหม่", engineer/licence kept, today's date)
+- 4 หลังคา → all later steps · the green notice ("นำเข้าเสา 0 ต้น …") stayed in the header through every step, squeezing it at 1366 · expected to fade · สำคัญ · fixed (fades after 10 s, click closes, 2 lines max)
+- 6 / 7 · utilisation chart axis labels overlapped in the narrow side panel ("20…%") · เล็ก · fixed (3 ticks, hideOverlap)
+- 4 หลังคา · "นำเข้าเสา + แปลนจากโครงสร้าง" imported 0 columns when the roof floor has none (columns only on ชั้น 2) — the card says so, but a hint to put columns on the top floor (เฉพาะเสา) would help · เล็ก · open
+- 4 หลังคา · near-square hip roof: two ดั้ง at almost the same point → their red "ไม่มีอะเสรับ" markers overlap · เล็ก · open
+- header at 1366: "กู้คืน" / "บันทึกเป็น…" wrap to two lines · เล็ก · open
+
 ## 2026-11-03 แก้ตามผลตรวจ (branch feature/review-fixes) — สถานะ
 - fixed: คานหลัก/ซอยที่จุดตัด, อะเสรับปลายอะเส/ดั้ง/ตุ๊กตา, แรงตุ๊กตาหาย 3.9 ตัน, อะเสบนคาน คสล. แรงหาย, เสาปลายอิสระ (k = 2) + klu/r > 100 = NG,
   เตือนปลายคานถูกยก/เสารับแรงดึง, D+W, Ec โครง 3 มิติ, แรงเฉือนที่ d (เลือกได้), เหตุผลไม่ผ่านในแผงคาน, แท่งอัตราใช้งานคลิกได้, หน้า 10 แสดงรายงาน,
