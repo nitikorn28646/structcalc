@@ -358,11 +358,12 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
             {g?.lines.filter((l) => l.type !== "eave").map((l, i) => <line key={`r${i}`} x1={l.p[0]} y1={-l.p[1]} x2={l.q[0]} y2={-l.q[1]} stroke={LINE_COLORS[l.type]} strokeWidth={1.5 * k} opacity={0.45} />)}
             <polygon points={ring(roof.pts)} fill="none" stroke={dark ? "#cdd1e2" : "#344054"} strokeWidth={2.5 * k} />
             {tool === "wall" && roof.pts.map((a, i) => {
-              const b = roof.pts[(i + 1) % roof.pts.length], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], gable = roof.edges[i]?.type === "gable";
+              const b = roof.pts[(i + 1) % roof.pts.length], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], ty = roof.edges[i]?.type ?? "hip", gable = ty !== "hip";
+              // click cycles ปั้นหยา → จั่ว → มนิลา (hip below, small gable on top)
               return (
-                <g key={`e${i}`} className="cursor-pointer" onPointerDown={(e) => { e.stopPropagation(); commit({ edges: roof.edges.map((x, j) => (j === i ? { type: gable ? "hip" : "gable" } : x)) }); }}>
-                  <rect x={m[0] - 26 * k} y={-m[1] - 9 * k} width={52 * k} height={18 * k} rx={4 * k} fill={gable ? LINE_COLORS.rake : dark ? "#3a4163" : "#fff"} stroke="#98a2b3" strokeWidth={k} />
-                  {txt(m, gable ? "จั่ว" : "ปั้นหยา", gable ? "#fff" : dark ? "#e3e6f0" : "#344054", 11)}
+                <g key={`e${i}`} className="cursor-pointer" onPointerDown={(e) => { e.stopPropagation(); commit({ edges: roof.edges.map((x, j) => (j === i ? { type: ({ hip: "gable", gable: "manila", manila: "hip" })[ty] ?? "hip" } : x)) }); }}>
+                  <rect x={m[0] - 26 * k} y={-m[1] - 9 * k} width={52 * k} height={18 * k} rx={4 * k} fill={ty === "gable" ? LINE_COLORS.rake : ty === "manila" ? "#8e4ec6" : dark ? "#3a4163" : "#fff"} stroke="#98a2b3" strokeWidth={k} />
+                  {txt(m, ty === "gable" ? "จั่ว" : ty === "manila" ? "มนิลา" : "ปั้นหยา", gable ? "#fff" : dark ? "#e3e6f0" : "#344054", 11)}
                   {txt([m[0], m[1] - 18 * k], `${fmt(dist(a, b), 2)} ม.`, "#667085", 11)}
                 </g>
               );

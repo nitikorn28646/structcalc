@@ -1,6 +1,6 @@
-// Roof shape test (dev server on :5180): 21 outlines × hip / gable / shed mixes → planar faces, faces tile the plan, area = plan / cos θ, framing builds. node cli/roof-shapes.cjs
+// Roof shape test (dev server on :5180): 28 outlines × hip / gable / shed / manila mixes → planar faces, faces tile the plan, area = plan / cos θ, framing builds. node cli/roof-shapes.cjs
 const { chromium } = require('playwright');
-const H = 'hip', G = 'gable';
+const H = 'hip', G = 'gable', M = 'manila';
 const R = (w, h) => [[0, 0], [w, 0], [w, h], [0, h]];
 const L = [[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]];
 const Lw = [[0, 0], [12, 0], [12, 8], [4, 8], [4, 14], [0, 14]];
@@ -33,6 +33,12 @@ const models = [
   ['19 ยโสธร ปั้นหยา', Y, ed(Y, () => H)],
   ['20 ยโสธร จั่วหัวท้าย', Y, ed(Y, (i) => ([4, 7].includes(i) ? G : H))],
   ['21 L หมาแหงน', L, ed(L, (i) => (i === 0 || i === 5 ? H : G))],
+  ['22 มนิลา สองด้าน', R(10, 6), ed(R(10, 6), (i) => (i % 2 ? M : H))],
+  ['23 มนิลา + จั่ว', R(10, 6), ed(R(10, 6), (i) => (i === 1 ? M : i === 3 ? G : H))],
+  ['24 L มนิลาปลายปีก', L, ed(L, (i) => (i === 1 || i === 4 ? M : H))],
+  ['25 T มนิลา 3 ปลาย', T, ed(T, (i) => ([1, 4, 7].includes(i) ? M : H))],
+  ['26 ยโสธร มนิลา หัวท้าย', Y, ed(Y, (i) => ([3, 7].includes(i) ? M : H))], ['28 ยโสธร มนิลา ด้านยาว+ปลาย', Y, ed(Y, (i) => ([4, 7].includes(i) ? M : H))],
+  ['27 หมาแหงน ยาว', R(14, 5), ed(R(14, 5), (i) => (i === 2 ? H : G))],
 ];
 (async () => { const b = await chromium.launch(); const p = await b.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
   await p.goto('http://localhost:5180/'); await p.waitForTimeout(1500);

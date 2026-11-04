@@ -93,7 +93,7 @@ function PlanEditor({ roof, set, g, fr, mode, sel, setSel, dark }) {
     set("pts", [...roof.pts.slice(0, i + 1), m, ...roof.pts.slice(i + 1)]);
     set("edges", [...roof.edges.slice(0, i + 1), { ...roof.edges[i] }, ...roof.edges.slice(i + 1)]);
   };
-  const toggle = (i) => set("edges", roof.edges.map((e, k) => (k === i ? { type: e.type === "gable" ? "hip" : "gable" } : e)));
+  const toggle = (i) => set("edges", roof.edges.map((e, k) => (k === i ? { type: ({ hip: "gable", gable: "manila", manila: "hip" })[e.type ?? "hip"] ?? "hip" } : e))); // hip → gable → manila
   const grid = [];
   for (let x = Math.ceil(x0); x <= x0 + w; x++) grid.push(<line key={`x${x}`} x1={x} x2={x} y1={y0} y2={y0 + h} strokeWidth={x % 5 ? sc * 0.04 : sc * 0.09} />);
   for (let y = Math.ceil(y0); y <= y0 + h; y++) grid.push(<line key={`y${y}`} y1={Y(y)} y2={Y(y)} x1={x0} x2={x0 + w} strokeWidth={y % 5 ? sc * 0.04 : sc * 0.09} />);
@@ -129,14 +129,14 @@ function PlanEditor({ roof, set, g, fr, mode, sel, setSel, dark }) {
         </g>
       )}
       {mode !== "frame" && roof.pts.map((a, i) => {
-        const b = roof.pts[(i + 1) % roof.pts.length], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, gable = roof.edges[i]?.type === "gable";
+        const b = roof.pts[(i + 1) % roof.pts.length], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, ty = roof.edges[i]?.type ?? "hip", gable = ty !== "hip";
         const L = Math.hypot(b[0] - a[0], b[1] - a[1]), nx = (b[1] - a[1]) / L, ny = -(b[0] - a[0]) / L, o = roof.overhang + sc * 2;
         return (
           <g key={`e${i}`} fontSize={sc * 1.1} textAnchor="middle" dominantBaseline="middle">
             <text x={mx + nx * o} y={Y(my + ny * o)} fill={dark ? "#9097b1" : "#667085"}>{fmt(L, 2)}</text>
             <g className="cursor-pointer" onClick={() => toggle(i)}>
-              <rect x={mx - sc * 1.9} y={Y(my) - sc * 0.8} width={sc * 3.8} height={sc * 1.6} rx={sc * 0.4} fill={gable ? LINE_COLORS.rake : dark ? "#3a4163" : "#fff"} stroke={dark ? "#6e7591" : "#d0d5dd"} strokeWidth={sc * 0.06} />
-              <text x={mx} y={Y(my)} fill={gable ? "#fff" : dark ? "#cdd1e2" : "#344054"} fontSize={sc * 0.9}>{gable ? "จั่ว" : "ปั้นหยา"}</text>
+              <rect x={mx - sc * 1.9} y={Y(my) - sc * 0.8} width={sc * 3.8} height={sc * 1.6} rx={sc * 0.4} fill={ty === "manila" ? "#8e4ec6" : gable ? LINE_COLORS.rake : dark ? "#3a4163" : "#fff"} stroke={dark ? "#6e7591" : "#d0d5dd"} strokeWidth={sc * 0.06} />
+              <text x={mx} y={Y(my)} fill={gable ? "#fff" : dark ? "#cdd1e2" : "#344054"} fontSize={sc * 0.9}>{ty === "manila" ? "มนิลา" : gable ? "จั่ว" : "ปั้นหยา"}</text>
             </g>
             <g className="cursor-copy" onClick={() => insert(i)}>
               <circle cx={mx + (b[0] - a[0]) / L * sc * 3} cy={Y(my + (b[1] - a[1]) / L * sc * 3)} r={sc * 0.65} fill={dark ? "#2c3250" : "#f2f4f7"} />
@@ -417,7 +417,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
                 <span className="text-gray-500">{i + 1}</span>
                 <NumberInput className="compact-num" value={p[0]} step="0.1" onChange={(v) => setPt(i, 0, v)} />
                 <NumberInput className="compact-num" value={p[1]} step="0.1" onChange={(v) => setPt(i, 1, v)} />
-                <Select className="!px-2" value={roof.edges[i]?.type ?? "hip"} onChange={(v) => set("edges", roof.edges.map((e, k) => (k === i ? { type: v } : e)))} options={[["hip", "ปั้นหยา"], ["gable", "จั่ว"]]} />
+                <Select className="!px-2" value={roof.edges[i]?.type ?? "hip"} onChange={(v) => set("edges", roof.edges.map((e, k) => (k === i ? { type: v } : e)))} options={[["hip", "ปั้นหยา"], ["gable", "จั่ว"], ["manila", "มนิลา"]]} />
                 <button onClick={() => del(i)} className="grid h-7 w-6 place-items-center text-gray-400 hover:text-red-500" title="ลบจุด"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             ))}

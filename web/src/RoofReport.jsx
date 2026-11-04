@@ -40,7 +40,7 @@ export function RoofReport({ roof, project , bare = false, nb = null }) {
   // inside the whole-project book: one chapter (nb), sections nb.1, nb.2 … on from its first page
   const Wrap = bare ? ({ children }) => <>{children}</> : ({ children }) => <div className="report">{children}</div>;
   const roofSummary = [
-          ["รูปทรง / ความชัน", `${roof.edges.some((e) => e.type === "gable") ? "ปั้นหยาผสมจั่ว" : "ปั้นหยา"} · ${roof.slope}°`],
+          ["รูปทรง / ความชัน", `${[roof.edges.some((e) => (e.type ?? "hip") === "hip") && "ปั้นหยา", roof.edges.some((e) => e.type === "gable") && "จั่ว", roof.edges.some((e) => e.type === "manila") && "มนิลา"].filter(Boolean).join(" + ")} · ${roof.slope}°`],
           ["พื้นที่มุงจริง", `${fmt(g.roofArea, 2)} ม.²`],
           ["วัสดุมุง", `${roofing[0]} (${roofing[1]} กก./ม.²)`],
           ["แป / จันทัน", `${pu.r.section.name} / ${ra.r.section.name}`],
