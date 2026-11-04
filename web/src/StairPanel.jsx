@@ -5,7 +5,7 @@ import { useState } from "react";
 import { autoStair } from "../engine/slabDesign.js";
 import { Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
-import { STAIR_KINDS, stairLoads } from "../engine/floor.js";
+import { STAIR_KINDS, stairLoads, stairRT } from "../engine/floor.js";
 import { SLAB_BARS } from "../engine/tables.js";
 
 const LIVE = [[300, "บ้านพักอาศัย 300"], [400, "อาคารชุด / หอพัก 400"], [500, "สำนักงาน / อาคารสาธารณะ 500"]];
@@ -14,7 +14,7 @@ const Sub = ({ children }) => <div className="col-span-2 mt-1 border-b border-gr
 
 // geometry from the storey height H the stair climbs and the drawn opening
 export function stairGeom(st, H, r0) {
-  const R = st.riser ?? 0.17, T = st.tread ?? 0.25, n = Math.max(2, Math.round(H / R)), Ra = H / n;
+  const { R, T } = stairRT(st), n = Math.max(2, Math.min(200, Math.round(H / R))), Ra = H / n;
   const Lr = r0?.Lr ?? 0, B = r0?.B ?? 0, land = st.kind === "landing" ? Math.min(st.landingL ?? 1.2, Lr) : 0;
   const flights = st.kind === "landing" ? 2 : 1, perFlight = Math.ceil(n / flights), runNeed = (perFlight - 1) * T;
   return { n, Ra, T, Lr, B, land, flights, perFlight, runNeed, runAvail: Lr - land, comfort: 2 * Ra + T,

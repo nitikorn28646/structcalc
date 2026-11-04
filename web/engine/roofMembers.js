@@ -343,7 +343,7 @@ export function designRoof(g, fr, roof, d) {
   // anchor bolts d.plateAnchor (m, default 1.0); its load and the point loads go straight down into the RC beam.
   // d.plateDefl: deflection limit L/360 (default) or L/240 (roof without a hung ceiling); stress check unchanged (Fb = 0.6Fy)
   const plateRun = (section, count, L, pl = []) => {
-    const mode = d.plateSupport ?? "cont", Ld = mode === "beam" ? Math.min(L, d.plateAnchor ?? 1.0) : L, onBeam = mode === "beam";
+    const mode = d.plateSupport ?? "cont", Ld = mode === "beam" ? Math.min(L, d.plateAnchor > 0.1 ? d.plateAnchor : 1.0) : L, onBeam = mode === "beam";
     const r = !onBeam && pl.length ? pointBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count, loads: pl })
       : simpleBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count });
     const km = 1, kd = 1, lim = d.plateDefl === 240 ? 240 : 360; // "cont" lines are solved as continuous beams (contRun); a lone span stays simple
@@ -415,7 +415,7 @@ export function designRoof(g, fr, roof, d) {
       (section, count) => (cl ? contRun(cl, section, count) : sp.free ? cantRun(section, count, sp.L, pl, sp.free === "p" ? "q" : "p") : plateRun(section, count, sp.L, pl)), { ...(sp.free ? { free: sp.free } : {}), loads: pl, ...(cl ? { contLine: sp.line } : {}) });
     const m = members[members.length - 1], mode = d.plateSupport ?? "cont";
     if (mode === "beam" && !sp.free) { // straight down along the RC beam: the plate load at the anchors + each point load where it stands
-      const n = Math.max(1, Math.round(sp.L / (d.plateAnchor ?? 1.0))), W = m.r.w * sp.L;
+      const n = Math.max(1, Math.min(200, Math.round(sp.L / (d.plateAnchor > 0.1 ? d.plateAnchor : 1.0)))), W = m.r.w * sp.L;
       m.bear = Array.from({ length: n + 1 }, (_, i) => ({ p: lerp(sp.p, sp.q, i / n).slice(0, 2), P: (W / n) * (i === 0 || i === n ? 0.5 : 1) }))
         .concat(pl.map((l) => ({ p: lerp(sp.p, sp.q, l.a / sp.L).slice(0, 2), P: l.P })));
     } else if (m.r.cont) m.bear = m.r.cant ? [{ p: (m.r.fixedEnd === "p" ? sp.p : sp.q).slice(0, 2), P: m.r.R }] : [{ p: sp.p.slice(0, 2), P: m.r.Rl }, { p: sp.q.slice(0, 2), P: m.r.Rr }];

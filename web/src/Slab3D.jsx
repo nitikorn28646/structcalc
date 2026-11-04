@@ -10,8 +10,8 @@ const TOP_DIV = { simple: [4, 4], one_end: [4, 3], both_ends: [3, 3] };
 const TWO_TOP_DIV = { 1: [3, 3], 2: [4, 3], 3: [4, 3], 4: [4, 3], 5: [4, 4] };
 
 const steps = (len, s) => {
-  if (!(s > 0)) return [];
-  const n = Math.floor(len / s);
+  if (!(s > 0.01)) return [];
+  const n = Math.min(400, Math.floor(len / s));
   const off = (len - n * s) / 2;
   return Array.from({ length: n + 1 }, (_, k) => off + k * s - len / 2);
 };

@@ -12,7 +12,7 @@ import { TextSizeControl, useTextScale } from "./uiPrefs.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "./beamModel.js";
 import { dist, gridAxes, round3, segCross, segDist } from "./planKit.js";
-import { findOverlaps, GROUPS, STAIR_KINDS, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
+import { findOverlaps, GROUPS, STAIR_KINDS, stairRT, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
 
 // type colours (user 2026-11-03: different types had the same colour — 8 colours repeated, two blues alike): 12 distinct hues,
 // then more by the golden angle so a long type list does not repeat
@@ -385,7 +385,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
           })}
           {stairs.map((st, i) => { // stair: outline, step lines across the run, arrow up, label
             const x0 = Math.min(st.a[0], st.b[0]), x1 = Math.max(st.a[0], st.b[0]), y0 = Math.min(st.a[1], st.b[1]), y1 = Math.max(st.a[1], st.b[1]), ax = st.up?.[1] ?? "x", sg = st.up?.[0] === "-" ? -1 : 1;
-            const Lr = ax === "x" ? x1 - x0 : y1 - y0, n = Math.max(2, Math.round(Lr / (st.tread ?? 0.25))), c = [(x0 + x1) / 2, (y0 + y1) / 2], on = isSel("stair", i);
+            const Lr = ax === "x" ? x1 - x0 : y1 - y0, n = Math.max(2, Math.min(200, Math.round(Lr / stairRT(st).T))), c = [(x0 + x1) / 2, (y0 + y1) / 2], on = isSel("stair", i);
             return (
               <g key={`st${i}`}>
                 <rect x={x0} y={-y1} width={x1 - x0} height={y1 - y0} fill={on ? "#f7900933" : dark ? "#0e938422" : "#0e938414"} stroke={ST_C} strokeWidth={1.5 * k} />
@@ -401,7 +401,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               <g key={`ll${i}`}>
                 {isSel("lineLoad", i) && <line x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke="#f79009" strokeOpacity={0.45} strokeWidth={14 * k} strokeLinecap="round" />}
                 <line x1={l.a[0]} y1={-l.a[1]} x2={l.b[0]} y2={-l.b[1]} stroke={SP_C} strokeWidth={2.5 * k} />
-                {Array.from({ length: Math.max(2, Math.round(L / (28 * k))) + 1 }, (_, j, N = Math.max(2, Math.round(L / (28 * k)))) => { const t = j / N, p = [l.a[0] + (l.b[0] - l.a[0]) * t, l.a[1] + (l.b[1] - l.a[1]) * t], d = 12 * k;
+                {Array.from({ length: Math.max(2, Math.min(60, Math.round(L / (28 * k) || 2))) + 1 }, (_, j, N = Math.max(2, Math.min(60, Math.round(L / (28 * k) || 2)))) => { const t = j / N, p = [l.a[0] + (l.b[0] - l.a[0]) * t, l.a[1] + (l.b[1] - l.a[1]) * t], d = 12 * k;
                   return <line key={j} x1={p[0] - n[0] * d} y1={-(p[1] - n[1] * d)} x2={p[0] - n[0] * 2 * k} y2={-(p[1] - n[1] * 2 * k)} stroke={SP_C} strokeWidth={1.2 * k} markerEnd="url(#arrL)" />; })}
                 <line x1={l.a[0] - n[0] * 12 * k} y1={-(l.a[1] - n[1] * 12 * k)} x2={l.b[0] - n[0] * 12 * k} y2={-(l.b[1] - n[1] * 12 * k)} stroke={SP_C} strokeWidth={1 * k} />
                 {txt([m[0] - n[0] * 20 * k, m[1] - n[1] * 20 * k], `${l.name || "น้ำหนักเส้น"} ${fmt(l.q, 0)} กก./ม.`, SP_C, 10, "middle", 600)}

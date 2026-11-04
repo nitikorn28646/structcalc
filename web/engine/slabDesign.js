@@ -1,6 +1,7 @@
 // Slab panels, cantilever slabs and stairs of a floor designed with the diff-tested slab engine (engine/slab.js, WSD).
 // Edge continuity: an edge shared with another slab panel is continuous. PS (precast) and GS (on ground) are not designed here.
 import { cantilever, oneWay, stair, twoWay } from "./slab.js";
+import { stairRT } from "./floor.js";
 
 const close = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.03;
 // share of edge p-q that lies on an edge of another slab panel
@@ -50,7 +51,7 @@ export function designSlabs(an, floor, mat, sm = {}) {
     const r0 = an.stairs[i];
     if (st.kind === "side" || st.kind === "cant") { out.push({ name: `บันได ${i + 1}`, si: i, kind: "ST", note: st.kind === "side" ? `พาดข้าง ช่วง ${r0.B.toFixed(2)} ม. — ออกแบบเป็นพื้นทางเดียวช่วงสั้น` : "บันไดยื่น — ออกแบบขั้นบันไดยื่นแยก" }); return; }
     try {
-      const r = stair({ ...base, t: st.t ?? 0.12, riser: st.riser ?? 0.17, tread: st.tread ?? 0.25, extra: st.finish ?? 100, live: st.live ?? 300, L: r0.Lr, mainBar: st.mainBar ?? sm.stairBar ?? "DB 12", tempBar: bar, fy: sm.stairFy ?? 4000 });
+      const rt = stairRT(st), r = stair({ ...base, t: rt.t, riser: rt.R, tread: rt.T, extra: st.finish ?? 100, live: st.live ?? 300, L: r0.Lr, mainBar: st.mainBar ?? sm.stairBar ?? "DB 12", tempBar: bar, fy: sm.stairFy ?? 4000 });
       out.push({ name: `บันได ${i + 1}`, si: i, kind: "ST", L: r0.Lr, r, text: `${r.mainText} (หลัก) · ${r.tempText}`, ok: r.nOk && r.minTOk && r.dOk && r.VcOk && r.McOk && r.uOk });
     } catch (e) { out.push({ name: `บันได ${i + 1}`, si: i, kind: "ST", note: e.message, ok: false }); }
   });
@@ -78,7 +79,7 @@ export function autoStair(st, H, Lr, mat, sm = {}) {
   const bars = [...new Set([st.mainBar ?? "DB 12", "DB 12", "DB 16"])];
   outer: for (const t of [0.1, 0.12, 0.13, 0.15, 0.17, 0.18, 0.2, 0.22, 0.25]) for (const mainBar of bars) {
     try {
-      const r = stair({ ...base, t, riser: patch.riser ?? st.riser ?? 0.17, tread: patch.tread ?? st.tread ?? 0.25, extra: st.finish ?? 100, live: st.live ?? 300, L: Lr, mainBar, tempBar: sm.bar ?? "RB 9", fy: sm.stairFy ?? 4000 });
+      const r = stair({ ...base, t, riser: patch.riser ?? stairRT(st).R, tread: patch.tread ?? stairRT(st).T, extra: st.finish ?? 100, live: st.live ?? 300, L: Lr, mainBar, tempBar: sm.bar ?? "RB 9", fy: sm.stairFy ?? 4000 });
       if (r.nOk && r.minTOk && r.dOk && r.VcOk && r.McOk && r.uOk) { Object.assign(patch, { t, mainBar }); notes.push(`ท้องบันไดหนา ${(t * 100).toFixed(0)} ซม. · เหล็กหลัก ${r.mainText}`); break outer; }
     } catch { /* try the next size */ }
   }

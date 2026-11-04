@@ -10,11 +10,13 @@ export const WALLS = { brick: ["อิฐมอญครึ่งแผ่น", 
 export const CONC = 2400; // kg/m³
 // load groups, kept apart from input to report (all act together in the analysis: WSD, service loads)
 export const GROUPS = { DL: ["โครงสร้าง (DL)", "#667085"], SDL: ["ปูผิว/ฝ้า/งานระบบ (SDL)", "#0e9384"], WALL: ["ผนัง", "#b54708"], LL: ["น้ำหนักจร (LL)", "#3e63dd"], SP: ["พิเศษ / จากชั้นบน", "#d6409f"] };
+// riser / tread / waist of a stair, never 0 (user 2026-11-04: a cleared field became 0 → run ÷ 0 = endless step lines, the page crashed)
+export const stairRT = (st) => ({ R: st.riser > 0.05 ? st.riser : 0.17, T: st.tread > 0.1 ? st.tread : 0.25, t: st.t > 0.05 ? st.t : 0.12 });
 export const STAIR_KINDS = { long: "ท้องเรียบ พาดตามยาว", side: "พาดข้าง (คานแม่บันได/ผนัง)", cant: "บันไดยื่น (ยื่นจากด้านข้าง)", landing: "มีชานพัก (รูป U / L)" };
 // stair load on plan (kg/m²): inclined waist t/cosθ + half the step + finish + live
 export function stairLoads(st) {
-  const th = Math.atan((st.riser ?? 0.17) / (st.tread ?? 0.25)), t = st.t ?? 0.12;
-  return { th, flight: { DL: CONC * (t / Math.cos(th) + (st.riser ?? 0.17) / 2), SDL: st.finish ?? 100, LL: st.live ?? 300 }, landing: { DL: CONC * t, SDL: st.finish ?? 100, LL: st.live ?? 300 } };
+  const { R, T, t } = stairRT(st), th = Math.atan(R / T);
+  return { th, flight: { DL: CONC * (t / Math.cos(th) + R / 2), SDL: st.finish ?? 100, LL: st.live ?? 300 }, landing: { DL: CONC * t, SDL: st.finish ?? 100, LL: st.live ?? 300 } };
 }
 export const SLAB_KINDS = { S: "S พื้นหล่อในที่", PS: "PS พื้นสำเร็จ", GS: "GS พื้นวางบนดิน" };
 export const DEFAULT_WALL_TYPES = [
