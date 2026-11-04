@@ -31,7 +31,7 @@ const TOOLS = {
 };
 const BOXABLE = { assign: ["beam", "column", "panel"], frame: ["column", "beam"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
 // polygon corners: vertices where the outline turns (a column / beam end on an edge adds a straight-through vertex)
-export const corners = (P) => P.filter((q, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length]; return Math.abs((q[0] - a[0]) * (b[1] - q[1]) - (q[1] - a[1]) * (b[0] - q[0])) > 1e-6; });
+export const corners = (P) => P.filter((q, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length], u = [q[0] - a[0], q[1] - a[1]], v = [b[0] - q[0], b[1] - q[1]], L = Math.hypot(...u) * Math.hypot(...v); return L > 0 && Math.abs(u[0] * v[1] - u[1] * v[0]) / L > 0.05; }); // turns of more than ~3°
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
@@ -319,7 +319,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
                     <line x1={x0} y1={y0} x2={x1} y2={y1} stroke={col} strokeWidth={1.4 * k} />
                     {[-L, L].flatMap((t) => [0, 1, 2].map((j) => tick(t, t < 0 ? j : -j)))}
                     <circle cx={cx} cy={cy} r={r} fill={dark ? "#0f1222" : "#fff"} stroke={col} strokeWidth={1.2 * k} />
-                    <text x={cx} y={cy} dy="0.35em" textAnchor="middle" fontSize={12 * k} fontWeight={600} fill={col}>PS</text></g>; })()}
+                    <text x={cx} y={cy} dy="0.35em" textAnchor="middle" fontSize={12 * k} fontWeight={700} fill={col} fontFamily="Arial, Helvetica, sans-serif" letterSpacing={-0.3 * k}>PS</text></g>; })()}
                 {txt([c[0], c[1] + 20 * k], `P${i + 1} ${p.open ? "ช่องเปิด" : p.st === "GS" ? "GS บนดิน" : `${p.st} ${fmt(p.t * 100, 0)} ซม.${p.st === "PS" ? ` วาง${p.dir === "x" ? "แนว X" : "แนว Y"}` : p.kind === "twoway" ? " 2 ทาง" : p.kind === "oneway" ? " 1 ทาง" : ""}`}`, muted, 11, "middle", 600)}
                 {labels && step === "slab" && !p.open && p.st !== "GS" && loads && txt([c[0], c[1] + 4 * k], `${loads} กก./ม.²`, muted, 10)}
               </g>
