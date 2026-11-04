@@ -34,7 +34,7 @@ export default function Column3D({ c, r, dark = false, className = "" }) {
     const k = Math.max(6 * td, 0.05) * 0.7;
     const s = (r?.sTie ?? 20) / 100;
     const ties = [];
-    for (let y = -H / 2 + 0.05; y <= H / 2 - 0.02; y += s) {
+    for (let y = -H / 2 + 0.05; y <= H / 2 - 0.02 && ties.length < 200; y += s > 0.03 ? s : 0.15) {
       ties.push({ d: td, kind: "stirrup", points: [
         [-hw + k, y, hd - k], [-hw, y, hd], [hw, y, hd], [hw, y, -hd], [-hw, y, -hd], [-hw, y + td, hd], [-hw + k, y + td, hd - k]] });
     }

@@ -99,7 +99,7 @@ export function FootingDetail({ f, mark = "", className = "" }) {
   const planH = By, secH = Df + fs * 8 + (pile ? 60 : 12), Hh = M + planH + gap + secH + M;
   const px0 = M, py0 = M, sy0 = M + planH + gap + fs * 4; // section: ground line at sy0, footing bottom at sy0 + Df
   const yb = sy0 + Df, yt = yb - T;
-  const across = (n0, n1, s) => { const out = []; for (let v = n0; v <= n1 + 1e-6; v += s) out.push(v); return out; };
+  const across = (n0, n1, s) => { const out = [], st = s > 3 ? s : 15; /* cm */ for (let v = n0; v <= n1 + 1e-6 && out.length < 200; v += st) out.push(v); return out; }; // never loop on a zero / missing spacing
   const xs = across(px0 + c, px0 + Bx - c, sS), ys = across(py0 + c, py0 + By - c, sL);
   const longT = r.longText ?? `${inp.longBar} @${fmt(inp.sLong, 3)}`, shortT = r.shortText ?? `${inp.shortBar} @${fmt(inp.sShort, 3)}`;
   return (

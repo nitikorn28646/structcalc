@@ -59,7 +59,8 @@ function designSpread(tt, P, pier, mat, fo, Mx, My) {
     const Df = Math.max(tt.Df ?? 1.2, t);
     const bar = tt.bar ?? "DB 12", barS = tt.barS ?? bar;
     // bar count ("6-DB 12"): the engine counts floor(B/s + 1) bars over the full width
-    const tight = (x) => (sk < 1 ? Math.min(x, sk) : x); // sk 1 = the type's own spacing
+    const okS = (x) => (x > 0.03 ? x : 0.15); // a spacing typed as 0 / left empty (user 2026-11-04: page crashed) → 0.15
+    const tight = (x) => (sk < 1 ? Math.min(okS(x), sk) : okS(x)); // sk 1 = the type's own spacing
     const sL = tt.nb > 1 ? (By / (tt.nb - 1)) * (1 - 1e-9) : tight(tt.s ?? 0.15), sS = tt.nbS > 1 ? (Bx / (tt.nbS - 1)) * (1 - 1e-9) : tight(tt.sS ?? tt.s ?? 0.15);
     const inp = { fcPrime: mat.fcFoot ?? mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: tt.fy ?? fo.fy, cover: mat.coverFoot ?? fo.cover, t, Bx, By, Df, P, Mx, My, qa, gamma,
       pier: "rect", bx: pier.Bx / 100, by: pier.By / 100, D: 0.3, longBar: bar, shortBar: barS, sLong: sL, sShort: sS, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4 };
@@ -98,7 +99,7 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
     }
     const { n, pile, s: bs, w: capWidth, bar } = tt, b = PILES[pile]?.b ?? Number(String(pile).split("-")[1]) / 100, s = Math.max(0.6, (tt.k ?? fo.spacing) * b);
     const inp = { fcPrime: mat.fcFoot ?? mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: mat.coverFoot ?? fo.cover, t: tt.t ?? fo.t, Df: Math.max(tt.Df ?? fo.Df, tt.t ?? fo.t), P, Mx, My, gamma: 1800, pier: "rect",
-      bx: pier.Bx / 100, by: pier.By / 100, longBar: bar, shortBar: tt.barS ?? fo.bar, sLong: bs, sShort: tt.sS ?? bs, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4, n, pile,
+      bx: pier.Bx / 100, by: pier.By / 100, longBar: bar, shortBar: tt.barS ?? fo.bar, sLong: bs > 0.03 ? bs : 0.15, sShort: tt.sS > 0.03 ? tt.sS : bs > 0.03 ? bs : 0.15, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4, n, pile,
       pileL: tt.L ?? fo.pileL, fcPile: fo.fcPile, Ptest: safe(pile), sx: s, sy: s, capWidth };
     try {
       // bars given as a count (schedule "5-DB 12"): spacing from the cap width — the engine counts floor((B − 2c)/s + 1) on 1–2 pile caps, floor(B/s + 1) otherwise

@@ -9,6 +9,9 @@ import { faceBars } from "../engine/floor.js";
 import { BARS, SLAB_BARS } from "../engine/tables.js";
 import { PILES } from "../engine/footing.js";
 
+// spacing used to place bars: a missing / zero / tiny spacing (a type given by bar count) must not loop forever (user 2026-11-04:
+// "Invalid array length" on the footing step) — fall back, and never more than 200 bars
+const safeS = (s, span, n) => (s > 0.03 ? s : n > 1 ? Math.max(span / (n - 1), 0.03) : 0.15);
 const dOf = (bar, def = 1.2) => (SLAB_BARS[bar]?.d ?? BARS[bar]?.d ?? def) / 100;
 function Scene({ children, span, dark, className }) {
   return (
@@ -37,7 +40,7 @@ export function ColumnCageParts({ lv, cover = 3, H = 1.6, dark = false }) {
     const ix = Bx / 2 - c - td - db / 2, iy = By / 2 - c - td - db / 2, pts = [];
     for (let i = 0; i < nx; i++) { const x = nx > 1 ? -ix + (2 * ix * i) / (nx - 1) : 0; pts.push([x, -iy], [x, iy]); }
     for (let j = 1; j < ny - 1; j++) { const z = -iy + (2 * iy * j) / (ny - 1); pts.push([-ix, z], [ix, z]); }
-    const ties = []; for (let y = 0.05; y < H - 0.02; y += lv.s ?? 0.15) ties.push(tie(y, Bx - 2 * c - td, By - 2 * c - td, td));
+    const ties = []; for (let y = 0.05, st = safeS(lv.s, H, 0); y < H - 0.02 && ties.length < 200; y += st) ties.push(tie(y, Bx - 2 * c - td, By - 2 * c - td, td));
     return { Bx, By, db, pts, ties };
   }, [lv, cover, H]);
   return (<group>
@@ -52,9 +55,9 @@ export const ColumnCage3D = ({ lv, cover, H = 1.6, dark = false, className = "" 
 export function FootingCageParts({ f, dark = false }) {
   const parts = useMemo(() => {
     const r = f.r, inp = f.inp, Bx = r.Bx, By = r.By, T = inp.t ?? 0.4, c = (inp.cover ?? 7.5) / 100, dl = dOf(inp.longBar), ds = dOf(inp.shortBar ?? inp.longBar);
-    const sL = inp.sLong ?? 0.15, sS = inp.sShort ?? sL, hk = Math.min(T - 2 * c, 0.15), bars = [];
-    for (let z = -By / 2 + c; z <= By / 2 - c + 1e-6; z += sL) bars.push({ d: dl, kind: "main", points: [[-Bx / 2 + c, c + hk, z], [-Bx / 2 + c, c, z], [Bx / 2 - c, c, z], [Bx / 2 - c, c + hk, z]] });
-    for (let x = -Bx / 2 + c; x <= Bx / 2 - c + 1e-6; x += sS) bars.push({ d: ds, kind: "dist", points: [[x, c + dl + hk, -By / 2 + c], [x, c + dl, -By / 2 + c], [x, c + dl, By / 2 - c], [x, c + dl + hk, By / 2 - c]] });
+    const sL = safeS(inp.sLong, By - 2 * c, r.nLong), sS = safeS(inp.sShort ?? sL, Bx - 2 * c, r.nShort), hk = Math.min(T - 2 * c, 0.15), bars = [];
+    for (let z = -By / 2 + c; z <= By / 2 - c + 1e-6 && bars.length < 200; z += sL) bars.push({ d: dl, kind: "main", points: [[-Bx / 2 + c, c + hk, z], [-Bx / 2 + c, c, z], [Bx / 2 - c, c, z], [Bx / 2 - c, c + hk, z]] });
+    for (let x = -Bx / 2 + c; x <= Bx / 2 - c + 1e-6 && bars.length < 400; x += sS) bars.push({ d: ds, kind: "dist", points: [[x, c + dl + hk, -By / 2 + c], [x, c + dl, -By / 2 + c], [x, c + dl, By / 2 - c], [x, c + dl + hk, By / 2 - c]] });
     const bx = inp.bx ?? 0.2, by = inp.by ?? 0.2, dd = dOf(inp.dowelBar), n = Math.max(4, inp.dowelN ?? 4), ex = bx / 2 - 0.05, ey = by / 2 - 0.05, Hs = T + 0.6;
     const corners = [[-ex, -ey], [ex, -ey], [ex, ey], [-ex, ey]], dow = corners.concat(n > 4 ? [[0, -ey], [0, ey], [-ex, 0], [ex, 0]].slice(0, n - 4) : []);
     dow.forEach(([x, z]) => { const sx = Math.sign(x) || 1; bars.push({ d: dd, kind: "top", points: [[x + sx * 0.2, c + dl * 2.5, z], [x, c + dl * 2.5, z], [x, Hs, z]] }); });
