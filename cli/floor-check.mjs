@@ -54,5 +54,10 @@ const ovB = [{ a: [0, 0], b: [4, 0], type: 2 }, { a: [3, 0], b: [6, 0], type: nu
 const ov = findOverlaps(ovB), mg = mergeOverlaps(ovB);
 check("overlaps found (touching end to end is not an overlap)", ov.length === 2 && ov.every((o) => o.i === 0) && Math.abs(ov[0].len - 1) < 1e-9, JSON.stringify(ov.map((o) => [o.i, o.j, o.len])));
 check("overlaps merged", mg.length === 3 && mg[0].a[0] === 0 && mg[0].b[0] === 6 && mg[0].type === 2 && findOverlaps(mg).length === 0, JSON.stringify(mg.map((b) => [b.a, b.b])));
+// compatibility torsion (ACI 318 22.7.3): the 3D part above the equilibrium torsion is capped at Tlim = 0.53·√f'c·(bh)²/(2(b+h))
+{ const { checkSpan } = await import("../web/engine/floor.js"); const t = { name: "T", b: 0.2, h: 0.5, top: "2-DB16", topX: "", bot: "2-DB16", botX: "", st: "RB 9", sSup: 0.1, sMid: 0.1 };
+  const sp = { kind: "both_ends", len: 4, Mpos: 1000, Mneg: 1500, V: 2000, Mt: 1500, MtEq: 200, vDone: true }, c = checkSpan(t, sp, mat), lim = (0.53 * Math.sqrt(240) * (20 * 50) ** 2 / (2 * 70)) / 100;
+  const c2 = checkSpan(t, sp, { ...mat, compatTorsion: false }), c3 = checkSpan(t, { ...sp, MtEq: 1500 }, mat);
+  check("compatibility torsion capped, equilibrium kept", Math.abs(c.MtUse - (200 + lim)) < 1e-6 && c2.MtUse === 1500 && c3.MtUse === 1500, `${Math.round(c.MtUse)} (lim ${Math.round(lim)})`); }
 function dist2(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
 process.exit(bad ? 1 : 0);

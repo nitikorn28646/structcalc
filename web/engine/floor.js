@@ -314,7 +314,13 @@ export function vAtD(sp, h, mat) {
 export function checkSpan(t, sp, mat) {
   if (sp.Vx && !sp.vDone) sp = { ...sp, Vface: sp.V, V: vAtD(sp, t.h, mat) }; // the frame envelope passes vDone (already at d)
   const top = parseBars(t.top), bot = parseBars(t.bot), topX = parseBars(t.topX), botX = parseBars(t.botX);
-  const base = { ...mat, fcPrime: mat.fcBeam ?? mat.fcPrime, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: sp.Mt ?? 0, stirrup: { bar: t.st, sets: t.stSets ?? 1 } }; // stSets 2 = double stirrups (2 sets, user: RB9 is the largest)
+  // compatibility torsion (user 2026-11-04, ACI 318 22.7.3): the part of the torsion that comes only from members framing in (3D frame,
+  // secondary beams / slabs) is not needed for equilibrium — it may be reduced to the cracking torque. Equilibrium torsion (cantilever
+  // slabs / loads hung on the beam = the continuous model's Mt, sp.MtEq) is kept in full. Cap (WSD, from φ·4√f'c·Acp²/pcp at an average
+  // load factor 1.5): Tlim = 0.53·√f'c·(b·h)²/(2(b + h)) kg-cm.
+  const fcB = mat.fcBeam ?? mat.fcPrime, Tlim = (0.53 * Math.sqrt(fcB) * (t.b * 100 * t.h * 100) ** 2 / (2 * (t.b * 100 + t.h * 100))) / 100;
+  const MtAll = sp.Mt ?? 0, MtEq = Math.min(MtAll, sp.MtEq ?? MtAll), MtUse = mat.compatTorsion === false || sp.MtEq === undefined ? MtAll : MtEq + Math.min(MtAll - MtEq, Tlim);
+  const base = { ...mat, fcPrime: mat.fcBeam ?? mat.fcPrime, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: MtUse, stirrup: { bar: t.st, sets: t.stSets ?? 1 } }; // stSets 2 = double stirrups (2 sets, user: RB9 is the largest)
   const out = {};
   try {
     const lay = (m, x) => barLayers(t.b, mat, t.st, m, x);
@@ -328,7 +334,7 @@ export function checkSpan(t, sp, mat) {
   const util = (r) => Math.max(typeof r.reqBot === "number" ? r.reqBot / r.provBot : 9, typeof r.reqTop === "number" && r.reqTop > 0 ? r.reqTop / (r.provTop || 1e-9) : 0, r.Vp > 0 ? r.Vp / r.Vc2 : 0);
   // As,min applies to the sagging face; a support with no hogging moment only needs its shear checked
   const supOk = sp.Mneg < 1 ? out.sup.VpOk && out.sup.stirrup !== "CHECK_SPACING" && out.sup.AminOk !== false : ok1(out.sup);
-  return { ...out, deep: deep && !(out.mid ?? out.sup).deepOk, ok: (!out.mid || ok1(out.mid)) && supOk, util: Math.max(out.mid ? util(out.mid) : 0, sp.Mneg < 1 ? 0 : util(out.sup)) };
+  return { ...out, MtUse, MtAll, Tlim, deep: deep && !(out.mid ?? out.sup).deepOk, ok: (!out.mid || ok1(out.mid)) && supOk, util: Math.max(out.mid ? util(out.mid) : 0, sp.Mneg < 1 ? 0 : util(out.sup)) };
 }
 
 // why a span check fails, in plain Thai (inspector, tables): one line per failed criterion, mid-span first then support

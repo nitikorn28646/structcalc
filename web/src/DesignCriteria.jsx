@@ -31,6 +31,8 @@ export function DesignCriteria({ frame, set, setMat, defaults, onNotice }) {
         {fc("fcBeam", "f'c คาน")}{fc("fcCol", "f'c เสา")}{fc("fcSlab", "f'c พื้น / บันได")}{fc("fcFoot", "f'c ฐานราก")}
         <label className="col-span-2 flex items-center gap-2 text-[13px] text-gray-700"><input type="checkbox" checked={m.capFc !== false} onChange={(e) => setMat("capFc", e.target.checked)} />
           จำกัด fc ≤ 65 ksc (กฎกระทรวงกำหนดการออกแบบโครงสร้างอาคาร)</label>
+        <label className="col-span-2 flex items-center gap-2 text-[13px] text-gray-700"><input type="checkbox" checked={m.compatTorsion !== false} onChange={(e) => setMat("compatTorsion", e.target.checked)} />
+          แรงบิดจากความต่อเนื่อง (คานซอย/พื้นมาต่อ) ลดได้ถึงแรงบิดที่ทำให้แตกร้าว (ACI 318) — แรงบิดจากพื้นยื่นคิดเต็ม</label>
         <Sub>เหล็กเสริม</Sub>
         {grade("fy", "เหล็กยืน / เหล็กหลัก")}{grade("fys", "เหล็กปลอก")}
         {num("Es", "Es", "ksc", "10000", 2040000)}{num("barClear", "ช่องว่างเหล็กคานขั้นต่ำ", "cm", "0.5", 3.5)}
