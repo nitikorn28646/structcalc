@@ -376,6 +376,11 @@ structure steps (toolbar row with sub-tabs / views / KPI chips, centre plan, set
 views 2D / 3D roof / 3D whole building (Frame3D roofOn + RoofFrameMembers) / split); click beams / columns in 3D selects them
 (Frame3D onPick / selected), click a wall plate in the roof 3D highlights it; screen: left steps fold to icons, focus mode, floor summary card.
 
+Figures 2026-11-04: src/Details.jsx (BeamDetail / ColumnDetail / FootingDetail — drafting SVG with hatching, hooked ties, leaders),
+src/Cage3D.jsx (ColumnCageParts / FootingCageParts + canvas wrappers), BeamCage3D exports BeamCageParts; report 3D = src/Snapshot3D.jsx
+(<Still3D id node/> queued to one off-screen <SnapshotStation/> canvas in App → PNG pictures; never put many live canvases in the report:
+the browser WebGL context limit froze the page). Wall-plate plan: NG marked, click → PlatePick card (type / section / single-double).
+
 OPEN ITEMS for the next session: (1) web copy published 2026-11-03 (Artifact version 3, without project files — open a .json with เปิด); (2) E2E expected re-saved; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
 torsion — likely the type list has no 20×40 with RB9 @0.10; check per-span reasons on the user's project); (4) Ole: 28 beams fail only on
 stirrup spacing d/2 (shallow GB 20×20, tiny shear) — ask whether to apply the ACI exemption (h ≤ 25 cm or v ≤ vc/2); columns RB6 @0.20 > 16db.
