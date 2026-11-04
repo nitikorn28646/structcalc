@@ -404,3 +404,11 @@ PyNite diffs now run in the cloud too (pip install PyNiteFEA; rea-lab not needed
 `python3 difftest/tools/diffrun.py difftest/frame3d.scenario.json difftest/contbeam.scenario.json` (script = token compare with the scenario
 tolerances, paths D:\REA\structcalc → repo). 2026-11-04: frame3d 9/9 (+ stair-landing-beam), contBeam 2/2. The Excel-tested formula files
 (beam/slab/column/footing/roofDesign/tables) have not changed since they came into this repo → no Excel re-run needed for today's work.
+REVIEW RESPONSE 2026-11-04 (user's third-party review docx of the Yasothon book): src/StatusSummary.jsx projectStatus(frame, res, dz) =
+one PASS / FAIL / NOT CHECKED / INCOMPLETE status per member of roof, beams, columns, slabs, stairs, footings → chapter 1 "สรุปผลการตรวจสอบ"
+of the book (per-category counts, failing list with page refs .rp-pref target-counter, 15 most utilised, not-checked items, scope not
+covered: cold-formed buckling, connections/base plates/anchors, settlement/pile soil capacity, cracking); FrameReport `overall` prop = the
+same text in the criteria summary (the book said "ผ่านทุกข้อ" while A5 failed). Footing intro from the systems used (footIntro). Column
+force table P / N3D / Mx My 3D / e min / design basis / util. Spread footings: corner soil pressure with both moments (frame.js designSpread,
+outside the frozen spreadFooting: q + 6Mx/(Bx·By²) + 6My/(By·Bx²) ≤ qa → r.qCornerOk, in ok/util) + breakdown table (P, Wf, Ws, A, q, terms).
+Standalone print file: empty Paged.js running strings closed (headers showed "--pagedjs-string…").

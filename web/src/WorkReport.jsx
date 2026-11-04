@@ -5,6 +5,8 @@ import { Cover, Toc } from "./ReportKit.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { RoofReport } from "./RoofReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
+import { runRoof, useSkeleton } from "./RoofPage.jsx";
+import { StatusChapter, projectStatus } from "./StatusSummary.jsx";
 
 const STANDARDS = [
   "พระราชบัญญัติควบคุมอาคาร พ.ศ. 2522 และที่แก้ไขเพิ่มเติม",
@@ -15,7 +17,10 @@ const STANDARDS = [
 
 export function WorkReport({ frame, roof, project }) {
   const res = analyzeFrame(frame), hasRoof = (roof?.pts?.length ?? 0) >= 3, lateral = !!res.lateral;
+  // one status for the whole book (roof + structure), the same numbers in the summary chapter and the criteria summary line
+  const sk = useSkeleton(), rr = hasRoof && sk ? runRoof(roof, sk) : null, st = projectStatus(frame, res, rr?.dz ?? null);
   const chapters = [
+    ["c-status", "สรุปผลการตรวจสอบ"],
     ["c-criteria", "ข้อมูลการออกแบบและน้ำหนักบรรทุก"],
     ...(lateral ? [["c-lateral", "แรงด้านข้างและชุดผสมแรง"]] : []),
     ["c-plans", "แบบแปลนโครงสร้าง"],
@@ -34,7 +39,8 @@ export function WorkReport({ frame, roof, project }) {
       <Cover project={project} title="รายการคำนวณออกแบบโครงสร้าง" subtitle="อาคารคอนกรีตเสริมเหล็ก และโครงหลังคาเหล็ก"
         items={[["ระดับอาคาร", floorsText], ["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`]]} standards={STANDARDS} />
       <Toc items={chapters.map(([id, th]) => ({ id, n: `${num[id]}.`, th }))} />
-      <FrameReport frame={frame} project={project} part="front" nOf={nOf} res={res} />
+      <StatusChapter st={st} n={num["c-status"]} />
+      <FrameReport frame={frame} project={project} part="front" nOf={nOf} res={res} overall={st} />
       {hasRoof && <RoofReport roof={roof} project={project} bare nb={num["c-roof"]} />}
       <FrameReport frame={frame} project={project} part="back" nOf={nOf} res={res} />
     </div>

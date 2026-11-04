@@ -31,6 +31,7 @@ const PAGE_CSS = `
 .rp thead { display: table-header-group; }
 .rp tr, .rp figure { break-inside: avoid; }
 .rp-toc a::after { content: target-counter(attr(href url), page); float: right; }
+.rp-pref::after { content: target-counter(attr(href url), page); }
 .rp-toc a { display: block; border-bottom: 0.5pt dotted #98a2b3; }
 `;
 
@@ -62,6 +63,12 @@ export async function printReport({ dialog = true, standalone = false } = {}) {
   if (standalone) {
     const css = [...document.styleSheets].map((sh) => { try { const abs = (t) => t.replace(/url\((["']?)(?!data:|blob:|https?:)([^)"']+)\1\)/g, (m, q, u) => `url("${new URL(u, sh.href || location.href).href}")`);
       return `<style>${abs([...sh.cssRules].map((r) => r.cssText).join("\n"))}</style>`; } catch { return sh.href ? `<link rel="stylesheet" href="${sh.href}">` : ""; } }).join("\n");
+    // Paged.js keeps an empty running string (header / footer text) as a lone quote — fine live, but written out as a style
+    // attribute it swallows the next declarations (the saved book showed "--pagedjs-string…" in its headers): close such strings
+    for (const pg of root.querySelectorAll(".pagedjs_page")) {
+      const decl = [...pg.style].map((k) => { let v = pg.style.getPropertyValue(k).trim(); if (k.startsWith("--") && ((v.match(/"/g) ?? []).length % 2)) v += '"'; return `${k}: ${v}`; });
+      pg.setAttribute("style", decl.join("; "));
+    }
     const html = `<!doctype html><html lang="th" class="printing"><head><meta charset="utf-8"><title>${document.title.replace(/</g, "")}</title>${css}</head><body>${root.outerHTML}`
       + `<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},600)})<\/script></body></html>`;
     done();

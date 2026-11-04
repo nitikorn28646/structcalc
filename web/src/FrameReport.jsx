@@ -47,7 +47,18 @@ function BeamSection({ title, r, M, V, tensionTop, atD = false }) {
 
 // part: "all" (the frame report alone) | "front" (summary, criteria, lateral, plans) | "back" (floor loads + slabs, beams, columns,
 // footings, schedules, appendix) — the whole-project book (WorkReport) puts the roof between them; nOf(id) gives its chapter numbers
-export function FrameReport({ frame, project, part = "all", nOf = null, res: resIn = null }) {
+
+// footing chapter intro from the systems really used (review 2026-11-04: the text named driven piles on a job of spread footings only)
+function footIntro(res, frame) {
+  const sp = res.footings.filter((f) => f.kind === "spread"), pl = res.footings.filter((f) => f.kind !== "spread" && f.n > 0), out = ["แรงที่ฐานเสา (รวมน้ำหนักเสาทุกชั้น)"];
+  if (sp.length) out.push(`ฐานแผ่ ${sp.length} ฐาน บนดิน qa = ${fmt((frame.soil?.qa ?? sp[0].inp?.qa ?? 10000) / 1000, 1)} ตัน/ม.² (γ ดิน ${fmt(frame.soil?.gamma ?? 1800, 0)} กก./ม.³): แรงดันดินคิดรวมน้ำหนักฐานและดินถมเหนือฐาน ตรวจทั้งแต่ละแกนและที่มุมฐานเมื่อมีโมเมนต์สองแกน ตรวจแรงเฉือนทางเดียว แรงเฉือนทะลุ โมเมนต์ และระยะฝังเหล็ก`);
+  if (pl.length) { const used = [...new Set(pl.map((f) => f.pile))];
+    out.push(`ฐานรากเสาเข็ม ${pl.length} ฐาน (${used.join(", ")}) ยาว ${frame.footing?.pileL ?? 6} ม. รับน้ำหนักปลอดภัย ${used.map((k) => `${k} ${fmt((frame.pileLoads?.[k] ?? PILE_SAFE[k] ?? 0) / 1000, 0)} ตัน`).join(" · ")}/ต้น (ค่าที่กำหนด — กำลังจากข้อมูลดินไม่ได้คำนวณในเล่มนี้) เลือกจำนวนเข็มและขนาดฐานที่แรงต่อเข็มไม่เกินค่าปลอดภัย`); }
+  out.push("แรงลงเสาใช้ค่ามากกว่าระหว่างคานต่อเนื่องกับคานช่วงเดี่ยว (ไม่ให้เสาที่ถูกยกรับแรงน้อยเกินจริง)");
+  return out.join(" · ");
+}
+
+export function FrameReport({ frame, project, part = "all", nOf = null, res: resIn = null, overall = null }) {
   const res = resIn ?? analyzeFrame(frame), { floors, beamTypes: types, colTypes, mat } = frame;
   const show = (x) => part === "all" || part === x;
   const spans = res.floors.flatMap((a, k) => a.spans.map((s) => ({ ...s, floor: k })));
@@ -59,7 +70,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           ["คาน", `${spans.length} ช่วง · type ${[...new Set(spans.map((s) => s.typeIdx))].sort((a, b) => a - b).map((i) => types[i]?.name).join(", ")}`],
           ["เสา", `${res.stacks.length} ต้น · type ${[...new Set(res.stacks.map((s) => colTypes[s.typeIdx]?.name))].join(", ")}`],
           ["แรงอัดเสาที่ฐานรวม", `${fmt(res.columns.filter((c) => c.floor === 0).reduce((s, c) => s + c.Pbot, 0) / 1000, 2)} ตัน`],
-          ["ผลการตรวจสอบรวม", res.ok ? "ผ่านทุกข้อ" : `คานไม่ผ่าน ${spans.filter((s) => !s.ok).length} ช่วง · เสาไม่ผ่าน ${res.columns.filter((c) => !c.ok).length} ต้น/ชั้น`, res.ok],
+          ["ผลการตรวจสอบรวม", overall ? `${overall.text} (ดูบท สรุปผลการตรวจสอบ)` : res.ok ? "ผ่านทุกข้อ (โครงสร้าง คสล.)" : `คานไม่ผ่าน ${spans.filter((s) => !s.ok).length} ช่วง · เสาไม่ผ่าน ${res.columns.filter((c) => !c.ok).length} ต้น/ชั้น`, overall ? overall.status === "PASS" : res.ok],
         ];
   // footing marks F1, F2 … : one per distinct footing (its type name when footing types are used)
   // footing marks F1… (largest = F1) shared with the footing plan (FootingPlan.jsx footingMarks)
@@ -194,6 +205,15 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           <Figure caption="แรงอัดและโมเมนต์ของเสาทุกต้น แยกตามชั้น"><ColumnChart stacks={res.stacks} floors={floors} /></Figure>
           <Table head={["เสา (X, Y)", "Type", ...floors.map((f) => `ใต้ ${f.name} P (ตัน)`)]}
             rows={res.stacks.map((st) => [st.key, colTypes[st.typeIdx]?.name, ...floors.map((f, k) => { const c = st.list.find((x) => x.floor === k); return c ? `${fmt(c.Pbot / 1000, 2)} · ${c.lv.Bx}×${c.lv.By} · ${c.ok ? "ผ่าน" : "ไม่ผ่าน"}` : "—"; })])} />
+          {/* forces of every column (review 2026-11-04: P, Mx, My of the 3D model per column) */}
+          <Sub>แรงในเสาทุกต้น — P, Mx, My</Sub>
+          <Table head={["เสา (X, Y)", "ชั้น", "Type", "P สะสม (ตัน)", "N โครง 3 มิติ (ตัน)", "Mx / My โครง 3 มิติ (กก.-ม.)", "e ขั้นต่ำ (ซม.)", "ใช้ออกแบบ", "อัตราใช้", "ผล"]}
+            rows={res.columns.map((c) => { const f3 = c.f3 ?? {}, fr = frame.colMethod === "frame";
+              return [c.stack, floors[c.floor]?.name, `${colTypes[c.typeIdx]?.name ?? "-"} ${c.lv.Bx}×${c.lv.By}`, fmt(c.Pbot / 1000, 2), f3.N != null ? fmt(f3.N / 1000, 2) : "-",
+                f3.Mx != null ? `${fmt(f3.Mx, 0)} / ${fmt(f3.My, 0)}` : "-", fmt(c.check?.e ?? 0, 1),
+                fr ? `P ${fmt((c.Pd ?? c.Pbot) / 1000, 2)} ตัน + Mx/My โครง 3 มิติ (≥ e ขั้นต่ำ)` : `P ${fmt(c.Pbot / 1000, 2)} ตัน + e ขั้นต่ำ แกนเดียว${c.check?.combo ? ` · ${c.check.combo}` : ""}`,
+                c.check?.util != null && c.check.util < 8.99 ? `${fmt(c.check.util * 100, 0)} %` : "-", pass(c.ok)]; })} />
+          <Note>วิธีออกแบบเสา: {frame.colMethod === "frame" ? "แรงอัด P = max(แรงสะสม, N จากโครง 3 มิติ) ร่วมกับโมเมนต์จากโครง 3 มิติทั้งสองแกน ไม่น้อยกว่าโมเมนต์จากระยะเยื้องศูนย์ขั้นต่ำ" : "แรงอัดสะสมร่วมกับระยะเยื้องศูนย์ขั้นต่ำ max(2.5 ซม., 0.1·ด้านแคบ) (แบบเดียวกับตารางอ้างอิง) — Mx/My จากโครง 3 มิติแสดงเพื่อตรวจสอบเท่านั้น เลือก “ใช้แรงจากโครง 3 มิติ” ที่ขั้น 6 เพื่อออกแบบด้วยโมเมนต์สองแกน"} · ความชะลูดตรวจด้วย klu/r (k = 1) ไม่เกิน 100</Note>
           {colTypes.map((t, i) => t.levels.map((lv, j) => {
             const list = res.columns.filter((c) => c.typeIdx === i && c.lv === lv);
             if (!list.length) return null;
@@ -217,10 +237,15 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
         </Sec>}
 
         {show("back") && <Sec id="c-footings" n={N("c-footings")} th="ฐานราก" en="Footings"
-          intro={`แรงที่ฐานเสา (รวมน้ำหนักเสาทุกชั้น) ลงฐานรากเสาเข็มตอก ยาว ${(frame.footing?.pileL ?? 6)} ม. รับน้ำหนักปลอดภัย ${["I-18", "I-22", "I-26"].map((k) => `${k} ${fmt((frame.pileLoads?.[k] ?? PILE_SAFE[k]) / 1000, 0)} ตัน`).join(" · ")}/ต้น ตรวจด้วยโมดูลฐานราก (เสาเข็ม ฐานหนา ${fmt(frame.footing?.t ?? 0.4, 2)} ม.) เลือกจำนวนและขนาดเข็มที่น้อยที่สุดที่ผ่านทุกข้อ แรงลงเสาใช้ค่ามากกว่าระหว่างคานต่อเนื่องกับคานช่วงเดี่ยว (ไม่ให้เสาที่ถูกยกรับแรงน้อยเกินจริง)`}>
+          intro={footIntro(res, frame)}>
           <Table head={["เสา (X, Y)", "ชุดแรง", "P ฐานเสา (ตัน)", "M ฐานเสา x / y (กก.-ม.)", "เข็ม", "ฐานราก Bx × By (ม.)", "แรงต่อเข็ม / ปลอดภัย (ตัน) · ดิน q / qa", "เหล็กเสริม", "ผล"]}
             rows={res.footings.map((f) => [`${f.stack} (${fName(f)})`, f.combo ?? "D+L", fmt(f.P / 1000, 2), `${fmt(f.Mx ?? 0, 0)} / ${fmt(f.My ?? 0, 0)}`, f.kind === "spread" ? `ฐานแผ่ t ${fmt(f.inp.t, 2)}` : `${f.n} × ${f.pile}`, f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)}` : "-",
               !f.r ? "-" : f.kind === "spread" ? `ดิน ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`, f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error, pass(f.ok)])} />
+          {res.footings.some((f) => f.kind === "spread" && f.r?.gross != null) && (<><Sub>ฐานแผ่ — แรงดันดิน (แจกแจงน้ำหนัก)</Sub>
+            <Table head={["ฐาน", "P (ตัน)", "น้ำหนักฐาน Wf (ตัน)", "ดินถม Ws (ตัน)", "A (ม.²)", "q = ΣW/A", "6My/(By·Bx²)", "6Mx/(Bx·By²)", "q มุม (สองแกน)", "qa", "ผล"]}
+              rows={res.footings.filter((f) => f.kind === "spread" && f.r?.gross != null).map((f) => [`${f.stack} (${fName(f)})`, fmt(f.P / 1000, 2), fmt(f.r.Wf / 1000, 2), fmt(f.r.Ws / 1000, 2), fmt(f.r.A, 2),
+                fmt(f.r.gross / 1000, 2), fmt(f.r.mX / 1000, 2), fmt(f.r.mY / 1000, 2), fmt(f.r.qCorner / 1000, 2), fmt(f.inp.qa / 1000, 2), pass(f.r.qCornerOk && f.ok)])} />
+            <Note>แรงดันดิน (ตัน/ม.²): q = (P + Wf + Ws) / A, Wf = t·A·2,400 กก./ม.³, Ws = (Df − t)·γ·A · q แต่ละแกน = q + 6M/(B·L²) และที่มุมฐาน q + 6Mx/(Bx·By²) + 6My/(By·Bx²) ≤ qa · q ต่ำสุดต้องไม่ติดลบ (ไม่มีแรงดึงใต้ฐาน)</Note></>)}
           {res.footings.some((f) => f.r?.bore) && (<><Sub>เหล็กเสริมในเสาเข็มเจาะ</Sub>
             <p className="text-[12px]">ตรวจเข็มเจาะเป็นองค์อาคารรับแรงอัดสั้น (WSD): P<sub>a</sub> = 0.85·A<sub>g</sub>·(0.25·f′c + f<sub>s</sub>·ρ<sub>g</sub>), f<sub>s</sub> = 0.40·f<sub>y</sub> ≤ 2,100 กก./ซม.² · ρ<sub>g</sub> ≥ 0.5 % อย่างน้อย 6 เส้น · ระยะช่องว่างเหล็ก ≥ 10 ซม. (Ø ≤ 0.40 ม. ใช้ 5 ซม.) · ปลอก RB 9 ≤ 16d<sub>b</sub> / 48d<sub>t</sub> / 0.20 ม. · ฝังในฐานราก ≥ 40d<sub>b</sub> · กำลังรับน้ำหนักของเข็มจากดินใช้ค่าน้ำหนักปลอดภัยที่กำหนด (ไม่ได้คำนวณจากผลเจาะสำรวจดิน)</p>
             <Table head={["เสา (X, Y)", "เข็ม", "แรงต่อเข็ม P (ตัน)", "Pa ตัวเข็ม (ตัน)", "เหล็กเสริม", "ผล"]}

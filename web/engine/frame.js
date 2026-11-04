@@ -66,9 +66,14 @@ function designSpread(tt, P, pier, mat, fo, Mx, My) {
       pier: "rect", bx: pier.Bx / 100, by: pier.By / 100, D: 0.3, longBar: bar, shortBar: barS, sLong: sL, sShort: sS, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4 };
     try {
       // fo.utilMax: the engineer's limit on soil use (e.g. 0.9 = q ≤ 90 % of qa)
-      const r = spreadFooting(inp), util = Math.max(r.qmaxX, r.qmaxY) / qa;
+      const r = spreadFooting(inp);
+      // soil pressure with BOTH base moments at once (review 2026-11-04): the frozen sheet checks each axis on its own; the corner
+      // takes gross + 6Mx/(Bx·By²) + 6My/(By·Bx²). Kept outside spreadFooting (diff-tested); load parts kept for the report.
+      const A = Bx * By, Wf = t * A * 2400, Ws = Math.max(0, Df - t) * gamma * A, gross = (P + Wf + Ws) / A, mY = (6 * Math.abs(Mx)) / (Bx * By ** 2), mX = (6 * Math.abs(My)) / (By * Bx ** 2);
+      Object.assign(r, { Wf, Ws, A, gross, mX, mY, qCorner: gross + mX + mY, qCornerMin: gross - mX - mY, qCornerOk: gross + mX + mY <= qa + 1e-6 });
+      const util = Math.max(r.qmaxX, r.qmaxY, r.qCorner) / qa;
       r.limOk = util <= (fo.utilMax ?? 1) + 1e-9;
-      const ok = spreadOk(r) && r.limOk;
+      const ok = spreadOk(r) && r.qCornerOk && r.limOk;
       r.Bx = Bx; r.By = By; r.piles = [];
       if (tt.nb > 1) r.longText = `${r.nLong}-${bar} @ ${sL.toFixed(3)}`;
       if (tt.nbS > 1) r.shortText = `${r.nShort}-${barS} @ ${sS.toFixed(3)}`;
