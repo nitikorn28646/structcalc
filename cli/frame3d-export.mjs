@@ -80,6 +80,17 @@ save("two-storey-pdelta", twoStorey(true));
   const inp = analyzeFrame({ mat, beamTypes: DEFAULT_BEAM_TYPES, colTypes: DEFAULT_COLUMN_TYPES, floors: [fl("GB", 1, false), fl("ชั้น 2", 3, true)] }).frame3d.input;
   save("arc-beam", { nodes: inp.nodes, members: inp.members.map((m) => ({ i: m.i, j: m.j, kind: m.kind, b: m.b, h: m.h, loads: m.loads ?? [], torque: m.torque ?? [], release: m.release })), nodeLoads: inp.nodeLoads, E: inp.E, pDelta: false });
 }
+// 4c stair with a landing on a beam inside the storey (beam.lvl 1.5): the landing beam at its own level, columns split there
+{
+  const { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES } = await import(pathToFileURL(join(root, "web/engine/floor.js")));
+  const mat = { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 }, Bm = (a, b) => ({ a, b, type: null });
+  const fl = (name, h, t) => ({ name, h, t, finish: t ? 100 : 0, live: t ? 200 : 0, columns: [[0, 0], [3, 0], [0, 4], [3, 4]], panels: {},
+    beams: [Bm([0, 0], [3, 0]), Bm([0, 4], [3, 4]), Bm([0, 0], [0, 4]), Bm([3, 0], [3, 4])] });
+  const f2 = fl("ชั้น 2", 3, 0.12); f2.beams.push({ a: [0, 4], b: [3, 4], type: null, lvl: 1.5 });
+  f2.stairs = [{ a: [0, 0], b: [3, 4], up: "+y", kind: "landing", t: 0.15, landingL: 1.2 }];
+  const inp = analyzeFrame({ mat, beamTypes: DEFAULT_BEAM_TYPES, colTypes: DEFAULT_COLUMN_TYPES, floors: [fl("GB", 1.5, 0), f2] }).frame3d.input;
+  save("stair-landing-beam", { nodes: inp.nodes, members: inp.members.map((m) => ({ i: m.i, j: m.j, kind: m.kind, b: m.b, h: m.h, loads: m.loads ?? [], torque: m.torque ?? [], release: m.release })), nodeLoads: inp.nodeLoads, E: inp.E, pDelta: false });
+}
 // 5 continuous beams (engine/contBeam.js): hand-made lines and every beam line of the Yasothon house as floor.js solves it
 {
   const lines = [

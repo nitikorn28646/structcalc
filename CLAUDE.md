@@ -400,3 +400,7 @@ StairInputs "สร้างคานชานพัก" draws it at H/2 between
 (columnsOf merges the pieces). sp.topFull (hogging at mid-span / lifted end → top bars full length; report table + inspector).
 mat.stirrupExempt (step 0, off by default): ACI min-stirrup exemption h ≤ 25 cm or V ≤ Vc/2, no Vp, torsion < ¼ cracking.
 slabDesign autoStair (riser/tread from H + opening, thinnest passing waist) → StairInputs "จัดขนาดบันไดอัตโนมัติ". PyNite/Excel NOT re-run.
+PyNite diffs now run in the cloud too (pip install PyNiteFEA; rea-lab not needed): `node cli/frame3d-export.mjs` then
+`python3 difftest/tools/diffrun.py difftest/frame3d.scenario.json difftest/contbeam.scenario.json` (script = token compare with the scenario
+tolerances, paths D:\REA\structcalc → repo). 2026-11-04: frame3d 9/9 (+ stair-landing-beam), contBeam 2/2. The Excel-tested formula files
+(beam/slab/column/footing/roofDesign/tables) have not changed since they came into this repo → no Excel re-run needed for today's work.

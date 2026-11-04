@@ -144,6 +144,22 @@
     "rel_tol": 0.0001
    },
    "timeout": 600
+  },
+  {
+   "id": "stair-landing-beam",
+   "type": "cli",
+   "args": [
+    "D:\\REA\\structcalc\\difftest\\frame3d\\stair-landing-beam.json"
+   ],
+   "compare": [
+    "stdout",
+    "exit_code"
+   ],
+   "tolerance": {
+    "abs_tol": 0.5,
+    "rel_tol": 0.0001
+   },
+   "timeout": 600
   }
  ]
 }
