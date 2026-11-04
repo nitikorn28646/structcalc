@@ -27,7 +27,7 @@ export function PlateInputs({ d, setD, g, plates, sizes, setInner, onAutoInner, 
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <div className="col-span-2"><Field label="การรองรับอะเส"><Select value={d.plateSupport ?? "cont"} onChange={(v) => setD("plateSupport", v)}
-          options={[["cont", "คานต่อเนื่องผ่านเสา (วิเคราะห์จริง)"], ["span", "ช่วงเดี่ยวระหว่างเสา (wL²/8)"], ["beam", "วางบนคาน คสล. ตลอดแนว (ช่วง = ระยะพุก)"]]} /></Field></div>
+          options={[["cont", "คานต่อเนื่องผ่านเสา (วิเคราะห์จริง)"], ["span", "ช่วงเดี่ยวระหว่างเสา (wL²/8)"], ["beam", "วางบนคาน คสล. ตลอดแนว (ช่วง = ระยะพุก)"], ["rc", "ไม่มีอะเสเหล็ก — จันทันวางบนคาน RB โดยตรง"]]} /></Field></div>
         {d.plateSupport === "beam" && <Field label="ระยะพุกยึด" unit="m"><NumberInput value={d.plateAnchor ?? 1.0} step="0.1" onChange={(v) => setD("plateAnchor", v)} /></Field>}
         <Field label="ระยะแอ่นตัวยอมให้"><Select value={d.plateDefl ?? 360} onChange={(v) => setD("plateDefl", Number(v))} options={[[360, "L/360"], [240, "L/240 (ไม่มีฝ้าแขวน)"]]} /></Field>
       </div>

@@ -193,12 +193,13 @@ export function designRoof(g, fr, roof, d) {
       const wallT = hits(low, high, wallSegs)[0] ?? 0, ts = [wallT, ...hits(low, high, supSegs).filter((t) => t > wallT), 1].sort((x, y) => x - y);
       const L = Math.max(...ts.slice(1).map((t, k) => (t - ts[k]) * plan)), a = wallT * plan, rise = (L + a) * ((high[2] - low[2]) / plan);
       addMember(kind, "hip", "hip", `${kind}-${i + 1}`, `${kind === "hip" ? "ตะเข้สัน" : "ตะเข้ราง"} เส้น ${i + 1}`, low, high, L,
-        (section, count) => hip({ ...base, section, selfW: section.w, transfer: lineLoad / 2, rise, overhang: a, run: L, count }));
+        (section, count) => hip({ ...base, section, selfW: section.w * count, transfer: lineLoad / 2, rise, overhang: a, run: L, count }));
     });
   }
 
   // ridge: rafters from both sides, spans between posts
-  const ridgeRun = (section, count, L) => simpleBeam({ ...base, section, selfW: section.w, transfer: lineLoad, L, count });
+  // self weight of a double member (2C) = 2 × one C (user check 2026-11-04: it was counted once; the sheet formulas are unchanged)
+  const ridgeRun = (section, count, L) => simpleBeam({ ...base, section, selfW: section.w * count, transfer: lineLoad, L, count });
   g.lines.filter((l) => l.type === "ridge").forEach((l, i) => {
     if (!roof.dang) return spans("ridge", "ridge", "ridge", `ridge-${i + 1}`, `อกไก่ เส้น ${i + 1}`, l.p, l.q, roof.frame.postSp, ridgeRun);
     // ดั้ง placed by the user: the ridge spans between the ดั้ง standing on it
@@ -215,7 +216,7 @@ export function designRoof(g, fr, roof, d) {
 
   // supports (สะพาน): interior rafter reaction ≈ w × span per rafter, spread over the rafter spacing; spans between ตุ๊กตา
   const supWarn = []; // (the warnings list starts further down)
-  const supRun = (section, count, L) => simpleBeam({ ...base, section, selfW: section.w, transfer: (ra.w * span) / D, L, count });
+  const supRun = (section, count, L) => simpleBeam({ ...base, section, selfW: section.w * count, transfer: (ra.w * span) / D, L, count });
   fr.supports.forEach((x, i) => {
     if (!roof.dang) return spans("support", "support", "support", `support-${i + 1}`, `สะพาน S${i + 1}`, [...x.a, x.za], [...x.b, x.zb], roof.frame.postSp, supRun);
     // posts placed by the engineer: the support spans between the ดั้ง / ตุ๊กตา on its line (its ends need one each)
@@ -314,7 +315,7 @@ export function designRoof(g, fr, roof, d) {
           return [[o.a, r.Rl], [o.b, r.Rr]].map(([e, R]) => { const a = alongSeg(ln.a, ln.b, e); return a === null ? null : { P: Math.max(0, R), a, from: o.tag }; }); }),
       ].filter(Boolean);
       addMember("plate", "plate", "plate", ln.id, `อะเสช่วงใน ${ln.tag}`, [...ln.a, g.H], [...ln.b, g.H], ln.L,
-        (section, count) => pointBeam({ ...base, section, selfW: section.w, loads, L: ln.L, count }));
+        (section, count) => pointBeam({ ...base, section, selfW: section.w * count, loads, L: ln.L, count }));
       const mem = members.pop();
       Object.assign(mem, { tag: ln.tag, inner: true, loads, k: ln.k });
       done.set(k, mem);
@@ -344,8 +345,8 @@ export function designRoof(g, fr, roof, d) {
   // d.plateDefl: deflection limit L/360 (default) or L/240 (roof without a hung ceiling); stress check unchanged (Fb = 0.6Fy)
   const plateRun = (section, count, L, pl = []) => {
     const mode = d.plateSupport ?? "cont", Ld = mode === "beam" ? Math.min(L, d.plateAnchor > 0.1 ? d.plateAnchor : 1.0) : L, onBeam = mode === "beam";
-    const r = !onBeam && pl.length ? pointBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count, loads: pl })
-      : simpleBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count });
+    const r = !onBeam && pl.length ? pointBeam({ ...base, section, selfW: section.w * count, transfer: ra.Rwall / D, L: Ld, count, loads: pl })
+      : simpleBeam({ ...base, section, selfW: section.w * count, transfer: ra.Rwall / D, L: Ld, count });
     const km = 1, kd = 1, lim = d.plateDefl === 240 ? 240 : 360; // "cont" lines are solved as continuous beams (contRun); a lone span stays simple
     const fb = r.fb * km, dd = r.d * kd, dAllow = (Ld * 100) / lim;
     return { ...r, Mx: r.Mx * km, SxReq: r.SxReq * km, fb, d: dd, dAllow, Ld, mode, Rl: r.Rl ?? r.R, Rr: r.Rr ?? r.R, ok: fb <= r.Fb && dd <= dAllow };
@@ -401,7 +402,7 @@ export function designRoof(g, fr, roof, d) {
   }
   const contRun = (cl, section, count) => {
     const j = cl.j, sw = section.w * count, a = cl.lo[j], u = cl.un[j], Ls = cl.x[j + 1] - cl.x[j], cant = !cl.sup[j] || !cl.sup[j + 1];
-    const s0 = simpleBeam({ ...base, section, selfW: section.w, transfer: cl.w, L: Ls, count }); // Fb and the section as the frozen sheet gives them
+    const s0 = simpleBeam({ ...base, section, selfW: section.w * count, transfer: cl.w, L: Ls, count }); // Fb and the section as the frozen sheet gives them
     const Ms = a.M.map((m, i) => m + sw * u.M[i]), Mpos = Math.max(0, ...Ms), Mneg = Math.max(0, ...Ms.map((m) => -m)), Mx = Math.max(Mpos, Mneg);
     const EI = (d.E * s0.section.Ix * count) / 1e4, dd = (Math.max(...a.v.map((v, i) => Math.abs(v + sw * u.v[i]))) / EI) * 100;
     const dAllow = ((cant ? 2 : 1) * Ls * 100) / lim, fb = (Mx * 100) / (count * s0.section.Sx);
@@ -409,7 +410,17 @@ export function designRoof(g, fr, roof, d) {
     return { ...s0, w: cl.w + sw, Mx, Mpos, Mneg, SxReq: (Mx * 100) / s0.Fb, fb, d: dd, dAllow, Ld: Ls, mode: "cont", Rl, Rr, R: cant ? (cl.sup[j] ? R0 : R1) : Math.max(Rl, Rr),
       cont: true, cant, fixedEnd: cant ? ((cl.sup[j] !== cl.flip) ? "p" : "q") : null, P: cl.pts.filter((p) => p.at > cl.x[j] - 1e-6 && p.at < cl.x[j + 1] + 1e-6).reduce((t, p) => t + p.P, 0), ok: fb <= s0.Fb && dd <= dAllow };
   };
-  for (const [k, sp] of aSpans.entries()) {
+  // "rc" (user 2026-11-04): the rafters sit straight on the RC ring beam (คาน RB) — no steel wall plate is designed; the rafter
+  // reactions and the posts / interior plates standing on the wall line go down where they are (points at the rafter spacing)
+  const bearDirect = [];
+  if ((d.plateSupport ?? "cont") === "rc") {
+    for (const sp of aSpans) {
+      const n = Math.max(1, Math.round(sp.L / D)), W = wR * sp.L;
+      for (let i = 0; i < n; i++) bearDirect.push({ p: lerp(sp.p, sp.q, (i + 0.5) / n).slice(0, 2), P: W / n, from: "จันทัน" });
+      for (const l of sp.loads.filter((x) => x.P > 0)) bearDirect.push({ p: lerp(sp.p, sp.q, l.a / sp.L).slice(0, 2), P: l.P, from: l.from });
+    }
+  }
+  for (const [k, sp] of (d.plateSupport ?? "cont") === "rc" ? [] : aSpans.entries()) {
     const pl = sp.loads.filter((l) => l.P > 0), cl = contLines.get(k);
     addMember("plate", "plate", "plate", sp.id, sp.label, sp.p, sp.q, sp.L,
       (section, count) => (cl ? contRun(cl, section, count) : sp.free ? cantRun(section, count, sp.L, pl, sp.free === "p" ? "q" : "p") : plateRun(section, count, sp.L, pl)), { ...(sp.free ? { free: sp.free } : {}), loads: pl, ...(cl ? { contLine: sp.line } : {}) });
@@ -482,5 +493,5 @@ export function designRoof(g, fr, roof, d) {
     plateLines.push({ label: cl.label, tags: ms.map((m) => m?.tag), x: cl.x, sup: cl.sup,
       loads: [...ms.map((m, j) => ({ a: cl.x[j], b: cl.x[j + 1], wa: m?.r.w ?? cl.w, wb: m?.r.w ?? cl.w })), ...cl.pts.map((p) => ({ at: p.at, P: p.P }))] });
   }
-  return { rows, members, warnings, loose, bearLoose, plateLines, weight: rows.reduce((a, x) => a + x.weight, 0), ok: rows.every((x) => x.ok) };
+  return { rows, members, warnings, loose, bearLoose, bearDirect, plateLines, weight: rows.reduce((a, x) => a + x.weight, 0), ok: rows.every((x) => x.ok) };
 }

@@ -444,3 +444,9 @@ the strip, gablet wall between them; menus cycle ปั้นหยา → จ�
 Tests: cli/roof-shapes.cjs (browser, 36 shapes incl. angled walls, hexagon, bay: planar faces, faces tile the plan, area = plan/cosθ, framing) 36/36; cli/stair-check.mjs
 (node, 10 stair kinds/landing supports: total load = loads on beams) 10/10. Stairs drawn on the floor they start from → stored on the
 floor above (FloorBoard onStairUp / stairsAbove dashed, click → that floor). Not supported yet: multi-level roofs (separate eave heights).
+2026-11-04 night: auto column types (engine/columnTypes.js generateColumnTypes, frame.js columnLevelCheck exported; step 7 Type เสา +1 /
+N types; cli/coltypes-check.mjs). Roof: design.plateSupport "rc" = no steel wall plate, rafter reactions + wall-line posts go down as
+points at the rafter spacing (dz.bearDirect → roofLink); design.autoSupports false = no automatic สะพาน (draw them). Double (2C)
+members' self weight now 2 × one C in the wrappers (hip/ridge/support/plates; the frozen sheet formulas unchanged): Yasothon roof
++449 kg, E2E new house 101.1 → 101.3 t. Roof levels: roofFromFrame H = top elevation; Frame3D datum = −baseLevel; RoofLinkCard
+warns plate level ≠ linked floor (Yasothon: +7.25 vs +6.60, button to align). Tests: cli/roof-levels.cjs (20/20).

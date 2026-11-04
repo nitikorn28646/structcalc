@@ -13,6 +13,7 @@ export async function roofPoints(roof, host = {}) {
     const addAt = (p, P) => { const hit = pts.find((x) => Math.hypot(x.p[0] - p[0], x.p[1] - p[1]) < 0.05); if (hit) hit.P += P; else pts.push({ p: [+p[0].toFixed(3), +p[1].toFixed(3)], P, name: "หลังคา" }); };
     for (const m of dz.members.filter((x) => x.group === "plate")) for (const b of m.bear ?? []) if (b.P > 0) addAt(b.p, b.P);
     for (const b of dz.bearLoose ?? []) if (b.P > 0) addAt(b.p, b.P);
+    for (const b of dz.bearDirect ?? []) if (b.P > 0) addAt(b.p, b.P); // rafters on the RC ring beam (no steel wall plate)
     // the roof plan and the structure are drawn separately: a bearing point a little off a column / beam (wall face vs column centre,
     // e.g. 0.25 m) is the same support — within host.tol (default 0.30 m) it goes to that column, else onto that beam (projected)
     const tol = host.tol ?? 0.3, fcols = host.columns?.length ? host.columns : cols, d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
