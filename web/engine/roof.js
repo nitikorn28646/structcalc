@@ -45,50 +45,81 @@ export function roofGeometry(roof, skeleton) {
   let pts = roof.pts.map((p) => [...p]), edges = roof.edges;
   if (signedArea(pts) < 0) { pts = pts.reverse(); edges = [...edges.slice(0, -1)].reverse().concat(edges.slice(-1)); }
   const n = pts.length, eave = offsetPolygon(pts, roof.overhang), tan = Math.tan((roof.slope * Math.PI) / 180);
-  const sk = skeleton([[...eave, eave[0]]]);
+  // segments i, j of a closed ring cross (not neighbours) → the outline folds over itself
+  const crosses = (P) => { const m = P.length, X = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    for (let i = 0; i < m; i++) for (let j = i + 2; j < m; j++) { if (i === 0 && j === m - 1) continue; const a = P[i], b = P[(i + 1) % m], c = P[j], d = P[(j + 1) % m];
+      if (X(a, b, c) * X(a, b, d) < -1e-9 && X(c, d, a) * X(c, d, b) < -1e-9) return true; } return false; };
+  if (eave.some((p, i) => Math.hypot(p[0] - eave[(i + 1) % n][0], p[1] - eave[(i + 1) % n][1]) < 1e-6) || crosses(eave))
+    throw new Error(`ชายคาชนกันที่ช่องแคบ (ช่องกว้างไม่เกิน 2 × ชายคา ${roof.overhang} ม.) — ลดระยะชายคา หรือขยายช่องระหว่างปีกอาคาร`);
+  const isG = edges.map((e) => e?.type === "gable"), zE = roof.H - roof.overhang * tan;
+  // GABLES (user 2026-11-04: only hip roofs came out right): every gable edge is pushed far outward (its two neighbours lengthened),
+  // the hip skeleton of that extended outline is taken, and each roof face is cut back at the real gable line → exact planes for
+  // gable / shed (หมาแหงน: three gables) / mixed gable-hip / gable wings of L, T, U plans. The gable wall is the vertical face left
+  // on that line. (Before: the hip end-face was pulled onto the line, wrong for sheds and wings.)
+  const out = (k) => { const a = eave[k], b = eave[(k + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]); return { a, u: [(b[0] - a[0]) / L, (b[1] - a[1]) / L], nrm: [(b[1] - a[1]) / L, -(b[0] - a[0]) / L] }; };
+  const E = eave.map((_, k) => out(k)), span = Math.max(...eave.map((p) => Math.hypot(p[0] - eave[0][0], p[1] - eave[0][1]))), D = 4 * span + 10;
+  const lineOf = (k) => { const e = E[k], sft = isG[k] ? D : 0; return { p: [e.a[0] + e.nrm[0] * sft, e.a[1] + e.nrm[1] * sft], u: e.u }; };
+  const meet = (l1, l2) => { const den = l1.u[0] * l2.u[1] - l1.u[1] * l2.u[0]; if (Math.abs(den) < 1e-9) return l2.p; const t = ((l2.p[0] - l1.p[0]) * l2.u[1] - (l2.p[1] - l1.p[1]) * l2.u[0]) / den; return [l1.p[0] + l1.u[0] * t, l1.p[1] + l1.u[1] * t]; };
+  // a gable on an inner edge (its outward side runs into the building, e.g. the inside corner of an L) cannot be pushed out: such
+  // edges become hips again (warned). Test: the outward ray from the edge's middle hits another edge of the outline.
+  const warn = [], X = (u, v, w) => (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0]);
+  for (let k = 0; k < n; k++) if (isG[k]) {
+    const mid = [(eave[k][0] + eave[(k + 1) % n][0]) / 2 + E[k].nrm[0] * 1e-3, (eave[k][1] + eave[(k + 1) % n][1]) / 2 + E[k].nrm[1] * 1e-3], far = [mid[0] + E[k].nrm[0] * D, mid[1] + E[k].nrm[1] * D];
+    for (let q = 0; q < n; q++) { if (q === k) continue; const a = eave[q], b = eave[(q + 1) % n];
+      if (X(mid, far, a) * X(mid, far, b) < 0 && X(a, b, mid) * X(a, b, far) < 0) { isG[k] = false; warn.push(k); break; } }
+  }
+  // two gables meeting at an inside (reflex) corner would be pushed into each other: both become hips (warned)
+  for (let k = 0; k < n; k++) { const j = (k + 1) % n, c = E[k].u[0] * E[j].u[1] - E[k].u[1] * E[j].u[0];
+    if (isG[k] && isG[j] && c < -1e-9) { isG[k] = isG[j] = false; warn.push(k, j); } }
+  const ext = isG.some(Boolean) ? eave.map((_, k) => meet(lineOf((k + n - 1) % n), lineOf(k))) : eave;
+  const sk = skeleton([[...ext, ext[0]]]);
   if (!sk) throw new Error("รูปร่างหลังคาไม่ถูกต้อง (ขอบตัดกันเอง)");
   // H is the wall-plate level where the rafters bear on the wall; the eave edge sits lower by overhang·tanθ
   const V = sk.vertices.map(([x, y, t]) => [x, y, roof.H + (t - roof.overhang) * tan]);
-  const key = (p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`, eaveIdx = new Map();
-  sk.vertices.forEach((v, i) => { if (v[2] < 1e-9) eaveIdx.set(key(v), i); });
-  const ei = eave.map((p) => eaveIdx.get(key(p)));
-  // assign each skeleton face to the eave edge it contains
+  // outline corners in the skeleton: nearest vertex at time 0 (far-out extended corners come back with rounding, a text key missed them)
+  const base = sk.vertices.map((v, i) => [v, i]).filter(([v]) => v[2] < 1e-7);
+  const ei = ext.map((p) => { let best = null, bd = Infinity; for (const [v, i] of base) { const dd = Math.hypot(v[0] - p[0], v[1] - p[1]); if (dd < bd) { bd = dd; best = i; } } return bd < 1e-4 * (1 + Math.hypot(p[0], p[1])) ? best : undefined; });
   const faceOf = new Array(n).fill(null);
   for (const poly of sk.polygons) for (let e = 0; e < n; e++) if (poly.includes(ei[e]) && poly.includes(ei[(e + 1) % n])) { faceOf[e] = poly; break; }
-  // gable: pull the face's interior vertices onto the eave line, turning the face into a vertical gable wall
-  edges.forEach((ed, e) => {
-    if (ed.type !== "gable" || !faceOf[e]) return;
-    const a = eave[e], b = eave[(e + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L;
-    for (const i of faceOf[e]) if (sk.vertices[i][2] > 1e-9) {
-      const s = (V[i][0] - a[0]) * ux + (V[i][1] - a[1]) * uy;
-      V[i] = [a[0] + ux * s, a[1] + uy * s, V[i][2]];
-    }
-  });
-  const faces = faceOf.map((poly, e) => poly && { edge: e, gable: edges[e].type === "gable", idx: poly, P: poly.map((i) => V[i]) }).filter(Boolean);
+  // cut a planar 3D polygon by the inner side of every gable line (Sutherland–Hodgman, z interpolated)
+  const side = (k, p) => (p[0] - E[k].a[0]) * E[k].nrm[0] + (p[1] - E[k].a[1]) * E[k].nrm[1];
+  const clip = (P) => { let Q = P; for (let k = 0; k < n; k++) { if (!isG[k] || Q.length < 3) continue; const R = [];
+    Q.forEach((p, i) => { const q = Q[(i + 1) % Q.length], sp = side(k, p), sq = side(k, q);
+      if (sp <= 1e-9) R.push(p);
+      if ((sp < -1e-9 && sq > 1e-9) || (sp > 1e-9 && sq < -1e-9)) { const t = sp / (sp - sq); R.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t]); } });
+    Q = R.filter((p, i) => Math.hypot(p[0] - R[(i + 1) % R.length][0], p[1] - R[(i + 1) % R.length][1], p[2] - R[(i + 1) % R.length][2]) > 1e-7); }
+    return Q; };
+  const roofF = [];
+  for (let e = 0; e < n; e++) if (!isG[e] && faceOf[e]) { const P = clip(faceOf[e].map((i) => V[i])); if (P.length >= 3) roofF.push({ edge: e, gable: false, P }); }
+  // gable walls: the roof profile left on each gable line, closed at eave level
+  const gableF = [];
+  for (let e = 0; e < n; e++) if (isG[e]) {
+    const on = []; for (const f of roofF) for (const p of f.P) if (Math.abs(side(e, p)) < 1e-6) on.push(p);
+    const s = (p) => (p[0] - E[e].a[0]) * E[e].u[0] + (p[1] - E[e].a[1]) * E[e].u[1], L = Math.hypot(eave[(e + 1) % n][0] - eave[e][0], eave[(e + 1) % n][1] - eave[e][1]);
+    const prof = [...new Map(on.filter((p) => s(p) > -1e-6 && s(p) < L + 1e-6).map((p) => [`${s(p).toFixed(5)}|${p[2].toFixed(5)}`, p])).values()].sort((a, b) => s(a) - s(b) || a[2] - b[2]);
+    if (prof.length < 2) continue;
+    const a = [...eave[e], zE], b = [...eave[(e + 1) % n], zE], P = [a, ...prof.filter((p) => p[2] > zE + 1e-6), b];
+    if (P.length >= 3) gableF.push({ edge: e, gable: true, P });
+  }
+  const faces = [...roofF, ...gableF];
   faces.forEach((f) => { f.plane = f.gable ? null : plane(f.P); f.area = area3(f.P); });
-  // unique skeleton segments, classified
-  const seg = new Map();
-  faces.forEach((f) => f.idx.forEach((i, k) => {
-    const j = f.idx[(k + 1) % f.idx.length], id = i < j ? `${i}-${j}` : `${j}-${i}`;
-    (seg.get(id) ?? seg.set(id, { i, j, faces: [] }).get(id)).faces.push(f);
-  }));
-  const lines = [];
-  for (const s of seg.values()) {
-    const p = V[s.i], q = V[s.j], len = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+  // unique segments by coordinates, classified
+  const vk = (p) => `${p[0].toFixed(4)},${p[1].toFixed(4)},${p[2].toFixed(4)}`, seg = new Map();
+  faces.forEach((f) => f.P.forEach((p, k) => { const q = f.P[(k + 1) % f.P.length], a = vk(p), b = vk(q); if (a === b) return; const id = a < b ? `${a}|${b}` : `${b}|${a}`;
+    (seg.get(id) ?? seg.set(id, { p, q, faces: [] }).get(id)).faces.push(f); }));
+  const lines = [], onG = (p) => isG.some((g, k) => g && Math.abs(side(k, p)) < 1e-6);
+  for (const s0 of seg.values()) {
+    const { p, q } = s0, len = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
     if (len < 1e-6) continue;
-    // seam between the two faces of a wall edge split by a collinear point: same plane (or same gable wall) → no line
-    if (s.faces.length === 2) {
-      const [A, B] = s.faces;
-      if (A.plane && B.plane && Math.abs(A.plane.a - B.plane.a) < 1e-6 && Math.abs(A.plane.b - B.plane.b) < 1e-6 && Math.abs(A.plane.c - B.plane.c) < 1e-4) continue;
-      if (A.gable && B.gable && Math.abs((eave[A.edge][0] - eave[B.edge][0]) * (eave[(B.edge + 1) % n][1] - eave[B.edge][1]) - (eave[A.edge][1] - eave[B.edge][1]) * (eave[(B.edge + 1) % n][0] - eave[B.edge][0])) < 1e-6) continue;
-    }
+    const rf = s0.faces.filter((f) => !f.gable);
+    if (rf.length === 2) { const [A, B] = rf; if (Math.abs(A.plane.a - B.plane.a) < 1e-6 && Math.abs(A.plane.b - B.plane.b) < 1e-6 && Math.abs(A.plane.c - B.plane.c) < 1e-4) continue; }
+    if (rf.length === 0) continue; // gable wall's own edges (its base is the eave line, its top is a rake already)
     let type;
-    if (s.faces.length < 2) type = sk.vertices[s.i][2] < 1e-9 && sk.vertices[s.j][2] < 1e-9 ? "eave" : "rake";
-    else if (s.faces.some((f) => f.gable)) type = "rake";
+    if (rf.length === 1) type = onG(p) && onG(q) ? "rake" : Math.abs(p[2] - zE) < 1e-6 && Math.abs(q[2] - zE) < 1e-6 ? "eave" : "rake";
     else if (Math.abs(q[2] - p[2]) < 1e-6) type = "ridge";
     else {
-      const [A, B] = s.faces, mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, cB = B.P.reduce((c, v) => [c[0] + v[0] / B.P.length, c[1] + v[1] / B.P.length], [0, 0]);
-      const t = 0.05, x = mx + (cB[0] - mx) * t, y = my + (cB[1] - my) * t; // a point just inside face B
+      const [A, B] = rf, mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, cB = B.P.reduce((c, v) => [c[0] + v[0] / B.P.length, c[1] + v[1] / B.P.length], [0, 0]);
+      const t = 0.05, x = mx + (cB[0] - mx) * t, y = my + (cB[1] - my) * t;
       const zA = A.plane.a * x + A.plane.b * y + A.plane.c, zB = B.plane.a * x + B.plane.b * y + B.plane.c;
       type = zA > zB ? "hip" : "valley";
     }
@@ -97,10 +128,11 @@ export function roofGeometry(roof, skeleton) {
   const sum = (t) => lines.filter((l) => l.type === t).reduce((a, l) => a + l.len, 0);
   const roofFaces = faces.filter((f) => !f.gable);
   return {
-    pts, edges, eave, faces, lines, V, tan, H: roof.H,
+    pts, edges, eave, faces, lines, V: faces.flatMap((f) => f.P), tan, H: roof.H,
     planArea: Math.abs(signedArea(eave)), wallArea: Math.abs(signedArea(pts)),
     roofArea: roofFaces.reduce((a, f) => a + f.area, 0), gableArea: faces.filter((f) => f.gable).reduce((a, f) => a + f.area, 0),
     ridge: sum("ridge"), hip: sum("hip"), valley: sum("valley"), rake: sum("rake"), eaveLen: sum("eave"),
-    top: Math.max(...V.map((v) => v[2])),
+    top: Math.max(...faces.flatMap((f) => f.P.map((v) => v[2]))),
+    warnings: [...new Set(warn)].map((k) => `ขอบที่ ${k + 1} ตั้งเป็นหน้าจั่วไม่ได้ (หันเข้าหาตัวอาคาร / ชนหน้าจั่วอื่นที่มุมใน) — คิดเป็นปั้นหยาแทน`),
   };
 }
