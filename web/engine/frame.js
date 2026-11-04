@@ -189,6 +189,16 @@ function gravity(frame, minTypes) {
 }
 
 // column types per stack: fixed (frame.colPick) or the lightest type whose sections pass at every level
+// one column (a result of analyzeFrame) checked with a level section lv under every load combination: the governing check
+export function columnLevelCheck(frame, lv, c) {
+  const mat = frame.mat;
+  let worst = null;
+  for (const q of [{ name: "D+L", P: c.Pd ?? c.Pbot, M: c.M3 ?? {} }, ...(c.combos ?? []).map((x) => ({ name: x.name, P: x.N, M: { Mx: x.Mx, My: x.My } }))]) {
+    const chk = { ...checkColumn(lv, q.P, c.Leff ?? c.Lu ?? c.L, c.floor === 0 && mat.coverPier > 0 ? { ...mat, coverCol: mat.coverPier } : mat, q.M), combo: q.name, tension: q.P < 0, ...(c.Leff ? { cantilever: true, Lc: c.Lc } : {}) };
+    if (!worst || (worst.ok && !chk.ok) || (chk.ok === worst.ok && chk.util > worst.util)) worst = chk;
+  }
+  return worst;
+}
 function designColumns(frame, cols) {
   const { colTypes, mat } = frame;
   const stacks = [...new Set(cols.map((c) => c.stack))].map((key) => ({ key, list: cols.filter((c) => c.stack === key).sort((a, b) => a.floor - b.floor) }));

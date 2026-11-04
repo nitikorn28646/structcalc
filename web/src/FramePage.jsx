@@ -17,6 +17,7 @@ import { BrickWall, Building2, Columns3, Grid3x3, Layers, Plus, Ruler, Trash2, T
 import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import { beamCost, generateBeamTypes } from "../engine/beamTypes.js";
+import { generateColumnTypes } from "../engine/columnTypes.js";
 import { findOverlaps, mergeOverlaps } from "../engine/floor.js";
 import { locateWarning } from "./warnLocate.js";
 import { SlabSection, slabRebar } from "./SlabDetail.jsx";
@@ -121,6 +122,33 @@ function AutoBeamTypes({ frame, set, res }) {
         <span className="text-[12px] text-gray-500">ค่าคานตอนนี้ ≈ {Math.round(cost).toLocaleString()} บาท</span>
       </div>
       <p className="mt-1.5 text-[11px] text-gray-500">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ถูกที่สุดที่ผ่าน (กว้าง 0.20 / 0.30 ม. ลึก 0.30–0.80 ม. ทีละ 10 ซม. เหล็ก ≤ 2 ชั้น) เรียงตามราคาแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดถูกที่สุดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2, … เรียงตามขนาดคาน (ตัด type ที่ไม่มีคานใช้) · คานยื่นใช้ type ที่เหล็กหัวเสาพอ ชื่อ B1A (เหล็กบนยาวตลอด) · แทนที่ type คานทั้งหมดและตั้งทุกคานเป็นอัตโนมัติ (ย้อนกลับได้ Ctrl+Z) · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p>
+      {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
+    </div>
+  );
+}
+
+// auto column types (user 2026-11-04, like the spread-footing types): "+1" adds one type and re-spreads every column, or a count
+function AutoColTypes({ frame, set, res }) {
+  const nNow = (frame.colTypes ?? []).length, k0 = frame.colAutoK ?? 0;
+  const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null), [want, setWant] = useState(Math.max(1, k0 || 2));
+  const nOk = res.columns.filter((c) => c.ok).length;
+  const run = (k) => { setBusy(true); setMsg(null); setTimeout(() => {
+    try {
+      const g = generateColumnTypes(frame, k);
+      if (!g) { setMsg({ ok: false, text: "ยังไม่มีเสาให้จัด type" }); return; }
+      set("colTypes", g.colTypes); set("colPick", g.colPick); set("colAutoK", g.colTypes.length);
+      setMsg({ ok: g.ok === g.n, text: `ได้ ${g.colTypes.length} type${g.colTypes.length < k ? ` (ขอ ${k} — กลุ่มที่ได้หน้าตัดเดียวกันรวมกัน)` : ""} · เสาผ่าน ${g.ok}/${g.n} · ค่าเสา ≈ ${Math.round(g.cost).toLocaleString()} บาท` });
+    } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(false); }
+  }, 30); };
+  return (
+    <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-white/[0.03]">
+      <div className="flex flex-wrap items-center gap-2">
+        <button disabled={busy} onClick={() => run((k0 || nNow) + (k0 ? 1 : 0) || 1)} className="rounded-lg bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600 disabled:opacity-60">{busy ? "กำลังจัด…" : k0 ? `เพิ่ม type เสาอัตโนมัติ (+1 → ${k0 + 1})` : "สร้าง type เสาอัตโนมัติ"}</button>
+        <span className="flex items-center gap-1 text-[12px] text-gray-600">หรือกำหนด<input type="number" min={1} max={12} value={want} onChange={(e) => setWant(Math.max(1, Math.min(12, Math.round(Number(e.target.value) || 1))))} className="h-7 w-14 rounded border border-gray-300 bg-transparent px-1 text-right" />type
+          <button disabled={busy} onClick={() => run(want)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50 disabled:opacity-60">จัด {want} type</button></span>
+        <span className="text-[12px] text-gray-500">เสาผ่านตอนนี้ {nOk}/{res.columns.length}</span>
+      </div>
+      <p className="mt-1.5 text-[11px] text-gray-500">แต่ละต้นหาหน้าตัดถูกสุดที่ผ่านทุกชั้น (เสาสี่เหลี่ยมจัตุรัส 20–50 ซม. · 4/6/8/12 เส้น DB12 → DB16 → DB20 · ρ 1–2.5 % · ปลอก RB6/RB9 ระยะห่างสุดที่ผ่าน 16d<sub>b</sub>/48d<sub>t</sub>) แล้วแบ่งเสาเป็นกลุ่มตามขนาดที่ต้องการ type = หน้าตัดที่ผ่านทุกต้นในกลุ่มของแต่ละชั้น · แทนที่ type เสาเดิมทั้งหมด (แก้ต่อในตารางได้)</p>
       {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
     </div>
   );
@@ -332,7 +360,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </div>
     </div>
   ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
-    : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
+    : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (() => {
       // every slab / cantilever slab / stair: this floor or all floors, bars by position, section drawing; row → flashes on the plan
