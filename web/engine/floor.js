@@ -627,6 +627,16 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     });
   }
   for (const pl of pointLoads) if (pl.on === "column") { result.columns[pl.ci].R += pl.P; result.columns[pl.ci].from.push({ point: pl.i, R: pl.P }); }
+  // a secondary beam deeper than the beam carrying it (user 2026-11-04: "why is a secondary sometimes deeper than the main?") — each
+  // drawn beam takes the lightest type passing its own forces, so a long / loaded secondary can end up deeper than a short main beam
+  const deeper = [];
+  for (const ln of lines) for (const c of ln.carriers) {
+    if (c.rev) continue;
+    const host = lines.find((o) => o.id === c.host), at = (l, t) => result.spans.find((x) => x.line === l.id && t >= x.x0 - 1e-6 && t <= x.x1 + 1e-6);
+    const sp = at(ln, c.t), hp = host && at(host, c.at);
+    if (sp?.type && hp?.type && sp.type.h > hp.type.h + 1e-6) deeper.push(`แนว ${ln.id + 1} (${sp.typeName ?? sp.type.name} ลึก ${Math.round(sp.type.h * 100)}) บนแนว ${host.id + 1} (${hp.typeName ?? hp.type.name} ลึก ${Math.round(hp.type.h * 100)}) ที่ (${(ln.A[0] + ln.u[0] * c.t).toFixed(2)}, ${(ln.A[1] + ln.u[1] * c.t).toFixed(2)})`);
+  }
+  if (deeper.length) warnings.push(`คานซอยลึกกว่าคานหลักที่รับ ${deeper.length} จุด: ${deeper.slice(0, 3).join(" · ")}${deeper.length > 3 ? " …" : ""} — ตามหลักปฏิบัติคานหลักควรลึก ≥ คานซอย: เลือก type ของคานหลักให้ลึกเท่าหรือมากกว่า (ขั้น 7 / แผงคาน)`);
   const groups = { DL: 0, SDL: 0, WALL: 0, LL: 0, SP: pointLoads.reduce((s, pl) => s + (pl.on === "column" ? pl.P : 0), 0) };
   for (const ln of lines) {
     for (const l of ln.slab) groups[l.g ?? "DL"] += ((l.wa + l.wb) / 2) * (l.b - l.a);

@@ -9,11 +9,14 @@ import { BARS } from "./tables.js";
 import { barLayers, parseBars } from "./floor.js";
 import { checkEnv } from "./frame.js";
 
-// sizes in whole 10 cm (user 2026-11-03: no 0.05 steps): b 0.20 / 0.30, h 0.30 … 0.80
-export const BEAM_GEN = { b: [0.2, 0.3], hMin: 0.3, hMax: 0.8, dh: 0.1, bars: ["DB 12", "DB 16", "DB 20"],
-  // stirrups (user 2026-11-03): RB9 at most; when RB9 @0.10 is not enough, two sets of RB9
-  stirrups: [["RB 6", 1], ["RB 9", 1], ["RB 9", 2]],
-  sMax: 0.2, sMin: 0.1, ds: 0.025, maxLayers: 2, price: { conc: 2500, steel: 28, form: 350 } };
+// the designer's habit (user 2026-11-04): start at 20×40 (easy to build), add DB12 bars up to 5 bottom / 3 top, then DB16 up to
+// 5 bottom / 3 top, only then a bigger section — and so on. Stirrups RB6 @0.20 → @0.15 → @0.10, then RB9 @0.20 → @0.15 → @0.10; when
+// shear is still too high, a bigger section. The first section in this order that passes is taken (not the cheapest of all).
+export const BEAM_GEN = { sections: [[0.2, 0.4], [0.2, 0.5], [0.2, 0.6], [0.3, 0.6], [0.3, 0.7], [0.3, 0.8]],
+  bigSections: [[0.4, 0.8], [0.4, 0.9], [0.4, 1.0]], // only for spans nothing above carries (flagged "ใหญ่พิเศษ")
+  bars: ["DB 12", "DB 16"], maxBot: 5, maxTop: 3,
+  stirrups: [["RB 6", 1], ["RB 9", 1]],
+  sMax: 0.2, sMin: 0.1, ds: 0.05, maxLayers: 2, price: { conc: 2500, steel: 28, form: 350 } };
 
 const kgm = (s) => { const x = parseBars(s); return x ? (x.n * BARS[x.bar].A * 7850) / 1e4 : 0; }; // kg per metre of bars
 // rough steel per metre of beam: through bars full length, extra top bars ~ L/2 (two quarters), extra bottom bars 3/5,
@@ -43,6 +46,9 @@ export function designBH(sps, b, h, bar, mat, g, start = null) {
   }
   for (let it = 0; it < 40; it++) {
     Object.assign(t, { top: bars(nT, bar), bot: bars(nB, bar), topX: bars(xT, bar), botX: bars(xB, bar), st: g.stirrups[si][0], stSets: g.stirrups[si][1] });
+    // bar count limits of this size (user: bottom 5, top 3): bottom bars in all; top = the bars running through, extra top bars at the
+    // supports may bring the top up to the bottom limit — then the next bar size, then the next section
+    if (nB + xB > (g.maxBot ?? 99) || nT > (g.maxTop ?? 99) || nT + xT > (g.maxBot ?? 99)) return null;
     if (!fitsLayers(t, mat, g)) return null;
     const cs = sps.map((sp) => checkEnv(t, sp, mat));
     if (cs.every((c) => c.ok)) return { ...t };
@@ -94,18 +100,13 @@ function trimType(t, sps, mat, g) {
   return best;
 }
 
-// cheapest of every b × h × bar size
+// the first section × bar size in the designer's order that passes every span in sps (BEAM_GEN.sections, then bars DB12 → DB16)
 export function designGroup(sps, mat, g = BEAM_GEN) {
-  let best = null;
-  // bar sizes in order (user 2026-11-03): DB12 until two layers are full, then DB16 until two layers are full, then DB20 — the first
-  // size that fits in two layers is taken for that b × h (designBH returns null when a third layer would be needed)
-  for (const b of g.b) for (let h = Math.max(g.hMin, b); h <= g.hMax + 1e-9; h = +(h + g.dh).toFixed(3)) for (const bar of g.bars) {
+  for (const [b, h] of g.sections) for (const bar of g.bars) {
     const t = designBH(sps, b, h, bar, mat, g);
-    if (!t) continue;
-    const c = beamCost(t, g); if (!best || c < best.cost) best = { t, cost: c };
-    break;
+    if (t) return { t, cost: beamCost(t, g) };
   }
-  return best;
+  return null;
 }
 
 // res = analyzeFrame result (span design forces in place); k = number of types wanted → { types, groups, unmatched }
@@ -121,7 +122,7 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
   const own = spans.map((sp) => ({ sp, d: designGroup([sp], mat, g) }));
   // spans that nothing within the limits carries (e.g. a transfer girder): extended limits for those spans only (user 2026-11-03:
   // b up to 0.40, h up to 1.00 m), one type for all of them if one passes, else one each — flagged big ("คานใหญ่พิเศษ")
-  const gBig = { ...g, b: [...new Set([...g.b, 0.4])], hMax: 1.0 };
+  const gBig = { ...g, sections: [...g.sections, ...(g.bigSections ?? [])] }; // same habit, larger sections only
   const over = own.filter((o) => !o.d), bigTypes = [], bigIds = [];
   if (over.length) {
     const all = designGroup(over.map((o) => o.sp), mat, gBig);
