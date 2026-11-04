@@ -35,7 +35,7 @@ const PAGE_CSS = `
 `;
 
 // Paginate the hidden report into #print-root, print, then clean up.
-export async function printReport({ dialog = true } = {}) {
+export async function printReport({ dialog = true, standalone = false } = {}) {
   // every report block of the hidden print area (the workflow prints roof + structure); not the on-screen preview in <main>
   // 3D figures (WebGL canvases, preserveDrawingBuffer) become pictures — the paged copy is made from HTML text
   const still = (e) => { const c = e.cloneNode(true), a = [...e.querySelectorAll("canvas")], b = [...c.querySelectorAll("canvas")];
@@ -57,6 +57,15 @@ export async function printReport({ dialog = true } = {}) {
   };
   window.addEventListener("afterprint", done);
   await new Previewer().preview(src.innerHTML, [{ "report.css": PAGE_CSS }], root);
+  // standalone: the paged book as one self-contained HTML file (user 2026-11-04: printing did nothing inside the claude.ai frame —
+  // its sandbox blocks window.print). Styles are inlined (cross-origin sheets, e.g. Google Fonts, stay as links); opened, it prints itself.
+  if (standalone) {
+    const css = [...document.styleSheets].map((sh) => { try { return `<style>${[...sh.cssRules].map((r) => r.cssText).join("\n")}</style>`; } catch { return sh.href ? `<link rel="stylesheet" href="${sh.href}">` : ""; } }).join("\n");
+    const html = `<!doctype html><html lang="th" class="printing"><head><meta charset="utf-8"><title>${document.title.replace(/</g, "")}</title>${css}</head><body>${root.outerHTML}`
+      + `<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},600)})<\/script></body></html>`;
+    done();
+    return html;
+  }
   if (dialog) window.print();
   else document.title += " [paged]"; // ?print: leave the paged preview open (used for headless PDF export)
 }

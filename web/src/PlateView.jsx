@@ -15,13 +15,14 @@ export const platesOf = (dz) => {
   return { plates: plates.map((m) => ({ ...m, color: sizeOf(sizes, m).color })), sizes };
 };
 
-export function PlateInputs({ d, setD, g, plates, sizes, setInner, onAutoInner, drawn }) {
+export function PlateInputs({ d, setD, g, plates, sizes, setInner, onAutoInner, drawn, cols }) {
   const div = (i) => d.plateDiv?.[i];
   const setDiv = (i, v) => { const p = { ...d.plateDiv }; if (v) p[i] = Math.max(1, Math.round(v)); else delete p[i]; setD("plateDiv", p); };
   return (<>
     <Card title="อะเส — ค่าตั้งต้น" icon={Ruler}>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="ระยะเสาอัตโนมัติ" unit="m"><NumberInput value={d.plateSpan} step="0.1" onChange={(v) => setD("plateSpan", v)} /></Field>
+        {/* only used when neither columns nor plates are drawn: each wall edge is cut into equal spans ≤ this (an assumed column spacing) */}
+        {!drawn && !cols ? <Field label="ระยะเสาสมมติ (ยังไม่วางเสา)" unit="m"><NumberInput value={d.plateSpan} step="0.1" onChange={(v) => setD("plateSpan", v)} /></Field> : null}
         <Field label="เดี่ยว / คู่"><Select value={d.counts.plate} onChange={(v) => setD("counts", { ...d.counts, plate: Number(v) })} options={[[1, "เดี่ยว"], [2, "คู่"]]} /></Field>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">

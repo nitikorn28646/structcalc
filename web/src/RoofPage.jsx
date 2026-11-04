@@ -291,7 +291,6 @@ function LoadInputs({ d, set, g, onRoofing = () => {} }) {
         {n("live", "น้ำหนักจร", "kg/m²")}{n("wind", "แรงลม", "kg/m²")}{n("extra", "น้ำหนักอื่นๆ", "kg/m²")}
         <Field label="เกรดเหล็ก"><Select value={d.grade} onChange={(v) => set("grade", v)} options={[["Fe-24", "Fe-24 (2400)"], ["Fe-30", "Fe-30 (3000)"]]} /></Field>
         <Field label="เหล็กยึดแป"><Select value={d.sagRows} onChange={(v) => set("sagRows", Number(v))} options={[[0, "ไม่ใช้"], [1, "1 แถว"], [2, "2 แถว"], [3, "3 แถว"]]} /></Field>
-        {n("plateSpan", "ช่วงอะเส (ระยะเสา)", "m", "0.1")}
         {d.pick.purlin === "batten" && n("battenW", "น้ำหนักแปสำเร็จรูป", "kg/m", "0.05")}
         <Field label="ความหนาเหล็กขั้นต่ำ"><Select value={d.minT ?? 0} onChange={(v) => set("minT", Number(v))} options={[[0, "ไม่จำกัด"], [1.6, "1.6 มม."], [2, "2.0 มม."], [2.3, "2.3 มม."], [3.2, "3.2 มม."]]} /></Field>
       </div>
@@ -383,7 +382,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
             <Field label="กริดจับจุด"><Select value={roof.snap} onChange={(v) => set("snap", Number(v))} options={[[0.1, "0.10 ม."], [0.25, "0.25 ม."], [0.5, "0.50 ม."], [1, "1.00 ม."]]} /></Field>
           </div>
         </Card>}
-        {mode === "plate" && g ? <PlateInputs d={roof.design} setD={setD} g={g} plates={pl.plates} sizes={pl.sizes} setInner={(v) => set("innerPlates", v)} onAutoInner={() => set("innerPlates", autoInnerPlates(g, fr))} drawn={!!roof.plates?.length} /> : mode === "loads" ? <LoadInputs d={roof.design} set={setD} g={g} onRoofing={(v) => TILES.includes(v) && (roof.frame.purlinSp < BATTEN_RANGE[0] || roof.frame.purlinSp > BATTEN_RANGE[1]) && set("frame", { ...roof.frame, purlinSp: 0.32 })} /> : mode === "design" ? <DesignInputs d={roof.design} set={setD} /> : mode === "frame" ? (<>
+        {mode === "plate" && g ? <PlateInputs d={roof.design} setD={setD} g={g} plates={pl.plates} sizes={pl.sizes} setInner={(v) => set("innerPlates", v)} onAutoInner={() => set("innerPlates", autoInnerPlates(g, fr))} drawn={!!roof.plates?.length} cols={!!roof.columns?.length} /> : mode === "loads" ? <LoadInputs d={roof.design} set={setD} g={g} onRoofing={(v) => TILES.includes(v) && (roof.frame.purlinSp < BATTEN_RANGE[0] || roof.frame.purlinSp > BATTEN_RANGE[1]) && set("frame", { ...roof.frame, purlinSp: 0.32 })} /> : mode === "design" ? <DesignInputs d={roof.design} set={setD} /> : mode === "frame" ? (<>
         <Card title="ระยะโครงหลังคา" icon={Ruler}>
           <div className="grid grid-cols-2 gap-3">
             {fv("rafterSp", "ระยะจันทัน", "m", "0.1")}{fv("purlinSp", "ระยะแป (ตามแนวเอียง)", "m", "0.05")}

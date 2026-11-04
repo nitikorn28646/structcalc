@@ -334,6 +334,17 @@ export default function App() {
   // the native pickers are refused inside a cross-origin frame (the claude.ai web copy runs in one): fall back to the file input /
   // a download there, and whenever a picker throws a SecurityError (user 2026-11-03: "เปิดไฟล์ไม่ได้: … Cross origin sub frames")
   const framed = (() => { try { return window.self !== window.top; } catch { return true; } })();
+  // print: inside the claude.ai frame window.print is blocked → the paged book as a file that prints itself (printReport standalone)
+  const [printBox, setPrintBox] = useState(null);
+  const onPrint = async () => {
+    if (!framed) return printReport();
+    setPrintBox({ busy: true });
+    try {
+      const html = await printReport({ standalone: true }), pages = (html.match(/class="pagedjs_page[ "]/g) ?? []).length;
+      const name = `รายการคำนวณ-${(st.project.name || "โครงการ").replace(/[\\/:*?"<>|]+/g, " ").trim()}.html`;
+      setPrintBox({ url: URL.createObjectURL(new Blob([html], { type: "text/html" })), name, pages });
+    } catch (e) { setPrintBox(null); setNotice({ ok: false, text: `จัดหน้ารายงานไม่ได้: ${e.message}` }); }
+  };
   const download = () => {
     const url = URL.createObjectURL(new Blob([projectJson()], { type: "application/json" }));
     Object.assign(document.createElement("a"), { href: url, download: fileName ?? baseName() }).click();
@@ -504,7 +515,7 @@ export default function App() {
                   <button onClick={newProject} className="rounded px-1.5 font-medium text-[#d92d20] underline">ทิ้งและเริ่มใหม่</button>
                   <button onClick={() => setAskNew(false)} className="rounded px-1.5">ยกเลิก</button></span>}
                 {mod !== "work" && <Button variant="secondary" icon={Building2} title="ข้อมูลโครงการ" onClick={() => setProjOpen(true)}><span className="hidden 2xl:inline">ข้อมูลโครงการ</span></Button>}
-                <Button icon={FileDown} onClick={printReport}>พิมพ์ / บันทึก PDF</Button>
+                <Button icon={FileDown} onClick={onPrint}>พิมพ์ / บันทึก PDF</Button>
               </div>
             </div>
           </header>
@@ -522,6 +533,16 @@ export default function App() {
                 </label>))}
             </div>
             <div className="flex justify-between text-[12px]"><button onClick={() => saveBrand({})} className="text-red-600">ลบรูปและลายเซ็น</button><button onClick={() => setBrandOpen(false)} className="rounded-md bg-brand-500 px-3 py-1 font-medium text-white">เสร็จ</button></div>
+          </DialogContent></Dialog>}
+          {printBox && <Dialog open onOpenChange={(o) => !o && setPrintBox(null)}><DialogContent className="max-w-lg">
+            <DialogTitle>พิมพ์ / บันทึก PDF</DialogTitle>
+            {printBox.busy ? <p className="text-[13px] text-gray-600">กำลังจัดหน้ารายการคำนวณ…</p> : <>
+            <p className="text-[13px] text-gray-600">หน้าเว็บนี้เปิดอยู่ในกรอบของ claude.ai ซึ่งไม่ยอมให้สั่งพิมพ์ จัดหน้ารายการคำนวณเป็นไฟล์ <b>{printBox.name}</b> แล้ว ({printBox.pages} หน้า) — เปิดไฟล์นั้นแล้วหน้าต่างพิมพ์จะขึ้นเอง เลือก "บันทึกเป็น PDF":</p>
+            <div className="flex flex-wrap gap-2 text-[13px]">
+              <button onClick={() => { const w = window.open(printBox.url, "_blank"); if (!w) setNotice({ ok: false, text: "เปิดแท็บใหม่ไม่ได้ (ถูกบล็อก) — ใช้ปุ่มดาวน์โหลด" }); }} className="rounded-md bg-brand-500 px-3 py-1.5 font-medium text-white">เปิดในแท็บใหม่แล้วพิมพ์</button>
+              <a href={printBox.url} download={printBox.name} className="rounded-md px-3 py-1.5 ring-1 ring-gray-300">ดาวน์โหลดไฟล์รายงาน (.html)</a>
+            </div>
+            <p className="text-[11px] text-gray-500">ไฟล์ที่ดาวน์โหลด: ดับเบิลคลิกเปิดใน Chrome / Edge → หน้าต่างพิมพ์ขึ้นเอง (หรือกด Ctrl+P) → ปลายทาง "บันทึกเป็น PDF" · ขนาดกระดาษ A4 ตั้งไว้ในไฟล์แล้ว · ถ้ารันโปรแกรมบนเครื่องตัวเอง ปุ่มพิมพ์จะเปิดหน้าต่างพิมพ์ตรง</p></>}
           </DialogContent></Dialog>}
           {saveBox && <Dialog open onOpenChange={(o) => !o && setSaveBox(null)}><DialogContent className="max-w-lg">
             <DialogTitle>บันทึกโครงการ</DialogTitle>
