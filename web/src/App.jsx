@@ -32,6 +32,7 @@ import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { autoInnerPlates } from "../engine/roofMembers.js";
 import { HelpCircle, Redo2, Undo2 } from "lucide-react";
 import { StepGuide, Tour, markTourSeen, tourSeen } from "./Help.jsx";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const BAR_OPTS = [["", "—"], ...Object.keys(BARS).map((k) => [k, k])];
 // single-member calculators (tools); the building itself is designed in the workflow
@@ -313,7 +314,7 @@ export default function App() {
   const fns = useMemo(() => spanFunctions(st.geom.type, st.geom.L, forces.w, forces.ML, forces.MR),
     [st.geom.type, st.geom.L, forces.w, forces.ML, forces.MR]);
   const [viewOpen, setViewOpen] = useState(false);
-  const openRef = useRef(null), [notice, setNotice] = useState(null);
+  const openRef = useRef(null), [notice, setNotice] = useState(null), [saveBox, setSaveBox] = useState(null);
   // project file: every module's inputs in one .json, to keep per job and reopen on any computer
   // project file: Chrome / Edge write the same .json again (File System Access API: Save = overwrite, Save As = choose);
   // other browsers download a copy. A new project starts empty (floors kept, no columns / beams).
@@ -327,8 +328,10 @@ export default function App() {
   const download = () => {
     const url = URL.createObjectURL(new Blob([projectJson()], { type: "application/json" }));
     Object.assign(document.createElement("a"), { href: url, download: fileName ?? baseName() }).click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
     setDirty(false); setNotice({ ok: true, text: "ดาวน์โหลดไฟล์โครงการแล้ว" });
+    // inside the claude.ai frame downloads can be blocked silently (user 2026-11-04: "บันทึกไม่ได้เลย") → offer copy / new tab too
+    if (framed) setSaveBox({ name: fileName ?? baseName(), url });
   };
   const saveAs = async () => {
     if (window.showSaveFilePicker && !framed) {
@@ -493,6 +496,17 @@ export default function App() {
             </div>
           </header>
           {mod === "work" && <StepGuide key={step} step={step} index={WORKFLOW.findIndex((w) => w[0] === step)} />}
+          {saveBox && <Dialog open onOpenChange={(o) => !o && setSaveBox(null)}><DialogContent className="max-w-lg">
+            <DialogTitle>บันทึกโครงการ</DialogTitle>
+            <p className="text-[13px] text-gray-600">หน้าเว็บนี้เปิดอยู่ในกรอบของ claude.ai ซึ่งอาจบล็อกการดาวน์โหลด ถ้าไม่มีไฟล์ <b>{saveBox.name}</b> ลงเครื่อง ใช้ทางใดทางหนึ่ง:</p>
+            <div className="flex flex-wrap gap-2 text-[13px]">
+              <a href={saveBox.url} download={saveBox.name} className="rounded-md bg-brand-500 px-3 py-1.5 font-medium text-white">ดาวน์โหลดอีกครั้ง</a>
+              <button onClick={() => { const w = window.open(saveBox.url, "_blank"); if (!w) setNotice({ ok: false, text: "เปิดแท็บใหม่ไม่ได้ (ถูกบล็อก) — ใช้ปุ่มคัดลอก" }); }} className="rounded-md px-3 py-1.5 ring-1 ring-gray-300">เปิดในแท็บใหม่ (แล้วกด Ctrl+S)</button>
+              <button onClick={async () => { const t = projectJson(); let ok = false; try { await navigator.clipboard.writeText(t); ok = true; } catch { const a = document.getElementById("sc-savetext"); a.select(); try { ok = document.execCommand("copy"); } catch { /* blocked */ } } setNotice({ ok, text: ok ? "คัดลอกแล้ว — วางลง Notepad แล้วบันทึกเป็น .json" : "คัดลอกอัตโนมัติไม่ได้ — คลิกในกล่องแล้ว Ctrl+A, Ctrl+C" }); }} className="rounded-md px-3 py-1.5 ring-1 ring-gray-300">คัดลอกข้อความโครงการ</button>
+            </div>
+            <textarea id="sc-savetext" readOnly value={projectJson()} className="h-28 w-full rounded border border-gray-200 p-1 font-mono text-[10px]" onFocus={(e) => e.target.select()} />
+            <p className="text-[11px] text-gray-500">คัดลอกแล้ววางใน Notepad บันทึกชื่อ {saveBox.name} — เปิดกลับด้วยปุ่ม "เปิด" ได้ตามปกติ · งานล่าสุดยังเก็บในเบราว์เซอร์นี้ด้วย (ปุ่ม "กู้คืน") · ถ้ารันโปรแกรมบนเครื่องตัวเอง ปุ่มบันทึกจะเขียนไฟล์ได้ตรง</p>
+          </DialogContent></Dialog>}
           {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} onNew={frame === DEFAULT_FRAME ? () => { closeTour(); newProject(); } : null} />}
 
           <ErrorBoundary resetKey={mod}>

@@ -8,11 +8,11 @@ const PAGE_CSS = `
   @top-left { content: string(rp-project); font: 8pt Sarabun, sans-serif; color: #667085; }
   @top-center { content: string(rp-sec); font: 8pt Sarabun, sans-serif; color: #344054; }
   @top-right { content: "รายการคำนวณออกแบบโครงสร้าง (" string(rp-method) ")"; font: 8pt Sarabun, sans-serif; color: #667085; }
-  @bottom-left { content: "StructCalc · " string(rp-member); font: 7.5pt Sarabun, sans-serif; color: #98a2b3; vertical-align: top; padding-top: 3mm; }
-  /* every sheet signed by the engineer (user 2026-11-04) */
-  @bottom-center { content: "ลงชื่อ ....................................................... วิศวกรผู้คำนวณ\\A" string(rp-eng); white-space: pre; text-align: center;
-    font: 8.5pt Sarabun, sans-serif; color: #344054; vertical-align: top; padding-top: 3mm; border-top: 0.6pt solid #98a2b3; }
-  @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 8pt Sarabun, sans-serif; color: #667085; vertical-align: top; padding-top: 3mm; }
+  @bottom-left { content: "StructCalc · " string(rp-member); font: 7.5pt Sarabun, sans-serif; color: #98a2b3; vertical-align: top; padding-top: 3mm; width: 40mm; }
+  /* every sheet signed by the engineer (user 2026-11-04) — one line (user: the registration number wrapped to a second line) */
+  @bottom-center { content: "ลงชื่อ ..................................  " string(rp-eng); white-space: nowrap; text-align: center;
+    font: 8pt Sarabun, sans-serif; color: #344054; vertical-align: top; padding-top: 3mm; border-top: 0.6pt solid #98a2b3; }
+  @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 8pt Sarabun, sans-serif; color: #667085; vertical-align: top; padding-top: 3mm; width: 24mm; }
 }
 /* the cover: no running header / footer (it carries its own signature block) */
 @page cover { margin: 14mm; @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-center { content: none; border: none; } @bottom-right { content: none; } }
@@ -72,7 +72,7 @@ export function Doc({ project, title, subtitle, memberLabel, member, summary, me
       <span className="rp-str-project hidden">{project.name}</span>
       <span className="rp-str-member hidden">{`${memberLabel} ${member}`}</span>
       <span className="rp-str-method hidden">{method}</span>
-      <span className="rp-str-eng hidden">{`(${project.engineer || ".............................................."})${project.license ? `  ทะเบียน ${project.license}` : ""}`}</span>
+      <span className="rp-str-eng hidden">{`(${project.engineer || "........................................"}) วิศวกรผู้คำนวณ${project.license ? ` ทะเบียน ${project.license}` : ""}`}</span>
       {bare ? <>{children}</> : <>
       <div className="mb-3 rounded-lg bg-[#465fff] px-4 py-3 text-[#fff]">
         <div className="text-[14pt] font-semibold leading-tight">{title}</div>
