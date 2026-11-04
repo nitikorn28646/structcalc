@@ -26,12 +26,12 @@ export function PlateInputs({ d, setD, g, plates, sizes, setInner, onAutoInner, 
         <Field label="เดี่ยว / คู่"><Select value={d.counts.plate} onChange={(v) => setD("counts", { ...d.counts, plate: Number(v) })} options={[[1, "เดี่ยว"], [2, "คู่"]]} /></Field>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <div className="col-span-2"><Field label="การรองรับอะเส"><Select value={d.plateSupport ?? "span"} onChange={(v) => setD("plateSupport", v)}
-          options={[["span", "ช่วงเดี่ยวระหว่างเสา (wL²/8)"], ["cont", "ต่อเนื่องผ่านเสา (wL²/10)"], ["beam", "วางบนคาน คสล. ตลอดแนว (ช่วง = ระยะพุก)"]]} /></Field></div>
+        <div className="col-span-2"><Field label="การรองรับอะเส"><Select value={d.plateSupport ?? "cont"} onChange={(v) => setD("plateSupport", v)}
+          options={[["cont", "คานต่อเนื่องผ่านเสา (วิเคราะห์จริง)"], ["span", "ช่วงเดี่ยวระหว่างเสา (wL²/8)"], ["beam", "วางบนคาน คสล. ตลอดแนว (ช่วง = ระยะพุก)"]]} /></Field></div>
         {d.plateSupport === "beam" && <Field label="ระยะพุกยึด" unit="m"><NumberInput value={d.plateAnchor ?? 1.0} step="0.1" onChange={(v) => setD("plateAnchor", v)} /></Field>}
         <Field label="ระยะแอ่นตัวยอมให้"><Select value={d.plateDefl ?? 360} onChange={(v) => setD("plateDefl", Number(v))} options={[[360, "L/360"], [240, "L/240 (ไม่มีฝ้าแขวน)"]]} /></Field>
       </div>
-      <p className="mt-1 text-[11px] text-gray-400">อะเสส่วนใหญ่ถูกบังคับด้วยระยะแอ่นตัว · ต่อเนื่อง = ต่อเชื่อมทะลุเสา (M ลด ~20 %, แอ่นลด ~47 %) · วางบนคาน คสล. = รับแรงข้ามแค่ระยะพุก</p>
+      <p className="mt-1 text-[11px] text-gray-400">อะเสส่วนใหญ่ถูกบังคับด้วยระยะแอ่นตัว · ต่อเนื่อง = แนวอะเสที่ต่อเชื่อมเต็มหน้าตัดผ่านหัวเสา วิเคราะห์เป็นคานต่อเนื่องจริง (M+ กลางช่วง, M− หัวเสา, ระยะแอ่นจริง) แนวที่มีช่วงเดียวคิดช่วงเดี่ยว · วางบนคาน คสล. = รับแรงข้ามแค่ระยะพุก</p>
       <div className="mt-3"><Field label="หน้าตัดตั้งต้นทุกช่วง"><SectionSelect value={d.pick.plate} onChange={(v) => setD("pick", { ...d.pick, plate: v })} /></Field></div>
       <div className="mt-3 space-y-1">
         <div className="text-[11px] text-gray-400">ขนาดที่ใช้ในแปลน</div>

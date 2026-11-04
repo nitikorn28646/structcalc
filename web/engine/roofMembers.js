@@ -1,6 +1,7 @@
 ﻿// Design every member group of a framed roof (ASD), auto-selecting the lightest passing section of each group.
 import { SECTIONS, findSection } from "./steelSections.js";
 import { FY, hip, pointBeam, purlin, rafter, simpleBeam } from "./roofDesign.js";
+import { solveBeam } from "./contBeam.js";
 
 export const ROOFINGS = { metal: ["เมทัลชีท", 7], cpac: ["กระเบื้องคอนกรีต", 50], ceramic: ["กระเบื้องเซรามิก", 60], fiber: ["ไฟเบอร์ซีเมนต์ลอนคู่", 17] };
 
@@ -258,12 +259,12 @@ export function designRoof(g, fr, roof, d) {
       const nCol = cuts.filter((t) => hasCol(t)).length;
       cuts.slice(1).forEach((t, j) => {
         const t0 = cuts[j], free = nCol > 0 ? (t0 === 0 && !hasCol(0) ? "p" : t === 1 && !hasCol(1) ? "q" : null) : null;
-        aSpans.push({ id: `plate-${i + 1}-${j + 1}`, label: `${free ? "อะเสยื่น" : "อะเส"} เส้น ${i + 1}${cuts.length > 2 ? ` ช่วง ${j + 1}/${cuts.length - 1}` : ""}`, p: P(t0), q: P(t), L: (t - t0) * L, free, loads: [] });
+        aSpans.push({ line: i, id: `plate-${i + 1}-${j + 1}`, label: `${free ? "อะเสยื่น" : "อะเส"} เส้น ${i + 1}${cuts.length > 2 ? ` ช่วง ${j + 1}/${cuts.length - 1}` : ""}`, p: P(t0), q: P(t), L: (t - t0) * L, free, loads: [] });
       });
     });
   } else {
     g.pts.forEach((p, i) => { const q = g.pts[(i + 1) % g.pts.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.max(1, Math.round(d.plateDiv?.[i + 1] ?? Math.ceil(L / d.plateSpan - 1e-9)));
-      for (let k = 0; k < n; k++) aSpans.push({ id: n > 1 ? `plate-${i + 1}-${k + 1}` : `plate-${i + 1}`, label: n > 1 ? `อะเส ขอบ ${i + 1} ช่วง ${k + 1}/${n}` : `อะเส ขอบ ${i + 1}`, p: [...lerp(p, q, k / n), g.H], q: [...lerp(p, q, (k + 1) / n), g.H], L: L / n, free: null, loads: [] }); });
+      for (let k = 0; k < n; k++) aSpans.push({ line: i, id: n > 1 ? `plate-${i + 1}-${k + 1}` : `plate-${i + 1}`, label: n > 1 ? `อะเส ขอบ ${i + 1} ช่วง ${k + 1}/${n}` : `อะเส ขอบ ${i + 1}`, p: [...lerp(p, q, k / n), g.H], q: [...lerp(p, q, (k + 1) / n), g.H], L: L / n, free: null, loads: [] }); });
   }
   // interior plates (B): two crossing inside both are not two simple spans side by side — the shorter one (stiffer) is the main
   // plate, the other is cut at the crossing and rests on it (same rule as the RC beams; ties: the one drawn first)
@@ -342,10 +343,10 @@ export function designRoof(g, fr, roof, d) {
   // anchor bolts d.plateAnchor (m, default 1.0); its load and the point loads go straight down into the RC beam.
   // d.plateDefl: deflection limit L/360 (default) or L/240 (roof without a hung ceiling); stress check unchanged (Fb = 0.6Fy)
   const plateRun = (section, count, L, pl = []) => {
-    const mode = d.plateSupport ?? "span", Ld = mode === "beam" ? Math.min(L, d.plateAnchor ?? 1.0) : L, onBeam = mode === "beam";
+    const mode = d.plateSupport ?? "cont", Ld = mode === "beam" ? Math.min(L, d.plateAnchor ?? 1.0) : L, onBeam = mode === "beam";
     const r = !onBeam && pl.length ? pointBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count, loads: pl })
       : simpleBeam({ ...base, section, selfW: section.w, transfer: ra.Rwall / D, L: Ld, count });
-    const km = mode === "cont" ? 0.8 : 1, kd = mode === "cont" ? 0.53 : 1, lim = d.plateDefl === 240 ? 240 : 360;
+    const km = 1, kd = 1, lim = d.plateDefl === 240 ? 240 : 360; // "cont" lines are solved as continuous beams (contRun); a lone span stays simple
     const fb = r.fb * km, dd = r.d * kd, dAllow = (Ld * 100) / lim;
     return { ...r, Mx: r.Mx * km, SxReq: r.SxReq * km, fb, d: dd, dAllow, Ld, mode, Rl: r.Rl ?? r.R, Rr: r.Rr ?? r.R, ok: fb <= r.Fb && dd <= dAllow };
   };
@@ -356,16 +357,69 @@ export function designRoof(g, fr, roof, d) {
     const Mx = r.Mx * 4 + xs.reduce((t, l) => t + l.P * l.x, 0), fb = (r.fb * Mx) / (r.Mx || 1), dd = r.d * 9.6 + xs.reduce((t, l) => t + (l.P * (l.x * 100) ** 2 * (3 * L * 100 - l.x * 100)) / (6 * EI), 0), dAllow = r.dAllow * 2;
     return { ...r, Mx, SxReq: (r.SxReq * Mx) / (r.Mx || 1), fb, d: dd, dAllow, R: r.w * (r.Ld ?? L) + xs.reduce((t, l) => t + l.P, 0), cant: true, ok: fb <= r.Fb && dd <= dAllow };
   };
-  for (const sp of aSpans) {
-    const pl = sp.loads.filter((l) => l.P > 0);
+  // "cont" (default, user 2026-11-04): each wall-plate line (one drawn plate / outline edge) is a real continuous beam over its columns,
+  // solved with contBeam (as the RC beams): rafter load w + point loads (posts, interior plates) and, by superposition, a unit UDL for
+  // the plate's own weight (w × section weight). Uniform EI along the line (the moments depend on the EI ratios only; exact when one
+  // section is used). Each span is checked with its own M+ (mid) / M− (over the columns), the true deflection (L/360 or L/240,
+  // cantilever end 2L) and gives its end shears as the loads on the columns. Lines with fewer than 2 supports fall back to plateRun.
+  const lim = d.plateDefl === 240 ? 240 : 360, wR = ra.Rwall / D;
+  const prof = (res) => res.el.map((el) => { // deflection along each element ×EI (EI = 1 in the solve): v'' = −M, matched to the node values
+    const n = 40, h = el.L / n, I1 = [0], I2 = [0];
+    for (let i = 1; i <= n; i++) { const k0 = -el.M((i - 1) * h), k1 = -el.M(i * h); I1.push(I1[i - 1] + ((k0 + k1) / 2) * h); I2.push(I2[i - 1] + ((I1[i - 1] + I1[i]) / 2) * h); }
+    const [d0, d1] = el.d, c1 = (d1 - d0 - I2[n]) / el.L;
+    return { M: Array.from({ length: n + 1 }, (_, i) => el.M(i * h)), v: I2.map((v, i) => v + d0 + c1 * i * h), V0: el.V(0), V1: el.V(el.L - 1e-9) };
+  });
+  const contLines = new Map();
+  if ((d.plateSupport ?? "cont") === "cont") {
+    // lines = chains of collinear spans sharing an end (plates drawn column to column are one continuous plate)
+    const par = aSpans.map((_, k) => k), root = (k) => (par[k] === k ? k : (par[k] = root(par[k])));
+    const dir = (sp) => { const L = Math.hypot(sp.q[0] - sp.p[0], sp.q[1] - sp.p[1]); return [(sp.q[0] - sp.p[0]) / L, (sp.q[1] - sp.p[1]) / L]; };
+    const same = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.02;
+    aSpans.forEach((a, i) => aSpans.forEach((b, j) => {
+      if (j <= i) return;
+      const u = dir(a), v = dir(b);
+      if (Math.abs(u[0] * v[1] - u[1] * v[0]) > 1e-3) return;
+      if ([[a.p, b.p], [a.p, b.q], [a.q, b.p], [a.q, b.q]].some(([x, y]) => same(x, y))) par[root(j)] = root(i);
+    }));
+    const byLine = new Map(); aSpans.forEach((sp, k) => { const r = root(k); if (!byLine.has(r)) byLine.set(r, []); byLine.get(r).push(k); });
+    for (const [line, ks0] of byLine) {
+      // order along the line; spans drawn the other way round are flipped (their point loads a measured from p)
+      const u = dir(aSpans[ks0[0]]), o = aSpans[ks0[0]].p, tt = (pt) => (pt[0] - o[0]) * u[0] + (pt[1] - o[1]) * u[1];
+      const ks = [...ks0].sort((a, b) => Math.min(tt(aSpans[a].p), tt(aSpans[a].q)) - Math.min(tt(aSpans[b].p), tt(aSpans[b].q)));
+      const flip = ks.map((k) => tt(aSpans[k].q) < tt(aSpans[k].p));
+      const sps = ks.map((k) => aSpans[k]), x = [0];
+      sps.forEach((sp) => x.push(x[x.length - 1] + sp.L));
+      const freeAt = (j, end) => { const f = sps[j].free; return f && (f === (flip[j] ? (end === "start" ? "q" : "p") : (end === "start" ? "p" : "q"))); };
+      const sup = x.map((_, i) => !((i === 0 && freeAt(0, "start")) || (i === x.length - 1 && freeAt(sps.length - 1, "end"))));
+      if (sup.filter(Boolean).length < 2 || sps.length < 2) continue;
+      const pts = sps.flatMap((sp, j) => sp.loads.filter((l) => l.P > 0).map((l) => ({ at: x[j] + (flip[j] ? sp.L - l.a : l.a), P: l.P, from: l.from })));
+      const L = x[x.length - 1], lo = solveBeam({ x, sup, loads: [{ a: 0, b: L, wa: wR, wb: wR }, ...pts] }), un = solveBeam({ x, sup, loads: [{ a: 0, b: L, wa: 1, wb: 1 }] });
+      if (lo.error || un.error) continue;
+      const line0 = { x, sup, pts, w: wR, label: sps[0].label.replace(/ ช่วง .*$/, ""), lo: prof(lo), un: prof(un) };
+      ks.forEach((k, j) => contLines.set(k, { ...line0, ks, j, flip: flip[j] }));
+    }
+  }
+  const contRun = (cl, section, count) => {
+    const j = cl.j, sw = section.w * count, a = cl.lo[j], u = cl.un[j], Ls = cl.x[j + 1] - cl.x[j], cant = !cl.sup[j] || !cl.sup[j + 1];
+    const s0 = simpleBeam({ ...base, section, selfW: section.w, transfer: cl.w, L: Ls, count }); // Fb and the section as the frozen sheet gives them
+    const Ms = a.M.map((m, i) => m + sw * u.M[i]), Mpos = Math.max(0, ...Ms), Mneg = Math.max(0, ...Ms.map((m) => -m)), Mx = Math.max(Mpos, Mneg);
+    const EI = (d.E * s0.section.Ix * count) / 1e4, dd = (Math.max(...a.v.map((v, i) => Math.abs(v + sw * u.v[i]))) / EI) * 100;
+    const dAllow = ((cant ? 2 : 1) * Ls * 100) / lim, fb = (Mx * 100) / (count * s0.section.Sx);
+    const R0 = a.V0 + sw * u.V0, R1 = -(a.V1 + sw * u.V1), [Rl, Rr] = cl.flip ? [R1, R0] : [R0, R1]; // Rl at the span's p, Rr at its q
+    return { ...s0, w: cl.w + sw, Mx, Mpos, Mneg, SxReq: (Mx * 100) / s0.Fb, fb, d: dd, dAllow, Ld: Ls, mode: "cont", Rl, Rr, R: cant ? (cl.sup[j] ? R0 : R1) : Math.max(Rl, Rr),
+      cont: true, cant, fixedEnd: cant ? ((cl.sup[j] !== cl.flip) ? "p" : "q") : null, P: cl.pts.filter((p) => p.at > cl.x[j] - 1e-6 && p.at < cl.x[j + 1] + 1e-6).reduce((t, p) => t + p.P, 0), ok: fb <= s0.Fb && dd <= dAllow };
+  };
+  for (const [k, sp] of aSpans.entries()) {
+    const pl = sp.loads.filter((l) => l.P > 0), cl = contLines.get(k);
     addMember("plate", "plate", "plate", sp.id, sp.label, sp.p, sp.q, sp.L,
-      (section, count) => (sp.free ? cantRun(section, count, sp.L, pl, sp.free === "p" ? "q" : "p") : plateRun(section, count, sp.L, pl)), { ...(sp.free ? { free: sp.free } : {}), loads: pl });
-    const m = members[members.length - 1], mode = d.plateSupport ?? "span";
+      (section, count) => (cl ? contRun(cl, section, count) : sp.free ? cantRun(section, count, sp.L, pl, sp.free === "p" ? "q" : "p") : plateRun(section, count, sp.L, pl)), { ...(sp.free ? { free: sp.free } : {}), loads: pl, ...(cl ? { contLine: sp.line } : {}) });
+    const m = members[members.length - 1], mode = d.plateSupport ?? "cont";
     if (mode === "beam" && !sp.free) { // straight down along the RC beam: the plate load at the anchors + each point load where it stands
       const n = Math.max(1, Math.round(sp.L / (d.plateAnchor ?? 1.0))), W = m.r.w * sp.L;
       m.bear = Array.from({ length: n + 1 }, (_, i) => ({ p: lerp(sp.p, sp.q, i / n).slice(0, 2), P: (W / n) * (i === 0 || i === n ? 0.5 : 1) }))
         .concat(pl.map((l) => ({ p: lerp(sp.p, sp.q, l.a / sp.L).slice(0, 2), P: l.P })));
-    } else if (sp.free) m.bear = [{ p: (sp.free === "p" ? sp.q : sp.p).slice(0, 2), P: m.r.R }];
+    } else if (m.r.cont) m.bear = m.r.cant ? [{ p: (m.r.fixedEnd === "p" ? sp.p : sp.q).slice(0, 2), P: m.r.R }] : [{ p: sp.p.slice(0, 2), P: m.r.Rl }, { p: sp.q.slice(0, 2), P: m.r.Rr }];
+    else if (sp.free) m.bear = [{ p: (sp.free === "p" ? sp.q : sp.p).slice(0, 2), P: m.r.R }];
     else m.bear = [{ p: sp.p.slice(0, 2), P: m.r.Rl ?? m.r.R }, { p: sp.q.slice(0, 2), P: m.r.Rr ?? m.r.R }];
   }
   members.filter((x) => x.group === "plate" && !x.inner).forEach((x, k) => { x.tag = `A${k + 1}`; x.edge = Number(x.id.split("-")[1]); });
@@ -420,5 +474,13 @@ export function designRoof(g, fr, roof, d) {
     x.weight ??= x.r.section.w * x.count * (x.len ?? 0);
     x.ok ??= x.r.ok;
   }
-  return { rows, members, warnings, loose, bearLoose, weight: rows.reduce((a, x) => a + x.weight, 0), ok: rows.every((x) => x.ok) };
+  // continuous wall-plate lines for the report diagrams: rafter load + each span's own weight (its chosen section) + point loads
+  const plateLines = [];
+  for (const [k, cl] of contLines) {
+    if (cl.j !== 0) continue;
+    const ms = cl.ks.map((kk) => members.find((m) => m.id === aSpans[kk].id));
+    plateLines.push({ label: cl.label, tags: ms.map((m) => m?.tag), x: cl.x, sup: cl.sup,
+      loads: [...ms.map((m, j) => ({ a: cl.x[j], b: cl.x[j + 1], wa: m?.r.w ?? cl.w, wb: m?.r.w ?? cl.w })), ...cl.pts.map((p) => ({ at: p.at, P: p.P }))] });
+  }
+  return { rows, members, warnings, loose, bearLoose, plateLines, weight: rows.reduce((a, x) => a + x.weight, 0), ok: rows.every((x) => x.ok) };
 }

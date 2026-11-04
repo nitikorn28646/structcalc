@@ -140,7 +140,7 @@ export function RoofReport({ roof, project , bare = false, nb = null }) {
           const { plates, sizes } = platesOf(dz), wall = plates.find((m) => !m.inner), inner = plates.filter((m) => m.inner);
           return (
             <Sec n={sn(6)} chapter={!bare} th="อะเส" en="Wall plate"
-              intro={`อะเสวางบนหัวผนังรับแรงปฏิกิริยาจากจันทัน ${fmt(wall?.r.w ?? 0)} กก./ม. (รวมน้ำหนักตัวเอง) ${{ cont: "คิดเป็นคานต่อเนื่องผ่านเสา M ≈ wL²/10 ระยะแอ่น ≈ 0.53 เท่าของช่วงเดี่ยว", beam: `วางบนคาน คสล. ตลอดแนว รับแรงข้ามช่วงระยะพุก ${fmt(roof.design?.plateAnchor ?? 1, 2)} ม. (wL²/8)` }[roof.design?.plateSupport] ?? "คิดเป็นคานช่วงเดี่ยว wL²/8 ระหว่างเสา"} ระยะแอ่นตัวไม่เกิน L/${roof.design?.plateDefl === 240 ? 240 : 360} ส่วนอะเสช่วงใน (B…) รับดั้งเป็นแรงจุดจากอกไก่/ตะเข้ แต่ละช่วงเลือกขนาดเหล็กได้เอง แปลนแสดงรหัสช่วง (A1, A2, …) และสีตามขนาดเหล็ก`}>
+              intro={`อะเสวางบนหัวผนังรับแรงปฏิกิริยาจากจันทัน ${fmt(wall?.r.w ?? 0)} กก./ม. (รวมน้ำหนักตัวเอง) ${{ beam: `วางบนคาน คสล. ตลอดแนว รับแรงข้ามช่วงระยะพุก ${fmt(roof.design?.plateAnchor ?? 1, 2)} ม. (wL²/8)` }[roof.design?.plateSupport] ?? ((roof.design?.plateSupport ?? "cont") === "cont" ? "คิดเป็นคานต่อเนื่องผ่านเสา วิเคราะห์ด้วยวิธีสติฟเนส (EI คงที่ตลอดแนว) ตรวจโมเมนต์บวกกลางช่วง โมเมนต์ลบที่หัวเสา และระยะแอ่นจริงของแต่ละช่วง แรงปฏิกิริยาลงเสาจากคานต่อเนื่อง (ต้องต่อเชื่อมเหล็กเต็มหน้าตัดและยึดหัวเสาทุกต้น) · แนวที่มีช่วงเดียวคิดเป็นช่วงเดี่ยว wL²/8" : "คิดเป็นคานช่วงเดี่ยว wL²/8 ระหว่างเสา")} ระยะแอ่นตัวไม่เกิน L/${roof.design?.plateDefl === 240 ? 240 : 360} ส่วนอะเสช่วงใน (B…) รับดั้งเป็นแรงจุดจากอกไก่/ตะเข้ แต่ละช่วงเลือกขนาดเหล็กได้เอง แปลนแสดงรหัสช่วง (A1, A2, …) และสีตามขนาดเหล็ก`}>
               <Figure caption={`แปลนอะเส — ${plates.length} ช่วง · ${sizes.map((x) => plateText(x)).join(" / ")}`}>
                 <Drawing model={plateModel(g, plates, fr.posts)} className="mx-auto h-[105mm]" fontSize={10} width={640} />
               </Figure>
@@ -150,10 +150,18 @@ export function RoofReport({ roof, project , bare = false, nb = null }) {
                   <tr key={m.id} className="border-b border-gray-100">
                     <td className="py-0.5 pr-2 font-semibold" style={{ color: m.color }}>{m.tag}{m.typeName ? ` (${m.typeName})` : ""}</td><td className="pr-2">{m.inner ? "ช่วงใน (รับดั้ง)" : m.label.replace("อะเส ", "")}</td>
                     <td className="pr-2 tabular-nums">{fmt(m.span, 2)}</td><td className="pr-2">{secText(m)}</td>
-                    <td className="pr-2 tabular-nums">{fmt(m.r.Mx, 1)}</td><td className="pr-2 tabular-nums">{fmt(m.r.fb, 0)} / {fmt(m.r.Fb, 0)}</td>
+                    <td className="pr-2 tabular-nums">{m.r.cont ? `+${fmt(m.r.Mpos, 0)} / −${fmt(m.r.Mneg, 0)}` : fmt(m.r.Mx, 1)}</td><td className="pr-2 tabular-nums">{fmt(m.r.fb, 0)} / {fmt(m.r.Fb, 0)}</td>
                     <td className="pr-2 tabular-nums">{fmt(m.r.d, 2)} / {fmt(m.r.dAllow, 2)}</td><td>{m.r.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
                   </tr>))}</tbody>
               </table>
+              {(dz.plateLines ?? []).length > 0 && (<>
+                <Sub>อะเสต่อเนื่อง — น้ำหนัก แรงเฉือน และโมเมนต์ของแต่ละแนว</Sub>
+                <p className="text-[9pt] text-gray-600">น้ำหนักแผ่ = แรงปฏิกิริยาจันทัน + น้ำหนักเหล็กของแต่ละช่วง · แรงจุด = ดั้ง / ตุ๊กตา / อะเสช่วงในที่วางบนแนว · ▲ = เสา · โมเมนต์ลบที่หัวเสาให้ต่อเหล็กเต็มหน้าตัด หรือวางรอยต่อห่างจากเสาประมาณ 0.2 L</p>
+                {dz.plateLines.map((ln, i) => (
+                  <Figure key={i} caption={`${ln.label} — ช่วง ${ln.tags.join(", ")} · ยาวรวม ${fmt(ln.x[ln.x.length - 1], 2)} ม.`}>
+                    <MemberDiagram x={ln.x} sup={ln.sup} loads={ln.loads} />
+                  </Figure>))}
+              </>)}
               {inner.length > 0 && (<>
                 <Sub>อะเสช่วงใน — แรงจุดที่รับและแรงปฏิกิริยา</Sub>
                 <p className="text-[9pt] text-gray-600">แรงจุดคือแรงปฏิกิริยาของอกไก่/ตะเข้/สะพานที่ลงดั้งหรือตุ๊กตา และแรงปลายของอะเสช่วงในตัวอื่นที่วางพาด (B…) ระยะวัดจากปลายต้น ·
