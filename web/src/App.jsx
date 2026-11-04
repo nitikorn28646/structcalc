@@ -315,6 +315,11 @@ export default function App() {
     [st.geom.type, st.geom.L, forces.w, forces.ML, forces.MR]);
   const [viewOpen, setViewOpen] = useState(false);
   const openRef = useRef(null), [notice, setNotice] = useState(null), [saveBox, setSaveBox] = useState(null);
+  // screen space (user 2026-11-04): left steps folded to icons, focus = plan only (no side bars / guide), remembered per browser
+  const [mini, setMiniState] = useState(() => { try { return localStorage.getItem("structcalc.side") === "mini"; } catch { return false; } });
+  const setMini = (v) => { setMiniState(v); try { localStorage.setItem("structcalc.side", v ? "mini" : "full"); } catch { /* ignore */ } };
+  const [focus, setFocus] = useState(false), side = focus ? 0 : mini ? 60 : 230;
+  useEffect(() => { const k = (e) => { if (e.key === "Escape" && focus && !["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) setFocus(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [focus]);
   // project file: every module's inputs in one .json, to keep per job and reopen on any computer
   // project file: Chrome / Edge write the same .json again (File System Access API: Save = overwrite, Save As = choose);
   // other browsers download a copy. A new project starts empty (floors kept, no columns / beams).
@@ -413,26 +418,27 @@ export default function App() {
   return (
     <>
       <div className="app flex min-h-screen xl:h-screen xl:overflow-hidden">
-        <aside className={`fixed inset-y-0 left-0 z-20 w-[230px] border-r border-gray-200 bg-white px-4 transition-transform lg:translate-x-0 ${menuOpen ? "translate-x-0" : "-translate-x-full"}`}>
-          <div className="flex items-center gap-2.5 py-5 text-xl font-semibold text-gray-900">
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500 text-[#fff]"><Calculator className="h-5 w-5" /></span>
-            StructCalc
+        {!focus && <aside style={{ width: mini ? 60 : 230 }} className={`fixed inset-y-0 left-0 z-20 overflow-y-auto border-r border-gray-200 bg-white ${mini ? "px-2" : "px-4"} transition-transform lg:translate-x-0 ${menuOpen ? "translate-x-0" : "-translate-x-full"}`}>
+          <div className={`flex items-center gap-2.5 text-xl font-semibold text-gray-900 ${mini ? "flex-col py-3" : "py-4"}`}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-500 text-[#fff]"><Calculator className="h-5 w-5" /></span>
+            {!mini && "StructCalc"}
+            <button onClick={() => setMini(!mini)} title={mini ? "ขยายแถบขั้นตอน" : "พับแถบขั้นตอน (เหลือไอคอน)"} className={`${mini ? "" : "ml-auto"} grid h-7 w-7 place-items-center rounded-md text-[13px] text-gray-400 ring-1 ring-gray-200 hover:bg-gray-50`}>{mini ? "»" : "«"}</button>
           </div>
-          <p className="mb-1.5 text-xs uppercase tracking-wider text-gray-400">ขั้นตอนออกแบบ</p>
+          {!mini && <p className="mb-1.5 text-xs uppercase tracking-wider text-gray-400">ขั้นตอนออกแบบ</p>}
           <nav className="space-y-0.5">
             {WORKFLOW.map(([key, label], i) => {
               const nBeam = fres.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nCol = fres.columns.filter((c) => !c.ok).length, nFoot = fres.footings.filter((f) => !f.ok).length;
               const warn = (key === "design" && nBeam + nCol > 0) || (key === "footing" && nFoot > 0) || (key === "frame" && fres.warnings.length > 0);
               const on = mod === "work" && step === key;
               return (
-                <button key={key} onClick={() => { setStep(key); setMenuOpen(false); }}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium ${on ? "bg-brand-50 text-brand-500" : "text-gray-700 hover:bg-gray-100"}`}>
-                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${on ? "bg-brand-500 text-[#fff]" : warn ? "bg-[#fef3f2] text-[#d92d20]" : "bg-gray-100 text-gray-500"}`}>{warn ? "!" : i}</span>{label}
+                <button key={key} onClick={() => { setStep(key); setMenuOpen(false); }} title={mini ? `${i}. ${label}` : undefined}
+                  className={`flex w-full items-center ${mini ? "justify-center" : ""} gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium ${on ? "bg-brand-50 text-brand-500" : "text-gray-700 hover:bg-gray-100"}`}>
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${on ? "bg-brand-500 text-[#fff]" : warn ? "bg-[#fef3f2] text-[#d92d20]" : "bg-gray-100 text-gray-500"}`}>{warn ? "!" : i}</span>{!mini && label}
                 </button>
               );
             })}
           </nav>
-          <button onClick={() => setToolsOpen(!toolsOpen)} className="mb-1.5 mt-4 flex w-full items-center text-left text-xs uppercase tracking-wider text-gray-400 hover:text-gray-600">
+          {!mini && <><button onClick={() => setToolsOpen(!toolsOpen)} className="mb-1.5 mt-4 flex w-full items-center text-left text-xs uppercase tracking-wider text-gray-400 hover:text-gray-600">
             เครื่องมือคำนวณเดี่ยว <span className="ml-auto">{toolsOpen || mod !== "work" ? "▾" : "▸"}</span></button>
           {(toolsOpen || mod !== "work") && <nav className="space-y-0.5">
             <p className="px-3 pb-1 text-[11px] text-gray-400">คำนวณทีละชิ้น ไม่เกี่ยวกับโครงการทั้งหลัง</p>
@@ -443,11 +449,11 @@ export default function App() {
                 {!key && <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-400">เร็วๆ นี้</span>}
               </button>
             ))}
-          </nav>}
-        </aside>
+          </nav>}</>}
+        </aside>}
         {menuOpen && <div className="fixed inset-0 z-10 bg-black/50 lg:hidden" onClick={() => setMenuOpen(false)} />}
 
-        <div className="flex min-w-0 flex-1 flex-col lg:ml-[230px]">
+        <div className="flex min-w-0 flex-1 flex-col lg:ml-[var(--side)]" style={{ "--side": `${side}px` }}>
           <header className="border-b border-gray-200 bg-white">
             <div className="flex items-center gap-3 px-4 py-2.5 md:px-5">
               <button className="grid h-10 w-10 place-items-center rounded-lg border border-gray-200 text-gray-500 lg:hidden" onClick={() => setMenuOpen(true)}>
@@ -470,6 +476,8 @@ export default function App() {
                   <button onClick={() => restore("undo", "redo")} disabled={!hist.current.undo.length} title="ย้อนกลับ (Ctrl+Z)" className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100 disabled:opacity-40"><Undo2 className="h-4 w-4" /></button>
                   <button onClick={() => restore("redo", "undo")} disabled={!hist.current.redo.length} title="ทำซ้ำ (Ctrl+Y)" className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100 disabled:opacity-40"><Redo2 className="h-4 w-4" /></button>
                 </>}
+                {mod === "work" && <button onClick={() => { const on = !focus; setFocus(on); try { if (on) document.documentElement.requestFullscreen?.().catch(() => {}); else if (document.fullscreenElement) document.exitFullscreen?.(); } catch { /* frame may refuse */ } }}
+                  title={focus ? "ออกจากโหมดเต็มจอ (Esc)" : "เต็มจอ: ซ่อนแถบซ้าย แผงขวา และแถบวิธีใช้"} className={`grid h-10 w-10 place-items-center rounded-lg ring-1 ${focus ? "bg-brand-500 text-[#fff] ring-brand-500" : "text-gray-500 ring-gray-300 hover:bg-gray-100"}`}>{focus ? "⤡" : "⤢"}</button>}
                 <button onClick={() => setTour(true)} title="วิธีใช้โปรแกรม"
                   className="grid h-10 w-10 place-items-center rounded-lg text-gray-500 ring-1 ring-gray-300 hover:bg-gray-100"><HelpCircle className="h-4 w-4" /></button>
                 <button onClick={() => setDark(!dark)} title={dark ? "ธีมสว่าง" : "ธีมมืด"}
@@ -495,7 +503,7 @@ export default function App() {
               </div>
             </div>
           </header>
-          {mod === "work" && <StepGuide key={step} step={step} index={WORKFLOW.findIndex((w) => w[0] === step)} />}
+          {mod === "work" && !focus && <StepGuide key={step} step={step} index={WORKFLOW.findIndex((w) => w[0] === step)} />}
           {saveBox && <Dialog open onOpenChange={(o) => !o && setSaveBox(null)}><DialogContent className="max-w-lg">
             <DialogTitle>บันทึกโครงการ</DialogTitle>
             <p className="text-[13px] text-gray-600">หน้าเว็บนี้เปิดอยู่ในกรอบของ claude.ai ซึ่งอาจบล็อกการดาวน์โหลด ถ้าไม่มีไฟล์ <b>{saveBox.name}</b> ลงเครื่อง ใช้ทางใดทางหนึ่ง:</p>
@@ -515,7 +523,7 @@ export default function App() {
               <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง (หลังคา → โครงสร้าง → ฐานราก) · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
               <WorkReport frame={frame} roof={roof} project={st.project} />
             </div></main>
-          ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} onProjectInfo={() => setProjOpen(true)}  onRoofFromFrame={roofFromStructure} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
+          ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} focus={focus} onProjectInfo={() => setProjOpen(true)}  onRoofFromFrame={roofFromStructure} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
           <main className="grid min-h-0 flex-1 gap-4 p-4 md:p-5 xl:grid-cols-[300px_1fr_1fr_1.15fr] xl:grid-rows-[auto_1fr]">
             {/* inputs */}
             <div className="space-y-4 xl:row-span-2 xl:overflow-y-auto">

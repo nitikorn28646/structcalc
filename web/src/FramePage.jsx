@@ -200,7 +200,7 @@ const STEPS = [["frame", "1 โครง", false, "ขั้น 1 โครง: 
   ["wall", "4 ผนัง", false, "ขั้น 4 ผนัง"], ["other", "5 น้ำหนักอื่น", false, "ขั้น 5 น้ำหนักอื่น: ราวกันตก น้ำหนักจุด แรงจากหลังคา"], ["result", "6 ผลคาน", false, "ผลออกแบบคาน (WSD)"], ["cols", "7 ผลเสา", false, "ผลออกแบบเสา (WSD)"],
   ["types", "Type คาน", false, "ตาราง Type คาน"], ["ctypes", "Type เสา", false, "ตาราง Type เสา"]];
 
-export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo, onRoofFromFrame }) {
+export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo, onRoofFromFrame, focus = false }) {
   const [multiSel, setMultiSel] = useState([]), [pickSet, setPickSet] = useState(null), [armed, setArmed] = useState(false), pickRef = useRef(null); // Load Cases page
   const [subState, setSubState] = useState(null), [view, setView] = useState("2d"), [sel, setSel] = useState(null), mode = step, setMode = () => {};
   const [show, setShow] = useState({ DL: true, SDL: true, WALL: true, LL: true, SP: true }), wallTypes = frame.wallTypes ?? DEFAULT_WALL_TYPES;
@@ -285,7 +285,15 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
-  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
+  // one toolbar row (user 2026-11-04: wasted space on top): sub-tabs + 2D/3D switch go into the board's own toolbar when the plan alone
+  // fills the centre; otherwise they keep their row
+  const pageNow = (step === "analysis" && ["frame3d", "colf"].includes(sub)) || step === "project" || (step === "design" && ["types", "ctypes", "slabs"].includes(sub)) || step === "footing" || (step === "loads" && ["groups", "lateral"].includes(sub));
+  const boardOnly = !pageNow && view === "2d" && !(step === "stair" && sel?.kind === "stair") && !(step === "analysis" && sub === "cont");
+  const tabsBar = (<div className="flex flex-wrap items-center gap-2">
+    {subs && <Tabs value={sub} onValueChange={(k) => { setSubState(k); setSel(null); }}><TabsList>{subs.map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
+    {!pageNow && step !== "footing" && <Tabs value={view} onValueChange={setView}><TabsList>{[["2d", "แปลน 2D"], ["3d", "3D"], ["split", "2D + 3D"]].map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
+  </div>);
+  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
   const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
@@ -594,6 +602,17 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <div className="grid grid-cols-2 gap-3">
             {fv("t", "พื้นหนา (ค่าเริ่มต้น)", "m", "0.01")}
           </div>
+          {(() => { // floor summary (user: the empty right card): counts, loads, what fails — click selects it
+            const ngS = an.spans.filter((x) => !x.ok), ngC = colsHere.filter((c) => !c.ok), tot = Object.values(an.groups ?? {}).reduce((a, b) => a + b, 0);
+            return <div className="mt-2 space-y-1 border-t border-gray-100 pt-2 text-[12px] tabular-nums text-gray-600">
+              <div className="grid grid-cols-3 gap-1 text-center">{[["เสา", fl.columns.length], ["คาน", fl.beams.length], ["แผ่นพื้น", an.panels.length]].map(([t, n]) => <div key={t} className="rounded-md bg-gray-50 py-1"><div className="text-[15px] font-semibold text-gray-800">{n}</div>{t}</div>)}</div>
+              <p className="flex justify-between"><span>น้ำหนักลงเสาทั้งชั้น</span><b>{fmt(tot / 1000, 1)} ตัน</b></p>
+              <p className="flex justify-between"><span>ช่วงคานผ่าน</span><b className={ngS.length ? "text-red-600" : "text-green-600"}>{an.spans.length - ngS.length}/{an.spans.length}</b></p>
+              <p className="flex justify-between"><span>เสาใต้ชั้นนี้ผ่าน</span><b className={ngC.length ? "text-red-600" : "text-green-600"}>{colsHere.length - ngC.length}/{colsHere.length}</b></p>
+              {(ngS.length > 0 || ngC.length > 0) && <div className="max-h-40 overflow-auto rounded-md bg-red-50 p-1.5 text-red-700">
+                {ngS.map((x) => <button key={x.id} onClick={() => setSel({ kind: "beam", i: x.member })} className="block w-full truncate text-left hover:underline">✕ ช่วง {x.id} {x.typeName ?? x.type?.name} — {spanReasons(x.check)[0] ?? "ไม่ผ่าน"}</button>)}
+                {ngC.map((c) => <button key={c.i} onClick={() => setSel({ kind: "column", i: c.i })} className="block w-full truncate text-left hover:underline">✕ เสา ({fmt(fl.columns[c.i]?.[0], 2)}, {fmt(fl.columns[c.i]?.[1], 2)}) {cTypes[c.typeIdx]?.name}</button>)}</div>}
+            </div>; })()}
           <p className="mt-1 text-[11px] text-gray-400">{step === "frame" ? "วาดเสา คาน แล้วคลิกแผ่นพื้นที่เกิดจากคานล้อมรอบเพื่อเลือกชนิด S / PS / GS ความหนา ช่องเปิด · เครื่องมือ \"พื้นยื่น\" คลิกบนคานด้านที่จะยื่น · ตารางแผ่นพื้นทั้งชั้นอยู่แถบขวา · " : ""}น้ำหนักปูผิว / จร ใส่ที่ขั้น "น้ำหนักบรรทุก" · ระดับ / ความสูงชั้นแก้ในขั้น 1</p>
         </Card>;
   const [drawer, setDrawer] = useState(null), resultStep = ["analysis", "design", "footing"].includes(step);
@@ -643,11 +662,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         <PanelGroup direction="horizontal" autoSaveId={`structcalc.panels.${dTab && dTab !== "warn" ? "3" : "2"}`} className="min-w-0 flex-1">
         <Panel id="centre" order={1} minSize={30} className="flex min-w-0 flex-col">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-2">
-            {subs && <Tabs value={sub} onValueChange={(k) => { setSubState(k); setSel(null); }}><TabsList>{subs.map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
-            {!page && step !== "footing" && <Tabs value={view} onValueChange={setView} className="ml-auto"><TabsList>{[["2d", "แปลน 2D"], ["3d", "3D"], ["split", "2D + 3D"]].map(([k, t]) => <TabsTrigger key={k} value={k}>{t}</TabsTrigger>)}</TabsList></Tabs>}
-          </div>
-          <div className="relative flex min-h-0 flex-1 flex-col p-3">{overlapBar}{center}
+          {!(boardOnly && !page) && <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-1.5">{tabsBar}</div>}
+          <div className={`relative flex min-h-0 flex-1 flex-col ${focus ? "p-1.5" : "p-2"}`}>{overlapBar}{center}
             {dTab === "warn" && ( // warnings float over the plan (user 2026-11-04: the side panel made the plan smaller)
               <div className="absolute right-4 top-4 z-30 flex max-h-[60%] w-[min(460px,60%)] flex-col rounded-xl border border-gray-200 bg-white/95 shadow-lg backdrop-blur dark:border-gray-700 dark:bg-gray-900/95">
                 <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-1.5 text-[13px] font-semibold text-gray-800 dark:border-gray-700 dark:text-gray-100">⚠ คำเตือน ({res.warnings.length})
@@ -697,8 +713,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 : warnList}
           </div>
         </Panel></>}
-        <Handle />
-        <Panel id="inspector" order={3} defaultSize={20} minSize={14} maxSize={40}><aside className="h-full space-y-3 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3">{inspector}</aside></Panel>
+        {!focus && <><Handle />
+        <Panel id="inspector" order={3} defaultSize={20} minSize={14} maxSize={40}><aside className="h-full space-y-3 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3">{inspector}</aside></Panel></>}
         </PanelGroup>
         <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-l border-gray-200 bg-white py-2">
           {tabsNow.map(([k, t]) => <Tip key={k} text={t} side="left"><button onClick={() => setDrawer(dTab === k ? null : k)}
