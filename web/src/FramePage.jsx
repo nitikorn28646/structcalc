@@ -18,6 +18,8 @@ import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import { beamCost, generateBeamTypes } from "../engine/beamTypes.js";
 import { findOverlaps, mergeOverlaps } from "../engine/floor.js";
+import { locateWarning } from "./warnLocate.js";
+import { highlight } from "./highlight.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, spanReasons, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { analyzeFrame, stackKey } from "../engine/frame.js";
@@ -201,6 +203,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   // copy the floor below (columns and beams) — most floors repeat the one under them
   const copyBelow = cur > 0 ? (withBeams = true) => { const b = frame.floors[cur - 1]; setFloor({ columns: b.columns.map((c) => [...c]), beams: withBeams ? b.beams.map((x) => ({ ...x, a: [...x.a], b: [...x.b] })) : [] }); } : null;
   const goFloor = (i) => { set("cur", i); setSel(null); };
+  const [pinW, setPinW] = useState(null); // warning clicked in the list: its place keeps flashing
   const colsHere = res.columns.filter((c) => c.floor === cur), colAt = (i) => colsHere.find((c) => c.i === i);
   const setMat = (k, v) => set("mat", { ...frame.mat, [k]: v });
   const [critMsg, setCritMsg] = useState(""), [libSel, setLibSel] = useState(null);
@@ -273,7 +276,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const drawerTabs = [["spans", `ช่วงคาน (${an.spans.length})`], ["cols", `เสา (${res.stacks.length})`], ["groups", "น้ำหนักแยกกลุ่ม"], ["warn", `คำเตือน (${res.warnings.length})`]];
   const nBeamNG = res.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nBeam = res.floors.reduce((a, f) => a + f.spans.length, 0), nColNG = res.columns.filter((c) => !c.ok).length;
   const tab = (on) => `rounded-md px-3 py-1 text-xs font-medium ${on ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500 hover:text-gray-700"}`;
-  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark} resolveW={resolveW} libItem={libItem} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
+  const boardEl = (<FloorBoard floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
   const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
@@ -647,7 +650,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             <p className="text-[11px] text-gray-400">ติ๊กเพื่อแสดงค่าบนแปลน · วิเคราะห์ทุกกลุ่มรวมกัน (WSD) · สร้างจากล่างขึ้นบน คำนวณจากบนลงล่าง</p>
           </div>
         </Card></div>
-                : res.warnings.length ? res.warnings.map((w) => <p key={w} className="py-0.5 text-[12px] text-red-600">{w}</p>) : <p className="text-[12px] text-gray-400">ไม่มีคำเตือน</p>}
+                : res.warnings.length ? res.warnings.map((w) => { const at = locateWarning(w, frame, res); return (
+                  <p key={w} onMouseEnter={() => at && highlight(at)} onMouseLeave={() => pinW !== w && highlight(pinW ? locateWarning(pinW, frame, res) : null)} onClick={() => { if (!at) return; const off = pinW === w; setPinW(off ? null : w); highlight(off ? null : at); if (!off && at.floor !== undefined && at.floor !== cur) goFloor(at.floor); }}
+                    className={`rounded px-1 py-0.5 text-[12px] text-red-600 ${at ? "cursor-pointer hover:bg-red-50" : ""} ${pinW === w ? "bg-red-50 ring-1 ring-red-300" : ""}`} title={at ? "ชี้ = กระพริบบนแปลน / 3D · คลิก = ค้างไว้ (และไปชั้นนั้น) · คลิกซ้ำ = เลิก" : ""}>{at?.p || at?.segs?.length ? "⌖ " : ""}{w}</p>); }) : <p className="text-[12px] text-gray-400">ไม่มีคำเตือน</p>}
           </div>
         </Panel></>}
         <Handle />

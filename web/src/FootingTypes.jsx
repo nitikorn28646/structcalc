@@ -29,7 +29,7 @@ const Num = ({ v, on, step = "0.05", w = "w-16" }) => <input type="number" step=
 export function FootingTypes({ frame, set, res }) {
   const types = frame.footTypes ?? [], pick = frame.footPick ?? {}, fo = frame.footing ?? {}, loads = frame.pileLoads;
   const [selStack, setSelStack] = useState(null);
-  const safe = (p) => (loads ? loads[p] ?? PILE_SAFE[p] : fo.Psafe ?? 18000);
+  const safe = (p) => loads?.[p] ?? PILE_SAFE[p] ?? fo.Psafe ?? 18000;
   const setSafe = (p, t) => set("pileLoads", { ...Object.fromEntries(Object.keys(PILES).map((k) => [k, safe(k)])), [p]: Math.round(t * 1000) });
   // site soil: one value for every spread footing (older files: taken from the first spread type that had its own)
   const t0s = types.find((t) => t.kind === "spread" && t.qa), soil = { qa: frame.soil?.qa ?? t0s?.qa ?? 10000, gamma: frame.soil?.gamma ?? t0s?.gamma ?? 1800 };
@@ -150,7 +150,7 @@ export function FootingTypes({ frame, set, res }) {
         <div className="grid grid-cols-2 gap-x-6 md:grid-cols-4 xl:grid-cols-6">{Object.entries(PILES).map(([p, d]) => (
           <label key={p} className="flex items-center justify-between gap-2 border-b border-gray-100 py-0.5"><span>{p} <span className="text-gray-400">{KIND(p)} {fmt(d.b * 100, 0)} ซม.</span></span>
             <span className="flex items-center gap-1"><Num v={safe(p) / 1000} on={(v) => setSafe(p, v)} step="1" w="w-14" />ตัน</span></label>))}</div>
-        {!loads && <p className="mt-1 text-[11px] text-[#b54708]">ยังใช้ค่าเดิม {fmt((fo.Psafe ?? 18000) / 1000, 0)} ตัน ทุกขนาด — แก้ช่องใดช่องหนึ่งเพื่อใช้ค่าแยกตามขนาด (ค่าเริ่มต้นแต่ละขนาดเป็นค่าประมาณ ต้องตรวจกับผู้ผลิต)</p>}
+        {!loads && <p className="mt-1 text-[11px] text-gray-500">ค่ามาตรฐาน: I-18 = 18 ต. · I-22 = 22 ต. · I-26 = 26 ต. (ขนาดอื่นเป็นค่าประมาณ ต้องตรวจกับผู้ผลิต) — แก้ช่องใดก็ได้ แล้ว "บันทึกเป็นค่ามาตรฐานของฉัน" ในขั้น 0</p>}
       </section>
     </div>
   );

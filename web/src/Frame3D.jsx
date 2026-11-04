@@ -1,20 +1,27 @@
 // 3D model of the whole building at true sizes: footings + piles, columns, beams, slabs (S / PS / GS), cantilever slabs, walls,
 // stairs and the steel roof. Every layer can be switched off; floors can be shown all / up to the current one / current only.
 // Plan x,y → three x,-z; height → y. Base (y = 0) = top of the footings.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { arcPolyline } from "../engine/arc.js";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Bounds, Edges, Grid, OrbitControls } from "@react-three/drei";
 import { Maximize2, Minimize2 } from "lucide-react";
 import * as THREE from "three";
 import { TYPE_COLORS } from "./FloorBoard.jsx";
 import { DEFAULT_WALL_TYPES, resolveWall, wallThick, wallsOf } from "../engine/floor.js";
 import { useHighlight } from "./highlight.js";
+import { beamPieces, edgeWidth, insetPolygon } from "./joints3d.js";
 
 const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"]];
 const WALL_T = { brick: 0.1, brick2: 0.2, block: 0.1, light: 0.1, gypsum: 0.1 }; // wall thickness (m) incl. plaster
 const CONC = "#b8bcc6", SLAB = { S: "#c9ccd4", PS: "#a9c4b0", GS: "#b5a58f" };
 
+// flashing marker for a highlighted warning: red emissive, opacity pulsing
+function Blink({ children }) {
+  const m = useRef();
+  useFrame(({ clock }) => { if (m.current) m.current.opacity = 0.35 + 0.6 * Math.abs(Math.sin(clock.elapsedTime * 4)); });
+  return <mesh>{children}<meshStandardMaterial ref={m} color="#d92d20" emissive="#d92d20" emissiveIntensity={0.8} transparent depthTest={false} /></mesh>;
+}
 // box from plan point p to q, width w (across), bottom z0, height h
 function Box({ p, q, w, z0, h, color, opacity = 1, edges }) {
   const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy);
@@ -32,7 +39,7 @@ function Prism({ P, z0, t, color, opacity = 1, edges }) {
   const geo = useMemo(() => new THREE.ExtrudeGeometry(new THREE.Shape(P.map(([x, y]) => new THREE.Vector2(x, y))), { depth: t, bevelEnabled: false }), [P, t]);
   return (
     <mesh geometry={geo} rotation={[-Math.PI / 2, 0, 0]} position={[0, z0, 0]}>
-      <meshStandardMaterial color={color} transparent={opacity < 1} opacity={opacity} depthWrite={opacity >= 1} side={THREE.DoubleSide} />
+      <meshStandardMaterial color={color} transparent={opacity < 1} opacity={opacity} depthWrite={opacity >= 1} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
       {edges && <Edges color={edges} />}
     </mesh>
   );
@@ -99,7 +106,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
   const Z = frame.floors.map((f) => (z += f.h ?? 3)), top = z, span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), top, 4);
   const shown = (k) => floorsShown === "all" || (floorsShown === "upto" ? k <= cur : k === cur);
   const wt = frame.wallTypes ?? DEFAULT_WALL_TYPES, base0 = (frame.floors[0]?.name ?? "").includes("+0.40") ? 0.4 : 0.4; // footing top at −0.40 in the drawings
-  const fo = frame.footing ?? { t: 0.4 }, hl = useHighlight(), hz = Z[frame.roofLink?.floor ?? frame.floors.length - 1] ?? top; // highlighted point: at the linked (roof) floor
+  const fo = frame.footing ?? { t: 0.4 }, hl = useHighlight(), hz = hl?.floor !== undefined ? Z[hl.floor] ?? top : Z[frame.roofLink?.floor ?? frame.floors.length - 1] ?? top; // highlighted point: at the linked (roof) floor
   const scene = (
     <Canvas dpr={[1, 2]} camera={{ position: [span, span * 0.8, span * 1.1], fov: 35, near: 0.1, far: 500 }}>
       <color attach="background" args={[dark ? "#0f1222" : "#f4f5f7"]} />
@@ -113,13 +120,23 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
               {(f.r.piles ?? []).map(([px, py], j) => <Box key={j} p={[f.p[0] + px - 0.09, f.p[1] + py]} q={[f.p[0] + px + 0.09, f.p[1] + py]} w={0.18} z0={-(f.inp?.t ?? fo.t ?? 0.4) - 1.5} h={1.5} color="#7c828f" />)}
             </group>
           ))}
-          {hl && <group>
-            <mesh position={[hl.p[0], hz + 0.35, -hl.p[1]]}><sphereGeometry args={[0.28, 24, 16]} /><meshStandardMaterial color={hl.bad ? "#d92d20" : "#12b76a"} emissive={hl.bad ? "#d92d20" : "#12b76a"} emissiveIntensity={0.6} /></mesh>
+          {hl && <group renderOrder={10}>
+            {(hl.segs ?? []).map(([a, b], j) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 0.01; return (
+              <group key={`hs${j}`} position={[(a[0] + b[0]) / 2, hz, -(a[1] + b[1]) / 2]} rotation={[0, Math.atan2(b[1] - a[1], b[0] - a[0]), 0]}>
+                <Blink><boxGeometry args={[L + 0.1, 0.5, 0.35]} /></Blink></group>); })}
+            {(hl.pts ?? []).slice(1).map((q, j) => <group key={`hp${j}`} position={[q[0], hz + 0.35, -q[1]]}><Blink><sphereGeometry args={[0.22, 20, 14]} /></Blink></group>)}
+            {hl.p && <mesh position={[hl.p[0], hz + 0.35, -hl.p[1]]}><sphereGeometry args={[0.28, 24, 16]} /><meshStandardMaterial color={hl.bad ? "#d92d20" : "#12b76a"} emissive={hl.bad ? "#d92d20" : "#12b76a"} emissiveIntensity={0.6} /></mesh>}
             {hl.to && <mesh position={[hl.to[0], hz + 0.35, -hl.to[1]]}><sphereGeometry args={[0.16, 16, 12]} /><meshStandardMaterial color="#d92d20" /></mesh>}
           </group>}
           {frame.floors.map((fl, k) => {
             if (!shown(k)) return null;
             const an = res.floors[k], Zk = Z[k], H = fl.h ?? 3, zb = k ? Z[k - 1] : 0;
+            // beam sizes and clean joints: columns of this floor (under the beams) and of the floor above (standing on them)
+            const bt = fl.beams.map((b, i) => { const sp = an?.spans.find((s) => (s.members ?? [s.member]).includes(i)), ti = sp?.typeIdx ?? b.type ?? 0; return { sp, t: frame.beamTypes[ti] ?? frame.beamTypes[0] }; });
+            const bw = fl.beams.map((b, i) => ({ ...b, w: bt[i].t.b, h: bt[i].t.h }));
+            const csz = (kk, i) => { const col = res.columns.find((x) => x.floor === kk && x.i === i); return [(col?.lv?.Bx ?? 20) / 100, (col?.lv?.By ?? 20) / 100]; };
+            const jc = [...fl.columns.map((p, i) => { const [B, D] = csz(k, i); return { p, B, D }; }), ...(frame.floors[k + 1]?.columns ?? []).map((p, i) => { const [B, D] = csz(k + 1, i); return { p, B, D }; })];
+            const pieces = beamPieces(bw, jc.reduce((a, c) => { const o = a.find((x) => Math.hypot(x.p[0] - c.p[0], x.p[1] - c.p[1]) < 0.03); if (o) { o.B = Math.max(o.B, c.B); o.D = Math.max(o.D, c.D); } else a.push({ ...c }); return a; }, []));
             return (
               <group key={k}>
                 {on.column && fl.columns.map((c, i) => {
@@ -127,14 +144,19 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                   return <Box key={`c${i}`} p={[c[0] - B / 2, c[1]]} q={[c[0] + B / 2, c[1]]} w={D} z0={Zk - H} h={H} color={col && !col.ok ? "#f97066" : CONC} edges="#667085" />;
                 })}
                 {on.beam && fl.beams.map((b, i) => {
-                  const sp = an?.spans.find((s) => (s.members ?? [s.member]).includes(i)), ti = sp?.typeIdx ?? b.type ?? 0, t = frame.beamTypes[ti] ?? frame.beamTypes[0];
-                  const pts = arcPolyline(b.a, b.b, b.arc?.s, 12), color = sp && !sp.ok ? "#f04438" : byType ? TYPE_COLORS[ti % TYPE_COLORS.length] : CONC;
-                  return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={color} edges={pts.length > 2 ? undefined : "#475467"} />);
+                  const { sp, t } = bt[i], ti = sp?.typeIdx ?? b.type ?? 0;
+                  const color = sp && !sp.ok ? "#f04438" : byType ? TYPE_COLORS[ti % TYPE_COLORS.length] : CONC;
+                  if (pieces[i]) return pieces[i].map(([p, q], j) => <Box key={`b${i}-${j}`} p={p} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={color} edges="#475467" />);
+                  const pts = arcPolyline(b.a, b.b, b.arc?.s, 12);
+                  return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={color} />);
                 })}
                 {on.slab && an?.panels.filter((p) => !p.open && !p.stairWell).map((p) => (
-                  <Prism key={p.key} P={p.P} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />
+                  <Prism key={p.key} P={insetPolygon(p.P, p.P.map((q, j) => edgeWidth(bw, q, p.P[(j + 1) % p.P.length]) / 2))} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />
                 ))}
-                {on.cant && an?.cants.map((c, i) => <Prism key={`ct${i}`} P={c.P} z0={Zk - c.t} t={c.t} color="#c3b5e0" edges="#8e4ec6" />)}
+                {on.cant && an?.cants.map((c, i) => { // starts at the face of its beam
+                  const w = edgeWidth(bw, c.P[0], c.P[1]) / 2, d = [c.P[3][0] - c.P[0][0], c.P[3][1] - c.P[0][1]], L = Math.hypot(...d) || 1, s0 = [(d[0] / L) * w, (d[1] / L) * w];
+                  const P = [[c.P[0][0] + s0[0], c.P[0][1] + s0[1]], [c.P[1][0] + s0[0], c.P[1][1] + s0[1]], c.P[2], c.P[3]];
+                  return <Prism key={`ct${i}`} P={L > w ? P : c.P} z0={Zk - c.t} t={c.t} color="#c3b5e0" edges="#8e4ec6" />; })}
                 {on.wall && wallsOf(fl).map((w0, i) => {
                   // true thickness of the type, clear height, doors / windows cut out (pieces between, under and over each opening)
                   const w = resolveWall(w0, frame, k), tp = wt.find((x) => x.id === w.kind), th = (tp?.core ? wallThick(tp) : WALL_T[w.kind] ?? 0.1) * (w.layers ?? 1) + ((w.layers ?? 1) > 1 ? 0.03 : 0);

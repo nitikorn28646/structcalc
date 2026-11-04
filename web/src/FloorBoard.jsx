@@ -33,7 +33,7 @@ const BOXABLE = { frame: ["column", "beam"], wall: ["wall"], other: ["lineLoad",
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, onImportFrame = null, colSize = () => null }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onImportFrame = null, colSize = () => null }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -390,9 +390,11 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               : <line key={`m${j}`} x1={P[0][0]} y1={-P[0][1]} x2={P[1][0]} y2={-P[1][1]} stroke="#f79009" strokeOpacity={0.5} strokeWidth={12 * k} strokeLinecap="round" />; })}
           {box && <rect x={Math.min(box.p0[0], box.p1[0])} y={-Math.max(box.p0[1], box.p1[1])} width={Math.abs(box.p1[0] - box.p0[0])} height={Math.abs(box.p1[1] - box.p0[1])}
             fill={box.p1[0] >= box.p0[0] ? "#465fff14" : "#12b76a14"} stroke={box.p1[0] >= box.p0[0] ? "#465fff" : "#12b76a"} strokeWidth={1.2 * k} strokeDasharray={box.p1[0] >= box.p0[0] ? "none" : `${5 * k} ${3 * k}`} />}
-          {hl && <g pointerEvents="none">
-            {hl.to && <line x1={hl.p[0]} y1={-hl.p[1]} x2={hl.to[0]} y2={-hl.to[1]} stroke="#d92d20" strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />}
-            <circle cx={hl.p[0]} cy={-hl.p[1]} r={16 * k} fill="#d92d2033" stroke={hl.bad ? "#d92d20" : "#12b76a"} strokeWidth={3 * k}><animate attributeName="r" values={`${12 * k};${24 * k};${12 * k}`} dur="1s" repeatCount="indefinite" /></circle>
+          {hl && (hl.floor === undefined || hl.floor === floorIdx) && <g pointerEvents="none">
+            {(hl.segs ?? []).map(([a, b], j) => <line key={`hs${j}`} x1={a[0]} y1={-a[1]} x2={b[0]} y2={-b[1]} stroke="#d92d20" strokeWidth={10 * k} strokeLinecap="round"><animate attributeName="stroke-opacity" values="0.85;0.15;0.85" dur="0.8s" repeatCount="indefinite" /></line>)}
+            {(hl.pts ?? []).slice(1).map((q, j) => <circle key={`hp${j}`} cx={q[0]} cy={-q[1]} r={12 * k} fill="none" stroke="#d92d20" strokeWidth={3 * k}><animate attributeName="r" values={`${8 * k};${18 * k};${8 * k}`} dur="0.8s" repeatCount="indefinite" /></circle>)}
+            {hl.p && hl.to && <line x1={hl.p[0]} y1={-hl.p[1]} x2={hl.to[0]} y2={-hl.to[1]} stroke="#d92d20" strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />}
+            {hl.p && <circle cx={hl.p[0]} cy={-hl.p[1]} r={16 * k} fill="#d92d2033" stroke={hl.bad ? "#d92d20" : "#12b76a"} strokeWidth={3 * k}><animate attributeName="r" values={`${12 * k};${24 * k};${12 * k}`} dur="1s" repeatCount="indefinite" /></circle>}
             {hl.to && <circle cx={hl.to[0]} cy={-hl.to[1]} r={7 * k} fill="#d92d20" />}
           </g>}
           {ghost.map((c, i) => <rect key={`g${i}`} x={c[0] - 8 * k} y={-c[1] - 8 * k} width={16 * k} height={16 * k} fill="none" stroke="#98a2b3" strokeWidth={1.2 * k} strokeDasharray={`${3 * k} ${2 * k}`} />)}

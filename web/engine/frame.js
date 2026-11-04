@@ -34,8 +34,9 @@ export const DEFAULT_FOOTING = { t: 0.4, Df: 1.2, cover: 7.5, fy: 4000, fcPile: 
 // a cap on one pile carries the column straight into the pile (no bending, no bond / anchorage demand; the bars are minimum steel
 // with standard hooks) — the reference sheet checks pile load + minimum steel only, so bond and anchorage are not counted there
 const capOk = (r, n) => r.pileOk && r.dOk && r.vOk && r.vpOk && r.vppOk && r.AsOkL && r.AsOkS && (n === 1 || (r.perimOk && r.ancOk)) && r.bearingOk;
-// typical safe loads per pile (kg) — starting values only; the engineer enters the values of the pile maker / load test (frame.pileLoads)
-export const PILE_SAFE = { "I-18": 18000, "I-22": 25000, "I-26": 35000, "I-30": 45000, "I-35": 55000, "I-40": 70000, "S-16": 14000, "S-18": 18000,
+// typical safe loads per pile (kg) — the default of every project (user standard 2026-11-04: I-18 = 18 t, I-22 = 22 t, I-26 = 26 t; the
+// rest are starting values); the engineer enters the values of the pile maker / load test (frame.pileLoads)
+export const PILE_SAFE = { "I-18": 18000, "I-22": 22000, "I-26": 26000, "I-30": 45000, "I-35": 55000, "I-40": 70000, "S-16": 14000, "S-18": 18000,
   "S-22": 25000, "S-26": 35000, "S-30": 45000, "S-35": 60000, "S-40": 80000, "SO-40": 70000, "SO-525": 120000, "HP-15": 12000,
   "Ø0.35": 30000, "Ø0.40": 40000, "Ø0.50": 60000, "Ø0.60": 85000, "Ø0.80": 150000, "Ø1.00": 230000 };
 // footing type (step 8, like the drawings' F1, F2…): { name, n piles, pile, t cap (m), Df (m), k pile spacing (× pile width), w cap width
@@ -79,7 +80,7 @@ function designSpread(tt, P, pier, mat, fo, Mx, My) {
 
 export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0) {
   let best = null;
-  const safe = (pile) => (fo.pileLoads ? fo.pileLoads[pile] ?? PILE_SAFE[pile] ?? fo.Psafe : fo.Psafe);
+  const safe = (pile) => fo.pileLoads?.[pile] ?? PILE_SAFE[pile] ?? fo.Psafe;
   const T = (n, pile, s, w, bar, extra = {}) => ({ n, pile, s, w, bar, ...extra });
   // auto order: spread footings first (no piles, by concrete volume), then pile caps by pile count × pile area, then thickness
   const weight = (t) => (t.kind === "spread" ? (t.Bx > 0 ? t.Bx * t.By * (t.t ?? 0.4) : 50) : 1e4 + t.n * (PILES[t.pile]?.A ?? 1e9) * 1e3 + (t.t ?? fo.t));
