@@ -3,7 +3,8 @@ import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
-import { Download, GitCommitHorizontal, Home, Plus, Ruler, Trash2, Triangle, Wand2 } from "lucide-react";
+import { BarChart3, Download, GitCommitHorizontal, Home, Plus, Ruler, Trash2, Triangle, Wand2 } from "lucide-react";
+import Frame3D from "./Frame3D.jsx";
 import { roofGeometry } from "../engine/roof.js";
 import { frameRoof } from "../engine/roofFrame.js";
 import { DEFAULT_DESIGN, ROOFINGS, autoInnerPlates, carrierPlates, designRoof, BATTEN_RANGE } from "../engine/roofMembers.js";
@@ -354,8 +355,9 @@ function SlopeFrom({ roof, g, set }) {
   );
 }
 
-export function RoofPage({ roof, set, dark, onFromFrame = null }) {
+export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, res = null, focus = false }) {
   const sk = useSkeleton(), { g, fr, dz, error, empty } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|loads|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
+  const [view, setView] = useState("2d"), [side, setSide] = useState("table");
   const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz);
   const modeBar = (
     <span className="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
@@ -371,9 +373,8 @@ export function RoofPage({ roof, set, dark, onFromFrame = null }) {
   const setPt = (i, k, v) => set("pts", roof.pts.map((p, j) => (j === i ? (k ? [p[0], v] : [v, p[1]]) : p)));
   const del = (i) => { if (roof.pts.length <= 3) return; set("pts", roof.pts.filter((_, j) => j !== i)); set("edges", roof.edges.filter((_, j) => j !== i)); };
   if (mode === "draw") return <DrawBoard roof={roof} set={set} g={g} fr={fr} loose={dz?.loose} plateMembers={dz?.members.filter((m) => m.group === "plate")} modeBar={modeBar} dark={dark} onFromFrame={onFromFrame} />;
-  return (
-    <main className="grid min-h-0 flex-1 gap-4 p-4 md:p-5 xl:grid-cols-[300px_1fr_1fr_1.15fr] xl:grid-rows-[auto_1fr]">
-      <div className="space-y-4 xl:row-span-2 xl:overflow-y-auto">
+  const settings = (
+      <div className="space-y-3">
         {mode !== "design" && mode !== "plate" && mode !== "loads" && <Card title="รูปทรงหลังคา" icon={Triangle}>
           <div className="grid grid-cols-2 gap-3">
             {f("slope", "ความชัน", "องศา", "1")}{f("overhang", "ชายคายื่น", "m", "0.1")}
@@ -425,11 +426,8 @@ export function RoofPage({ roof, set, dark, onFromFrame = null }) {
           </div>
         </Card>
         )}
-      </div>
-
-      {g && (
-        <div className="grid grid-cols-4 gap-3 md:grid-cols-8 xl:col-span-3">
-          {(mode === "plate" && dz ? [["จำนวนช่วง", pl.plates.length], ["ความยาวรวม (ม.)", fmt(pl.plates.reduce((a, x) => a + x.len, 0), 2)],
+      </div>);
+  const kpis = g ? (mode === "plate" && dz ? [["จำนวนช่วง", pl.plates.length], ["ความยาวรวม (ม.)", fmt(pl.plates.reduce((a, x) => a + x.len, 0), 2)],
             ["น้ำหนักอะเส (กก.)", fmt(pl.plates.reduce((a, x) => a + x.weight, 0), 0)], ["ช่วงยาวสุด (ม.)", fmt(Math.max(...pl.plates.map((x) => x.span)), 2)],
             ["หน่วยแรงสูงสุด", `${fmt(Math.max(...pl.plates.map((x) => x.stress)) * 100, 0)}%`], ["ระยะแอ่นสูงสุด", `${fmt(Math.max(...pl.plates.map((x) => x.defl)) * 100, 0)}%`],
             ["ขนาดเหล็กที่ใช้", `${pl.sizes.length} ขนาด`], ["สรุป", pl.plates.every((x) => x.r.ok) ? "ผ่านทุกช่วง" : `ไม่ผ่าน ${pl.plates.filter((x) => !x.r.ok).length} ช่วง`]]
@@ -441,40 +439,46 @@ export function RoofPage({ roof, set, dark, onFromFrame = null }) {
             ["ดั้ง (ต้น)", fr.posts.filter((p) => p.kind === "ดั้ง").length], ["ตุ๊กตา (ต้น)", fr.posts.filter((p) => p.kind === "ตุ๊กตา").length]]
             : [["พื้นที่ใต้หลังคา (ม²)", fmt(g.planArea, 2)], ["พื้นที่มุงจริง (ม²)", fmt(g.roofArea, 2)], ["ความสูงยอด (ม.)", fmt(g.top, 2)],
             ["อกไก่ (ม.)", fmt(g.ridge, 2)], ["ตะเข้สัน (ม.)", fmt(g.hip, 2)], ["ตะเข้ราง (ม.)", fmt(g.valley, 2)], ["ปั้นลม (ม.)", fmt(g.rake, 2)],
-            ["หน้าจั่ว (ม²)", fmt(g.gableArea, 2)]]).map(([l, v]) => (
-            <div key={l} className="rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
-              <div className="truncate text-[11px] text-gray-400">{l}</div>
-              <div className="text-base font-semibold tabular-nums">{v}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Card icon={Home} className="flex min-h-0 flex-col xl:col-span-2" bodyClass="flex-1 min-h-[420px]"
-        title={<span className="flex w-full items-center justify-between">{mode === "design" ? "ผลออกแบบชิ้นส่วนเหล็ก (ASD)" : mode === "plate" ? "อะเส — แปลนและขนาดเหล็กแต่ละช่วง" : "แปลนหลังคา (แก้ไขได้)"}
-          <span className="flex items-center gap-2"><button disabled={!fr} onClick={() => (mode === "plate" ? downloadDxf(plateModel(g, pl.plates, fr.posts), `${roof.roofNo}-wall-plate`) : downloadDxf(roofPlanModel(g, fr), `${roof.roofNo}-roof-framing`))} title="ดาวน์โหลดแปลนโครงหลังคา DXF (AutoCAD)"
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50"><Download className="h-3.5 w-3.5" />DXF</button>
-          {modeBar}</span></span>}>
-
+            ["หน้าจั่ว (ม²)", fmt(g.gableArea, 2)]]) : [];
+  const dxf = () => (mode === "plate" ? downloadDxf(plateModel(g, pl.plates, fr.posts), `${roof.roofNo}-wall-plate`) : downloadDxf(roofPlanModel(g, fr), `${roof.roofNo}-roof-framing`));
+  // layout like the structure steps (user 2026-11-04): one toolbar row (sub-tabs, view, summary chips), the plan / table large in the
+  // centre, settings in a right panel, tables / charts on demand from the right rail, 3D of the roof alone or of the whole building
+  const plan = (<div className="flex h-full min-h-0 flex-col rounded-xl border border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
         {error ? <p className="text-sm text-red-600">{error}</p> : empty ? <p className="text-sm text-gray-500">ยังไม่มีหลังคา — ไปแท็บ "1 วาดแปลน" แล้วกด "ใช้แปลนจากโครงสร้าง" (แนะนำ), นำเข้า DXF หรือวาดผนังเอง</p> : !g ? <p className="text-sm text-gray-400">กำลังโหลดตัวคำนวณรูปทรงหลังคา…</p> : (
           mode === "plate" ? (
             <div className="flex h-full min-h-0 flex-col gap-2">
               <div className="min-h-[300px] flex-[3] rounded-xl bg-gray-50 p-2"><PlatePlan g={g} plates={pl.plates} posts={fr?.posts} loose={dz?.loose}columns={roof.columns?.length ? roof.columns : null} hover={hover} setHover={setHover} dark={dark} /></div>
-              <div className="min-h-0 flex-[2] overflow-auto"><PlateTable plates={pl.plates} d={roof.design} setD={setD} setHover={setHover} warnings={dz?.warnings} looseN={dz?.loose?.length ?? 0} onCarriers={() => set("innerPlates", [...(roof.innerPlates ?? []), ...carrierPlates(roof, g, dz?.loose ?? [])])} /></div>
+              <div className={side === "table" ? "min-h-0 flex-[2] overflow-auto" : "hidden"}><PlateTable plates={pl.plates} d={roof.design} setD={setD} setHover={setHover} warnings={dz?.warnings} looseN={dz?.loose?.length ?? 0} onCarriers={() => set("innerPlates", [...(roof.innerPlates ?? []), ...carrierPlates(roof, g, dz?.loose ?? [])])} /></div>
             </div>
           ) : mode === "design" ? <MemberTable dz={dz} d={roof.design} setD={setD} setHover={setHover} /> : <div className="h-full rounded-xl bg-gray-50 p-2"><PlanEditor roof={roof} set={set} g={g} fr={fr} mode={mode} sel={sel} setSel={setSel} dark={dark} /></div>
         )}
-      </Card>
-
-      <div className="flex min-h-0 flex-col gap-4">
-        <section className="rounded-2xl border border-gray-200 bg-white px-3 pt-2">
+  </div>);
+  const roof3d = g && <Roof3D onPick={mode === "plate" || mode === "design" ? (m) => setHover(m) : null} g={g} fr={mode !== "shape" ? fr : null} hover={mode === "design" || mode === "plate" ? hover : null} plates={mode === "design" || mode === "plate" ? pl.plates : null} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
+  const all3d = frame && res ? <Frame3D frame={frame} res={res} cur={frame.floors.length - 1} roof={roof} dark={dark} roofOn className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" /> : roof3d;
+  const views = [["2d", mode === "design" ? "ตาราง" : "แปลน 2D"], ["3d", "3D หลังคา"], ["all", "3D ทั้งหลัง"], ["split", "2D + 3D"]];
+  const centre = view === "3d" ? roof3d : view === "all" ? all3d : view === "split" ? <div className="grid h-full min-h-0 grid-cols-2 gap-2"><div className="min-h-0">{plan}</div><div className="min-h-0">{all3d}</div></div> : plan;
+  return (
+    <main className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-1.5 dark:border-gray-800 dark:bg-gray-900">
+        {modeBar}
+        <span className="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">{views.map(([k, t]) => <button key={k} onClick={() => setView(k)} className={`rounded-md px-2.5 py-1 ${view === k ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500"}`}>{t}</button>)}</span>
+        <button disabled={!fr} onClick={dxf} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50"><Download className="h-3.5 w-3.5" />DXF</button>
+        <div className="ml-auto flex flex-wrap gap-1.5 text-[11px]">{kpis.map(([l, v]) => <span key={l} className="rounded-md bg-gray-50 px-2 py-0.5 text-gray-500 ring-1 ring-gray-200 dark:bg-white/5">{l} <b className="tabular-nums text-gray-800 dark:text-gray-100">{v}</b></span>)}</div>
+      </div>
+      <div className="flex min-h-0 flex-1">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col p-2">{centre}</section>
+        {side === "chart" && <section className="flex w-[380px] shrink-0 flex-col border-l border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900"><div>
           <div className="flex items-center justify-between px-1 text-sm font-semibold text-gray-800">
             {mode === "design" || mode === "plate" ? "อัตราส่วนการใช้งาน" : mode === "frame" ? "ปริมาณโครงเหล็กรวม" : "ความยาวแนวโครงหลังคา"}
             <span className="text-[11px] font-normal text-gray-500">{mode === "design" || mode === "plate" ? "หน่วยแรง / ระยะแอ่น เทียบค่ายอมให้" : "ความยาวจริงตามแนวเอียง"}</span>
           </div>
           {g && mode === "plate" ? <UtilChart items={pl.plates.map((x) => ({ ...x, label: x.tag }))} dark={dark} height={230} /> : g && mode === "design" ? <UtilChart dz={dz} dark={dark} height={230} /> : g && <LengthChart g={g} fr={mode === "frame" ? fr : null} dark={dark} height={230} />}
-        </section>
-        {g && <Roof3D g={g} fr={mode !== "shape" ? fr : null} hover={mode === "design" || mode === "plate" ? hover : null} plates={mode === "design" || mode === "plate" ? pl.plates : null} dark={dark} className="min-h-[300px] flex-1 overflow-hidden rounded-2xl border border-gray-200" />}
+        </div></section>}
+        {!focus && <aside className="w-[330px] shrink-0 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">{settings}</aside>}
+        <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-l border-gray-200 bg-white py-2 dark:border-gray-800 dark:bg-gray-900">
+          {[...(mode === "plate" ? [["table", "ตารางช่วง", Ruler]] : []), ["chart", mode === "design" || mode === "plate" ? "อัตราใช้งาน" : "ความยาว", BarChart3]].map(([k, t, I]) => (
+            <button key={k} onClick={() => setSide(side === k ? null : k)} title={t} className={`flex w-[46px] flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-[10px] font-medium leading-tight ${side === k ? "bg-brand-500 text-[#fff]" : "text-gray-600 hover:bg-gray-50"}`}><I className="h-4 w-4" /><span className="text-center">{t}</span></button>))}
+        </nav>
       </div>
     </main>
   );

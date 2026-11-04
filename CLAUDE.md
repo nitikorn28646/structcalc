@@ -365,6 +365,17 @@ NEXT (user request 2026-11-04): stair with landing must load 3 beams — floor-1
 `level` (elevation inside the storey) → 3D joint on the columns at that height (column split), landing reaction on it, plan tag, 3D at
 the real height. Not built yet: that, load arrows in 3D, auto stair sizing button.
 
+Later still 2026-11-04: brand "โครงสร้างไทย by นิธิกร" (src/brand.js; owner photo + signature uploaded via the logo → localStorage
+structcalc.brand; signature in every report footer = Paged.js running element .rp-sig-run / element(rpSig)); save dialog in the claude.ai
+frame (download / new tab / copy text); auto beam types follow the user's habit (BEAM_GEN.sections from 20x40, DB12 ≤ 5 bottom / 3 top
+through, then DB16, stirrups RB6 @0.20/0.15/0.10 then RB9; first passing in order; "+1" never lowers the count); compatibility torsion
+cap (floor.js checkSpan, mat.compatTorsion, sp.MtEq = continuous-model Mt); secondary deeper than main warned; coverPier for ตอม่อ;
+bored-pile bars (engine/borePile.js); footing plan component (src/FootingPlan.jsx, marks F1 = largest, used in step 8 + report);
+spread footings too close → lighter one reshaped to a rectangle (frame.js), remaining clashes warned; roof page re-laid like the
+structure steps (toolbar row with sub-tabs / views / KPI chips, centre plan, settings panel right, table / chart from the right rail,
+views 2D / 3D roof / 3D whole building (Frame3D roofOn + RoofFrameMembers) / split); click beams / columns in 3D selects them
+(Frame3D onPick / selected), click a wall plate in the roof 3D highlights it; screen: left steps fold to icons, focus mode, floor summary card.
+
 OPEN ITEMS for the next session: (1) web copy published 2026-11-03 (Artifact version 3, without project files — open a .json with เปิด); (2) E2E expected re-saved; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
 torsion — likely the type list has no 20×40 with RB9 @0.10; check per-span reasons on the user's project); (4) Ole: 28 beams fail only on
 stirrup spacing d/2 (shallow GB 20×20, tiny shear) — ask whether to apply the ACI exemption (h ≤ 25 cm or v ≤ vc/2); columns RB6 @0.20 > 16db.

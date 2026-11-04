@@ -10,9 +10,10 @@ import * as THREE from "three";
 import { TYPE_COLORS } from "./FloorBoard.jsx";
 import { DEFAULT_WALL_TYPES, resolveWall, wallThick, wallsOf } from "../engine/floor.js";
 import { useHighlight } from "./highlight.js";
+import { RoofFrameMembers } from "./Roof3D.jsx";
 import { beamPieces, edgeWidth, insetPolygon } from "./joints3d.js";
 
-const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"]];
+const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"], ["roofFrame", "โครงหลังคา"]];
 const WALL_T = { brick: 0.1, brick2: 0.2, block: 0.1, light: 0.1, gypsum: 0.1 }; // wall thickness (m) incl. plaster
 const CONC = "#b8bcc6", SLAB = { S: "#c9ccd4", PS: "#a9c4b0", GS: "#b5a58f" };
 
@@ -28,11 +29,12 @@ function BlinkPoly({ P, z }) {
   return <group rotation={[-Math.PI / 2, 0, 0]} position={[0, z, 0]}><Blink><primitive object={geo} attach="geometry" /></Blink></group>;
 }
 // box from plan point p to q, width w (across), bottom z0, height h
-function Box({ p, q, w, z0, h, color, opacity = 1, edges }) {
+function Box({ p, q, w, z0, h, color, opacity = 1, edges, onClick }) {
   const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy);
   if (L < 1e-3 || h <= 0) return null;
   return (
-    <mesh position={[(p[0] + q[0]) / 2, z0 + h / 2, -(p[1] + q[1]) / 2]} rotation={[0, Math.atan2(dy, dx), 0]}>
+    <mesh position={[(p[0] + q[0]) / 2, z0 + h / 2, -(p[1] + q[1]) / 2]} rotation={[0, Math.atan2(dy, dx), 0]}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined} onPointerOver={onClick ? (e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; } : undefined} onPointerOut={onClick ? () => { document.body.style.cursor = ""; } : undefined}>
       <boxGeometry args={[L, h, w]} />
       <meshStandardMaterial color={color} transparent={opacity < 1} opacity={opacity} depthWrite={opacity >= 1} />
       {edges && <Edges color={edges} />}
@@ -85,25 +87,25 @@ function useRoofFaces(roof, on) {
   useEffect(() => {
     if (!on || !roof?.pts) return;
     let live = true;
-    import("./RoofPage.jsx").then(async (m) => { const sk = await m.loadSkeleton(), { g } = m.runRoof(roof, sk); if (live && g) setFaces(g.faces.filter((f) => !f.gable)); });
+    import("./RoofPage.jsx").then(async (m) => { const sk = await m.loadSkeleton(), { g, fr, dz } = m.runRoof(roof, sk); if (live && g) setFaces(Object.assign(g.faces.filter((f) => !f.gable), { g, fr, plates: dz ? (await import("./PlateView.jsx")).platesOf(dz).plates : null })); });
     return () => { live = false; };
   }, [roof, on]);
   return on ? faces : null;
 }
-function RoofFace({ f, dz }) {
+function RoofFace({ f, dz, faint = false }) {
   const geo = useMemo(() => {
     const flat = f.P.map((p) => new THREE.Vector2(p[0], p[1])), tris = THREE.ShapeUtils.triangulateShape(flat, []), g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(f.P.flatMap(([x, y, z]) => [x, z + dz, -y]), 3));
     g.setIndex(tris.flat()); g.computeVertexNormals();
     return g;
   }, [f, dz]);
-  return <mesh geometry={geo}><meshStandardMaterial color="#b54708" transparent opacity={0.45} side={THREE.DoubleSide} depthWrite={false} /><Edges color="#7a2e0e" /></mesh>;
+  return <mesh geometry={geo} position={[0, faint ? 0.12 : 0, 0]}><meshStandardMaterial color="#b54708" transparent opacity={faint ? 0.12 : 0.45} side={THREE.DoubleSide} depthWrite={false} />{!faint && <Edges color="#7a2e0e" />}</mesh>;
 }
 
-export default function Frame3D({ frame, res, cur, roof, dark = false, className = "" }) {
-  const [on, setOn] = useState({ footing: true, column: true, beam: true, slab: true, cant: true, wall: true, stair: true, roof: false });
+export default function Frame3D({ frame, res, cur, roof, dark = false, className = "", roofOn = false, onPick = null, selected = null }) {
+  const [on, setOn] = useState({ footing: true, column: true, beam: true, slab: true, cant: true, wall: true, stair: true, roof: roofOn, roofFrame: roofOn });
   const [floorsShown, setFloorsShown] = useState("all"), [byType, setByType] = useState(true), [big, setBig] = useState(false);
-  const roofFaces = useRoofFaces(roof, on.roof);
+  const roofFaces = useRoofFaces(roof, on.roof || on.roofFrame);
   const pts = frame.floors.flatMap((f) => [...f.columns, ...f.beams.flatMap((b) => [b.a, b.b])]);
   if (!pts.length) return <div className={`grid place-items-center text-sm text-gray-400 ${className}`}>ยังไม่มีเสาหรือคาน</div>;
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
@@ -161,14 +163,15 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
               <group key={k}>
                 {on.column && fl.columns.map((c, i) => {
                   const col = res.columns.find((x) => x.floor === k && x.i === i), B = (col?.lv?.Bx ?? 20) / 100, D = (col?.lv?.By ?? 20) / 100;
-                  return <Box key={`c${i}`} p={[c[0] - B / 2, c[1]]} q={[c[0] + B / 2, c[1]]} w={D} z0={Zk - H} h={H} color={col && !col.ok ? "#f97066" : CONC} edges="#667085" />;
+                  return <Box key={`c${i}`} p={[c[0] - B / 2, c[1]]} q={[c[0] + B / 2, c[1]]} w={D} z0={Zk - H} h={H} color={selected?.floor === k && selected?.kind === "column" && selected?.i === i ? "#f79009" : col && !col.ok ? "#f97066" : CONC} edges="#667085" onClick={onPick ? () => onPick({ floor: k, kind: "column", i }) : undefined} />;
                 })}
                 {on.beam && fl.beams.map((b, i) => {
                   const { sp, t } = bt[i], ti = sp?.typeIdx ?? b.type ?? 0;
                   const color = sp && !sp.ok ? "#f04438" : byType ? TYPE_COLORS[ti % TYPE_COLORS.length] : CONC;
-                  if (pieces[i]) return pieces[i].map(([p, q], j) => <Box key={`b${i}-${j}`} p={p} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={color} edges="#475467" />);
+                  const pick = onPick ? () => onPick({ floor: k, kind: "beam", i }) : undefined, isSel = selected?.floor === k && selected?.kind === "beam" && selected?.i === i;
+                  if (pieces[i]) return pieces[i].map(([p, q], j) => <Box key={`b${i}-${j}`} p={p} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={isSel ? "#f79009" : color} edges="#475467" onClick={pick} />);
                   const pts = arcPolyline(b.a, b.b, b.arc?.s, 12);
-                  return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={color} />);
+                  return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={isSel ? "#f79009" : color} onClick={pick} />);
                 })}
                 {on.slab && an?.panels.filter((p) => !p.open && !p.stairWell).map((p) => (
                   <Prism key={p.key} P={insetPolygon(p.P, p.P.map((q, j) => edgeWidth(bw, q, p.P[(j + 1) % p.P.length]) / 2))} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />
@@ -195,7 +198,8 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
               </group>
             );
           })}
-          {on.roof && roofFaces?.map((f, i) => <RoofFace key={i} f={f} dz={base0} />)}
+          {on.roof && roofFaces?.map((f, i) => <RoofFace key={i} f={f} dz={base0} faint={on.roofFrame && !!roofFaces.fr} />)}
+          {on.roofFrame && roofFaces?.fr && <RoofFrameMembers g={roofFaces.g} fr={roofFaces.fr} plates={roofFaces.plates} Z0={base0} />}
         </group>
       </Bounds>
       <Grid args={[80, 80]} position={[0, -top / 2 - (fo.t ?? 0.4) - 1.51, 0]} cellColor={dark ? "#252a44" : "#e4e7ec"} sectionColor={dark ? "#323a5c" : "#d0d5dd"} fadeDistance={70} infiniteGrid />
