@@ -37,4 +37,9 @@ const { borePileRebar } = await import("../web/engine/borePile.js");
 const bp = [[0.35, 30000], [0.5, 60000], [0.6, 85000], [1.0, 230000]].map(([D, P]) => ({ D, P, r: borePileRebar({ D, P, fc: 240 }) }));
 const ok3 = bp.every(({ P, r }) => r.ok && r.Pa >= P && r.rho >= 0.005 - 1e-9 && r.n >= 6) && Math.abs(bp[1].r.Pa - 0.85 * bp[1].r.Ag * (0.25 * 240 + 1600 * bp[1].r.rho)) < 1e-6;
 console.log(`${ok3 ? "ok  " : "FAIL"} bored pile bars: ${bp.map(({ D, r }) => `Ø${D} ${r.n}-${r.bar}`).join(" · ")}`);
-process.exit(ok && ok2 && ok3 ? 0 : 1);
+// spread footings too close → the lighter one becomes a rectangle that keeps ≥ 0.10 m clear and still passes
+const { analyzeFrame: aF } = await import("../web/engine/frame.js"); const yj = JSON.parse((await import("node:fs")).readFileSync(new URL("../web/public/projects/yasothon.json", import.meta.url), "utf8"));
+const rr = aF({ ...yj.frame, footTypes: [{ kind: "spread", name: "F", Bx: 0, By: 0, t: 0.3, Df: 1.2, bar: "DB 12", s: 0.15 }], soil: { qa: 6000, gamma: 1800 } });
+const re = rr.footings.filter((f) => f.reshaped), ok4 = re.length > 0 && re.every((f) => f.ok && f.r.Bx !== f.r.By);
+console.log(`${ok4 ? "ok  " : "FAIL"} clashing spread footings reshaped to rectangles: ${re.map((f) => `${f.r.Bx}x${f.r.By}`).join(", ")}`);
+process.exit(ok && ok2 && ok3 && ok4 ? 0 : 1);

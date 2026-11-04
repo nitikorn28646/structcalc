@@ -323,7 +323,7 @@ export function analyzeFrame(frame) {
     stacks = designColumns(frame, g.cols);
   }
   const base = (c, list = f3?.base) => list?.find((b) => near(b.p, c.p));
-  const footings = g.cols.filter((c) => c.floor === 0).map((c) => {
+  let footings = g.cols.filter((c) => c.floor === 0).map((c) => {
     const b = base(c), P = Math.max(c.Pbot, b?.R[2] ?? 0), Mx = Math.abs(b?.R[3] ?? 0), My = Math.abs(b?.R[4] ?? 0);
     const ft = frame.footTypes?.[frame.footPick?.[c.stack]], fo = { ...(frame.footing ?? DEFAULT_FOOTING), soil: frame.soil, utilMax: frame.footUtil, ...(frame.pileLoads ? { pileLoads: frame.pileLoads } : {}), ...(ft ? { fixed: ft } : frame.footTypes?.length ? { types: frame.footTypes } : {}) }, grav = { p: c.p, stack: c.stack, P, Mx, My, combo: "D+L", ...designFooting(P, c.lv, mat, fo, Mx, My) };
     const lc = (f3?.combos ?? []).filter((cb) => cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, R: base(c, cb.base)?.R })).filter((x) => x.R);
@@ -339,13 +339,48 @@ export function analyzeFrame(frame) {
     if (minP < 0) g.warnings.push(`ฐานราก ${c.stack}: แรงถอน ${Math.round(-minP)} กก. (ชุด ${lc.find((x) => x.R[2] === minP).name}) — ตรวจแรงถอนเข็ม`);
     return { ...worst, minP };
   });
+  // spread footings that overlap / sit too close (user 2026-11-04: "ออกแบบให้ฐานรากไม่ซ้อนกัน … อันเล็กเป็นสี่เหลี่ยมผืนผ้า"):
+  // the lighter one (then the other) becomes a rectangle — short side across the clash, sized to keep 0.10 m clear, the long side
+  // grown in 0.10 m steps until every check passes again (designSpread with a fixed size). Pile caps are left as they are.
+  {
+    const gapMin = 0.1, foS = { ...(frame.footing ?? DEFAULT_FOOTING), soil: frame.soil, utilMax: frame.footUtil };
+    const gapOf = (a, b) => { const gx = Math.abs(a.p[0] - b.p[0]) - (a.r.Bx + b.r.Bx) / 2, gy = Math.abs(a.p[1] - b.p[1]) - (a.r.By + b.r.By) / 2; return { gap: Math.max(gx, gy), ax: gx >= gy ? 0 : 1 }; };
+    const clear = (f, i) => footings.every((g, j) => j === i || !g.r?.Bx || gapOf(f, g).gap >= gapMin - 1e-9);
+    const reshape = (i, j, ax) => {
+      const f = footings[i], g = footings[j]; if (f.kind !== "spread" || !f.inp) return false;
+      const half = ax ? g.r.By / 2 : g.r.Bx / 2, d = Math.abs(f.p[ax] - g.p[ax]), Lmax = Math.floor((2 * (d - half - gapMin)) * 10 + 1e-9) / 10;
+      const pierDim = (ax ? f.inp.by : f.inp.bx) + 0.2; if (Lmax < pierDim) return false;
+      const A = f.r.Bx * f.r.By, w0 = Math.ceil((A / Lmax) * 10 - 1e-9) / 10;
+      for (let w = w0; w <= w0 + 1.5 + 1e-9; w = Math.round((w + 0.1) * 10) / 10) {
+        const Bx = ax ? w : Lmax, By = ax ? Lmax : w;
+        if (Math.max(Bx, By) / Math.min(Bx, By) > 3) break; // a strip, not a footing any more
+        const tt = { name: f.type, t: f.inp.t, Df: f.inp.Df, bar: f.inp.longBar, barS: f.inp.shortBar, s: f.inp.sLong, sS: f.inp.sShort, Bx, By };
+        const r = designSpread(tt, f.inp.P, { Bx: f.inp.bx * 100, By: f.inp.by * 100, mainBar: f.inp.dowelBar, n: f.inp.dowelN }, mat, foS, f.inp.Mx ?? 0, f.inp.My ?? 0);
+        const cand = { ...f, ...r, p: f.p, stack: f.stack, P: f.P, Mx: f.Mx, My: f.My, combo: f.combo, minP: f.minP, reshaped: true };
+        if (r.ok && clear(cand, i)) { footings[i] = cand; return true; }
+      }
+      return false;
+    };
+    for (let pass = 0; pass < 3; pass++) {
+      let moved = false;
+      for (let i = 0; i < footings.length; i++) for (let j = i + 1; j < footings.length; j++) {
+        const a = footings[i], b = footings[j]; if (!a.r?.Bx || !b.r?.Bx) continue;
+        const { gap, ax } = gapOf(a, b); if (gap >= gapMin - 1e-9) continue;
+        const [lo, hi] = (a.P ?? 0) <= (b.P ?? 0) ? [i, j] : [j, i];
+        if (reshape(lo, hi, ax) || reshape(hi, lo, ax)) moved = true;
+      }
+      if (!moved) break;
+    }
+    const nRe = footings.filter((f) => f.reshaped).length;
+    if (nRe) g.warnings.push(`ฐานแผ่ ${nRe} ฐานปรับเป็นสี่เหลี่ยมผืนผ้าอัตโนมัติ เพราะชิด/ซ้อนกับฐานข้างเคียง (เว้นระยะ ≥ ${gapMin.toFixed(2)} ม.) — ดูแปลนฐานราก`);
+  }
   // footings overlapping or too close (user 2026-11-04: "ฐานรากเดี่ยวไม่ค่อยติดหรือซ้อนกัน"): clear gap between plan rectangles
   // < 0.10 m (room for the formwork / excavation) → combined footing or resize; each pair flagged on the footing plan (f.clash)
   const gapMin = 0.1, clash = [];
   for (let i = 0; i < footings.length; i++) for (let j = i + 1; j < footings.length; j++) {
     const a = footings[i], b = footings[j]; if (!a.r?.Bx || !b.r?.Bx) continue;
     const gx = Math.abs(a.p[0] - b.p[0]) - (a.r.Bx + b.r.Bx) / 2, gy = Math.abs(a.p[1] - b.p[1]) - (a.r.By + b.r.By) / 2, gap = Math.max(gx, gy);
-    if (gap < gapMin) { clash.push(`(${a.p[0].toFixed(2)}, ${a.p[1].toFixed(2)})–(${b.p[0].toFixed(2)}, ${b.p[1].toFixed(2)}) ${gap < 0 ? `ซ้อนกัน ${(-gap).toFixed(2)}` : `ห่าง ${gap.toFixed(2)}`} ม.`); (a.clash ??= []).push(j); (b.clash ??= []).push(i); }
+    if (gap < gapMin - 1e-6) { clash.push(`(${a.p[0].toFixed(2)}, ${a.p[1].toFixed(2)})–(${b.p[0].toFixed(2)}, ${b.p[1].toFixed(2)}) ${gap < 0 ? `ซ้อนกัน ${(-gap).toFixed(2)}` : `ห่าง ${gap.toFixed(2)}`} ม.`); (a.clash ??= []).push(j); (b.clash ??= []).push(i); }
   }
   if (clash.length) g.warnings.push(`ฐานรากซ้อน/ชิดกันเกินไป ${clash.length} คู่ (ระยะห่างน้อยกว่า ${gapMin.toFixed(2)} ม.): ${clash.slice(0, 3).join(" · ")}${clash.length > 3 ? " …" : ""} — ใช้ฐานรากร่วม หรือปรับขนาด / ตำแหน่งฐาน`);
   const lateral = lat && f3?.combos ? lateralChecks(frame, lat, f3) : null;
