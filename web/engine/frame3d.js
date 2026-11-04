@@ -285,7 +285,10 @@ export function frame3dModel(frame, res, opt = {}) {
     fl.columns.forEach((c, i) => {
       const col = res.columns.find((x) => x.floor === k && x.i === i), lv = col?.lv ?? { Bx: 20, By: 20 };
       const a = node(c[0], c[1], zb, k === 0), b = node(c[0], c[1], zk);
-      members.push({ i: a, j: b, kind: "column", floor: k, ci: i, b: lv.Bx / 100, h: lv.By / 100, E: EcOf(frame.mat, frame.mat.fcCol) });
+      // beams inside the storey on this column (stair landing beams, ln.lvl above the floor below): the column is split there
+      const mids = [...new Set(an.lines.filter((l) => l.lvl && l.cols.some((x) => x.ci === i)).map((l) => +l.lvl))].filter((v) => v > 1e-3 && v < zk - zb - 1e-3).sort((p, q) => p - q);
+      const chain = [a, ...mids.map((v) => node(c[0], c[1], zb + v)), b];
+      for (let s = 0; s + 1 < chain.length; s++) members.push({ i: chain[s], j: chain[s + 1], kind: "column", floor: k, ci: i, b: lv.Bx / 100, h: lv.By / 100, E: EcOf(frame.mat, frame.mat.fcCol) });
       const W = (CONC * lv.Bx * lv.By * (fl.h ?? 3)) / 1e4; nodeLoads.push({ n: a, P: W / 2 }, { n: b, P: W / 2 });
     });
     for (const pl of an.pointLoads ?? []) if (pl.on === "column") nodeLoads.push({ n: node(fl.columns[pl.ci][0], fl.columns[pl.ci][1], zk), P: pl.P });
@@ -296,8 +299,9 @@ export function frame3dModel(frame, res, opt = {}) {
       const at = (t) => (!ag ? [ln.A[0] + ln.u[0] * t, ln.A[1] + ln.u[1] * t] : t < 1e-9 ? ln.A : t > ln.L - 1e-9 ? ln.B : arcPoint(ag, t));
       const ts = new Set([0, ln.L, ...ln.cols.map((c) => c.t), ...ln.parts.flatMap((p) => [p.t0, p.t1]), ...(ag ? Array.from({ length: 11 }, (_, i) => (ln.L * (i + 1)) / 12) : [])]);
       for (const o of an.lines) for (const c of o.carriers ?? []) if (c.host === ln.id && c.at > 1e-3 && c.at < ln.L - 1e-3) ts.add(c.at); // where the floor analysis put a beam on this one
-      for (const o of an.lines) if (o !== ln) for (const p of [o.A, o.B]) { const d = [p[0] - ln.A[0], p[1] - ln.A[1]], t = d[0] * ln.u[0] + d[1] * ln.u[1]; if (t > 1e-3 && t < ln.L - 1e-3 && Math.abs(d[0] * ln.u[1] - d[1] * ln.u[0]) < 0.03) ts.add(t); }
-      for (const c of res.columns.filter((x) => x.floor === k + 1)) { const p = c.p, d = [p[0] - ln.A[0], p[1] - ln.A[1]], t = d[0] * ln.u[0] + d[1] * ln.u[1]; if (t > 1e-3 && t < ln.L - 1e-3 && Math.abs(d[0] * ln.u[1] - d[1] * ln.u[0]) < 0.03) ts.add(t); }
+      const zl = ln.lvl ? zb + ln.lvl : zk; // a beam inside the storey stands at its own level
+      for (const o of an.lines) if (o !== ln && (o.lvl ?? null) === (ln.lvl ?? null)) for (const p of [o.A, o.B]) { const d = [p[0] - ln.A[0], p[1] - ln.A[1]], t = d[0] * ln.u[0] + d[1] * ln.u[1]; if (t > 1e-3 && t < ln.L - 1e-3 && Math.abs(d[0] * ln.u[1] - d[1] * ln.u[0]) < 0.03) ts.add(t); }
+      if (!ln.lvl) for (const c of res.columns.filter((x) => x.floor === k + 1)) { const p = c.p, d = [p[0] - ln.A[0], p[1] - ln.A[1]], t = d[0] * ln.u[0] + d[1] * ln.u[1]; if (t > 1e-3 && t < ln.L - 1e-3 && Math.abs(d[0] * ln.u[1] - d[1] * ln.u[0]) < 0.03) ts.add(t); }
       const xs = [...ts].map((t) => +t.toFixed(4)).sort((a, b) => a - b).filter((t, i, a) => !i || t - a[i - 1] > 1e-3);
       // loads on the line: distributed (slab, walls, cantilevers, stairs, railings…) + self weight + point loads that are not columns above
       const typeAt = (t) => { const sp = an.spans.find((s) => s.line === ln.id && t >= s.x0 - 1e-6 && t <= s.x1 + 1e-6); return sp?.type ?? frame.beamTypes[0]; };
@@ -316,7 +320,7 @@ export function frame3dModel(frame, res, opt = {}) {
         // arc piece: its real length differs from the chord-parameter length → stretch positions, keep each load's total
         const kL = ag ? Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / L : 1;
         if (kL !== 1) for (const l of loads) { if (l.P !== undefined) l.at = Math.min(l.at * kL, L * kL); else { l.a *= kL; l.b = Math.min(l.b * kL, L * kL); l.wa /= kL; l.wb /= kL; } }
-        members.push({ i: node(p0[0], p0[1], zk), j: node(p1[0], p1[1], zk), kind: "beam", floor: k, line: ln.id, x0, x1, b: ty.b, h: ty.h, E: EcOf(frame.mat, frame.mat.fcBeam), loads, torque, torqueL,
+        members.push({ i: node(p0[0], p0[1], zl), j: node(p1[0], p1[1], zl), kind: "beam", floor: k, line: ln.id, x0, x1, b: ty.b, h: ty.h, E: EcOf(frame.mat, frame.mat.fcBeam), loads, torque, torqueL,
           release: [s === 0 && carried.has(+x0.toFixed(4)), s === xs.length - 2 && carried.has(+x1.toFixed(4))] });
       }
     }
@@ -348,7 +352,13 @@ export function frame3dModel(frame, res, opt = {}) {
     return { floor: k, id: sp.id, Mpos: Math.max(0, ...ms.map((m) => m.Mmax)), Mneg: Math.max(0, -ms[0].ML, -ms[ms.length - 1].MR),
       V, Vd, T: Math.max(...ms.map((m) => m.T)), cont: { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V } };
   }).filter(Boolean));
-  const columnsOf = (ms) => ms.filter((m) => m.kind === "column").map((m) => ({ floor: m.floor, ci: m.ci, N: -m.N, Mx: Math.max(Math.abs(m.Mz[0]), Math.abs(m.Mz[1])), My: Math.max(Math.abs(m.My[0]), Math.abs(m.My[1])) }));
+  // one entry per column (a column split by a beam inside the storey has several members: the largest of each force)
+  const columnsOf = (ms) => { const out = new Map();
+    for (const m of ms.filter((x) => x.kind === "column")) {
+      const c = { floor: m.floor, ci: m.ci, N: -m.N, Mx: Math.max(Math.abs(m.Mz[0]), Math.abs(m.Mz[1])), My: Math.max(Math.abs(m.My[0]), Math.abs(m.My[1])) }, k = `${m.floor}|${m.ci}`, o = out.get(k);
+      out.set(k, o ? { ...o, N: Math.abs(c.N) > Math.abs(o.N) ? c.N : o.N, Mx: Math.max(o.Mx, c.Mx), My: Math.max(o.My, c.My) } : c);
+    }
+    return [...out.values()]; };
   const held = nodes.map((n, i) => (n.fixed || n.pinned ? i : -1)).filter((i) => i >= 0);
   const spans = spansOf(sol.members), columns = columnsOf(sol.members);
   const base = held.map((i) => ({ p: [nodes[i].x, nodes[i].y], R: sol.R[i] }));

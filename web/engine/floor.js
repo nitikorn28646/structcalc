@@ -109,7 +109,7 @@ function along(ln, p, inside = false) {
 export function findOverlaps(beams = []) {
   const out = [];
   for (let i = 0; i < beams.length; i++) for (let j = i + 1; j < beams.length; j++) {
-    const p = beams[i], q = beams[j]; if (p.arc?.s || q.arc?.s) continue;
+    const p = beams[i], q = beams[j]; if (p.arc?.s || q.arc?.s || (+p.lvl || 0) !== (+q.lvl || 0)) continue; // a beam inside the storey is not on top of a floor beam
     const L = dist(p.a, p.b); if (L < TOL) continue;
     const u = [(p.b[0] - p.a[0]) / L, (p.b[1] - p.a[1]) / L], off = (x) => Math.abs(cross(u, sub(x, p.a))), t = (x) => (x[0] - p.a[0]) * u[0] + (x[1] - p.a[1]) * u[1];
     if (off(q.a) > TOL || off(q.b) > TOL) continue;
@@ -389,7 +389,18 @@ export function spanReasons(c) {
 // minTypes: { drawnBeamIndex: typeIdx } lightest type allowed (set by the 3D-frame envelope of analyzeFrame)
 export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = [], minTypes = null) {
   const warnings = [], cols = floor.columns ?? [];
-  const lines = buildLines(floor.beams ?? [], cols);
+  // beams inside the storey (beam.lvl = height above the floor below, m — e.g. a stair landing beam at mid level, user 2026-11-04):
+  // their own lines, never merged / crossed / resting with the floor beams, no slab panels; supported by this floor's columns
+  const lvKey = (b) => (b.lvl > 0 ? +(+b.lvl).toFixed(3) : 0), lvGroups = new Map();
+  (floor.beams ?? []).forEach((b, i) => { const k = lvKey(b); if (!lvGroups.has(k)) lvGroups.set(k, []); lvGroups.get(k).push(i); });
+  const lines = []; let guessAll = [];
+  for (const [k, idx] of [...lvGroups].sort((a, b) => a[0] - b[0])) {
+    const sub = buildLines(idx.map((i) => floor.beams[i]), cols);
+    for (const l of sub) lines.push({ ...l, id: lines.length, members: l.members.map((m) => idx[m]), lvl: k || null });
+    guessAll = guessAll.concat(sub.guess ?? []);
+  }
+  lines.guess = guessAll;
+  const flat = lines.filter((o) => !o.lvl), same = (o, ln) => (o.lvl ?? null) === (ln.lvl ?? null);
   const overlaps = findOverlaps(floor.beams ?? []);
   if (overlaps.length) warnings.push(`คานซ้อนกัน ${overlaps.length} คู่ (${overlaps.slice(0, 4).map((o) => `คาน ${o.i + 1}/${o.j + 1} ทับกัน ${o.len.toFixed(2)} ม.`).join(" · ")}${overlaps.length > 4 ? " …" : ""}) — น้ำหนักคานคิดซ้ำ · กด "รวมคานซ้อน" ที่ขั้น 2 โครง`);
   // members along each line (t range) and supports
@@ -408,7 +419,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   for (const ln of lines) {
     for (const [t, p] of [[0, ln.A], [ln.L, ln.B]]) {
       if (ln.cols.some((c) => Math.abs(c.t - t) < TOL)) continue;
-      const host = lines.find((o) => o !== ln && along(o, p) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
+      const host = lines.find((o) => o !== ln && same(o, ln) && along(o, p) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
       if (!host) continue;
       if (!host.cols.length && ln.cols.length >= 2) addCarrier(host, { t: along(host, p), host: ln.id, at: t, rev: true });
       else if (!host.carriers.some((x) => x.rev && x.host === ln.id && Math.abs(x.at - t) < TOL)) addCarrier(ln, { t, host: host.id, at: along(host, p) }); // not when that line already rests here on this one
@@ -429,7 +440,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   }
   // secondaries kept whole over a main beam (a cantilever stub past it): interior support where they cross
   for (const ln of lines) for (const J of ln.through ?? []) {
-    const host = lines.find((o) => o !== ln && along(o, J) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
+    const host = lines.find((o) => o !== ln && same(o, ln) && along(o, J) !== null && Math.abs(cross(ln.u, o.u)) > 1e-6);
     const t = along(ln, J);
     if (host && t !== null) addCarrier(ln, { t, host: host.id, at: along(host, J) });
   }
@@ -448,7 +459,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   // one line for all of them (user 2026-11-03: too many warnings)
   if (corners.length) warnings.push(`มุมคานไม่มีเสา ${corners.length} จุด (แนว ${corners.join(", ")}) — คานต่อเนื่องคิดว่าวางบนกันเอง ใช้ผลโครง 3 มิติ (มุมยึดแน่น) ประกอบ · ใส่เสาที่มุม หรือให้คานด้านหนึ่งยื่นรับ`);
   // slab panels by kind: S cast in place (two-way / one-way), PS precast planks (one-way along dir), GS on ground (nothing to the beams)
-  const panels = findPanels(lines).map((P) => {
+  const panels = findPanels(flat).map((P) => {
     const key = panelKey(P), o = floor.panels?.[key] ?? {}, open = !!o.open, st = o.kind ?? "S", dir = st === "PS" ? o.dir ?? "x" : null;
     const t = o.t ?? floor.t, finish = o.finish ?? floor.finish, live = o.live ?? floor.live;
     const area = Math.abs(P.reduce((s, p, i) => s + cross(p, P[(i + 1) % P.length]), 0) / 2);
@@ -460,7 +471,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   // walls: on a beam → line load on that beam; on a slab → spread over that panel
   const walls = wallsOf(floor).map((w, i) => {
     const q = wallLoad(w, wallTypes), L = dist(w.a, w.b), u = sub(w.b, w.a).map((v) => v / (L || 1)), out = { i, q, len: L, on: [] };
-    for (const ln of lines) {
+    for (const ln of flat) {
       if (Math.abs(cross(ln.u, u)) > 1e-6 || Math.abs(cross(ln.u, sub(w.a, ln.A))) > TOL) continue;
       const proj = (p) => (p[0] - ln.A[0]) * ln.u[0] + (p[1] - ln.A[1]) * ln.u[1], a = Math.max(0, Math.min(proj(w.a), proj(w.b))), b = Math.min(ln.L, Math.max(proj(w.a), proj(w.b)));
       if (b - a > 0.05) { ln.slab.push({ a, b, wa: q, wb: q, g: "WALL", from: `ผนัง ${i + 1}` }); out.on.push({ line: ln.id, len: b - a }); }
@@ -479,7 +490,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     const t = c.t ?? floor.t, g = { DL: CONC * t, SDL: c.finish ?? floor.finish, LL: c.live ?? floor.live }, L = c.L, ab = dist(c.a, c.b);
     const n = [(-(c.b[1] - c.a[1]) / ab) * (c.side ?? 1), ((c.b[0] - c.a[0]) / ab) * (c.side ?? 1)];
     const P = [c.a, c.b, [c.b[0] + n[0] * L, c.b[1] + n[1] * L], [c.a[0] + n[0] * L, c.a[1] + n[1] * L]];
-    const ln = lines.find((o) => along(o, c.a) !== null && along(o, c.b) !== null);
+    const ln = flat.find((o) => along(o, c.a) !== null && along(o, c.b) !== null);
     if (ln) {
       const a = Math.min(along(ln, c.a), along(ln, c.b)), b = Math.max(along(ln, c.a), along(ln, c.b));
       for (const [k, v] of Object.entries(g)) if (v > 0) ln.slab.push({ a, b, wa: v * L, wb: v * L, g: k, from: `พื้นยื่น ${i + 1}` });
@@ -488,9 +499,9 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     return { i, P, t, L, g, w: g.DL + g.SDL + g.LL, area: ab * L, line: ln?.id };
   });
   // a uniform load along segment a-b onto the beam line under it (false when no beam is there)
-  const onBeam = (a, b, q, g, from) => {
+  const onBeam = (a, b, q, g, from, mid = false) => { // mid: onto a beam inside the storey (stair landing)
     const L = dist(a, b), u = sub(b, a).map((v) => v / (L || 1));
-    const ln = lines.find((o) => Math.abs(cross(o.u, u)) < 1e-6 && along(o, a) !== null && along(o, b) !== null);
+    const ln = (mid ? lines.filter((o) => o.lvl) : flat).find((o) => Math.abs(cross(o.u, u)) < 1e-6 && along(o, a) !== null && along(o, b) !== null);
     if (!ln || !(q > 0)) return !!ln;
     const t0 = along(ln, a), t1 = along(ln, b);
     ln.slab.push({ a: Math.min(t0, t1), b: Math.max(t0, t1), wa: q, wb: q, g, from });
@@ -511,6 +522,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       for (const [g, q] of Object.entries(perM)) {
         if (!(q > 0)) continue;
         if (where === "below") down.push({ a: edge[0], b: edge[1], q, g, from });
+        else if (where === "mid" && !onBeam(edge[0], edge[1], q, g, from, true)) { warnings.push(`${from}: ชานพักไม่มีคานรับที่ระดับชานพัก (คานระดับกลางชั้นตามขอบ (${edge[0].map((v) => v.toFixed(2))})–(${edge[1].map((v) => v.toFixed(2))})) — วาดคานชานพักแล้วตั้ง "ระดับ" ของคาน`); break; }
+        else if (where === "mid") continue;
         else if (!onBeam(edge[0], edge[1], q, g, from)) { warnings.push(`${from}: ขอบ (${edge[0].map((v) => v.toFixed(2))})–(${edge[1].map((v) => v.toFixed(2))}) ไม่มีคานรับ`); break; }
       }
     };
@@ -523,11 +536,13 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       // U / L: flight 1 up on one half, landing at the far end, flight 2 back on the other half (simple span start → far edge)
       const Ll = Math.min(st.landingL ?? 1.2, Lr), Lf = Lr - Ll, Rfar = add(scale(flight, (Lf * Lf) / 2 / Lr), scale(landing, (Ll * (Lf + Ll / 2)) / Lr)), Rst = add(scale(flight, Lf - (Lf * Lf) / 2 / Lr), scale(landing, Ll - (Ll * (Lf + Ll / 2)) / Lr));
       put(half(E.start, 0), Rst, "below"); put(half(E.start, 1), Rst, "this");
-      put(E.end, Rfar, st.landingTo === "this" ? "this" : "below");
+      // the landing edge: a landing beam inside the storey ("mid", default when one is drawn along it), this floor or the floor below
+      const midThere = lines.some((o) => o.lvl && along(o, E.end[0]) !== null && along(o, E.end[1]) !== null);
+      put(E.end, Rfar, st.landingTo === "this" ? "this" : st.landingTo === "below" ? "below" : st.landingTo === "mid" || midThere ? "mid" : "below");
       total.DL = flight.DL * Lf * B + landing.DL * Ll * B; total.SDL = flight.SDL * Lr * B; total.LL = flight.LL * Lr * B;
     } else { put(E.start, scale(flight, Lr / 2), "below"); put(E.end, scale(flight, Lr / 2), "this"); } // long: simple span along the run
     if (st.kind === "cant") { // the supporting beam also takes the torque wB²/2 per metre
-      const e = st.side === -1 ? E.sideA : E.sideB, ln = lines.find((o) => along(o, e[0]) !== null && along(o, e[1]) !== null);
+      const e = st.side === -1 ? E.sideA : E.sideB, ln = flat.find((o) => along(o, e[0]) !== null && along(o, e[1]) !== null);
       if (ln) { const a = along(ln, e[0]), b = along(ln, e[1]); ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: ((flight.DL + flight.SDL + flight.LL) * B * B) / 2, mL: (flight.LL * B * B) / 2 }); }
     }
     return { i, P: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], kind: st.kind ?? "long", up: st.up ?? "+x", th, Lr, B, total, w: flight.DL + flight.SDL + flight.LL };
@@ -564,7 +579,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   const pointLoads = (floor.pointLoads ?? []).map((pl, i) => {
     const from = pl.name || `น้ำหนักจุด ${i + 1}`, ci = cols.findIndex((c) => dist(c, pl.p) < 0.05);
     if (ci >= 0) return { i, on: "column", ci, P: pl.P }; // e.g. roof plates bearing on a column top
-    const ln = lines.find((o) => along(o, pl.p) !== null);
+    const ln = flat.find((o) => along(o, pl.p) !== null);
     if (ln) { (ln.extra ??= []).push({ at: along(ln, pl.p), P: pl.P, from, g: "SP" }); return { i, on: "beam" }; }
     const pn = inPanel(pl.p);
     if (pn && pn.st !== "GS") { pn.g.SP = (pn.g.SP ?? 0) + pl.P / pn.area; pn.w += pl.P / pn.area; return { i, on: "panel", panel: pn.key }; }
@@ -573,7 +588,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   for (const d of downLines) if (!onBeam(d.a, d.b, d.q, d.g, d.from)) warnings.push(`${d.from}: ปลายล่างไม่มีคานรับที่ชั้นนี้`);
   panels.forEach((pn, k) => pn.st !== "GS" && pn.edges.forEach((pieces, e) => {
     const p = pn.P[e], q = pn.P[(e + 1) % pn.P.length], L = dist(p, q), u = sub(q, p).map((v) => v / L);
-    const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], ln = lines.find((o) => along(o, mid) !== null && Math.abs(cross(o.u, u)) < 1e-6);
+    const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], ln = flat.find((o) => along(o, mid) !== null && Math.abs(cross(o.u, u)) < 1e-6);
     if (!ln) return;
     const t0 = along(ln, p), dir = u[0] * ln.u[0] + u[1] * ln.u[1] > 0 ? 1 : -1;
     for (const pc of pieces) for (const [gk, gv] of Object.entries(pn.g)) {
@@ -594,7 +609,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   }
   // columns from above standing on a beam: point load on the first line through that point
   for (const e of extra) {
-    const ln = lines.find((o) => along(o, e.p) !== null);
+    const ln = flat.find((o) => along(o, e.p) !== null);
     if (ln) (ln.extra ??= []).push({ at: along(ln, e.p), P: e.P, from: e.from });
     else warnings.push(`${e.from} ที่ (${e.p[0].toFixed(2)}, ${e.p[1].toFixed(2)}) ไม่มีเสาหรือคานรับที่ชั้นนี้ — แรงหายไป`);
   }

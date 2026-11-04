@@ -56,3 +56,32 @@ export function designSlabs(an, floor, mat, sm = {}) {
   });
   return out;
 }
+
+// Auto stair sizing (user 2026-11-04): risers / treads from the storey height H and the drawn opening (riser ≤ 0.20, tread ≥ 0.22,
+// 2R + T = 0.60–0.65, run fits the opening; prefers R ≈ 0.175, 2R + T ≈ 0.63), then the thinnest waist slab and the smallest main
+// bar that pass the diff-tested stair design (slab.js). st = the stair, Lr = its span on plan (an.stairs[i].Lr) → { patch, notes }
+export function autoStair(st, H, Lr, mat, sm = {}) {
+  const notes = [], land = st.kind === "landing" ? Math.min(st.landingL ?? 1.2, Lr) : 0, flights = st.kind === "landing" ? 2 : 1, avail = Lr - land;
+  let best = null;
+  for (let n = Math.ceil(H / 0.2 - 1e-9); n <= Math.ceil(H / 0.15); n++) {
+    const R = H / n, per = Math.ceil(n / flights);
+    for (let T = Math.min(0.3, Math.round((0.63 - 2 * R) / 0.005) * 0.005); T >= Math.max(0.22, 0.6 - 2 * R) - 1e-9; T -= 0.005) {
+      const c = 2 * R + T; if (c > 0.65 + 1e-9 || c < 0.6 - 1e-9) continue;
+      const fits = (per - 1) * T <= avail + 0.01, score = (fits ? 0 : 10) + Math.abs(R - 0.175) * 4 + Math.abs(c - 0.63);
+      if (!best || score < best.score) best = { R, T: +T.toFixed(3), n, fits, score };
+    }
+  }
+  const patch = {};
+  if (best) { patch.riser = +best.R.toFixed(3); patch.tread = best.T; notes.push(`${best.n} ลูกตั้ง × ${best.R.toFixed(3)} ม. · ลูกนอน ${best.T.toFixed(3)} ม. · 2R+T = ${(2 * best.R + best.T).toFixed(3)}`); if (!best.fits) notes.push("ช่องบันไดสั้นกว่าที่ต้องการ — ขยายช่องบันไดหรือเพิ่มชานพัก"); }
+  if (st.kind === "side" || st.kind === "cant") { notes.push("บันไดพาดข้าง / ยื่น: ความหนาไม่ได้ออกแบบที่นี่"); return { patch, notes }; }
+  const base = { fcPrime: mat.fcSlab ?? mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: sm.fy ?? 2400, cover: sm.cover ?? mat.coverSlab ?? 2, unitWeight: 2400 };
+  const bars = [...new Set([st.mainBar ?? "DB 12", "DB 12", "DB 16"])];
+  outer: for (const t of [0.1, 0.12, 0.13, 0.15, 0.17, 0.18, 0.2, 0.22, 0.25]) for (const mainBar of bars) {
+    try {
+      const r = stair({ ...base, t, riser: patch.riser ?? st.riser ?? 0.17, tread: patch.tread ?? st.tread ?? 0.25, extra: st.finish ?? 100, live: st.live ?? 300, L: Lr, mainBar, tempBar: sm.bar ?? "RB 9", fy: sm.stairFy ?? 4000 });
+      if (r.nOk && r.minTOk && r.dOk && r.VcOk && r.McOk && r.uOk) { Object.assign(patch, { t, mainBar }); notes.push(`ท้องบันไดหนา ${(t * 100).toFixed(0)} ซม. · เหล็กหลัก ${r.mainText}`); break outer; }
+    } catch { /* try the next size */ }
+  }
+  if (patch.t === undefined) notes.push("ไม่มีความหนาถึง 25 ซม. ที่ผ่าน — ลดช่วงบันได (เพิ่มคานรับ / ชานพัก)");
+  return { patch, notes };
+}

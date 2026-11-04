@@ -459,7 +459,15 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 <br /><b className="text-[13px]">{fmt(wallLoad(rw, wallTypes), 0)} กก./ม.</b> · {r?.on.length ? `ลงคาน ${r.on.join(", ")}` : r?.panel ? `กระจายลงแผ่นพื้น ${r.panel}` : "ยังไม่มีคาน/พื้นรับ"}</p>
               <button onClick={() => { setFloor({ walls: wallsOf(fl).filter((_, i) => i !== sel.i) }); setSel(null); }} className="col-span-2 text-left text-[12px] text-red-600">ลบผนัง</button>
             </div>); })()}
-            {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={fl.h} r0={an.stairs?.[sel.i]} />
+            {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={fl.h} r0={an.stairs?.[sel.i]} mat={frame.mat} onLandingBeam={() => {
+              // landing edge (far end of the run) extended along its line to the nearest columns of this floor on each side
+              const x0 = Math.min(stair.a[0], stair.b[0]), x1 = Math.max(stair.a[0], stair.b[0]), y0 = Math.min(stair.a[1], stair.b[1]), y1 = Math.max(stair.a[1], stair.b[1]);
+              const ax = stair.up?.[1] ?? "x", pos = stair.up?.[0] !== "-", c = ax === "x" ? (pos ? x1 : x0) : (pos ? y1 : y0), lo = ax === "x" ? y0 : x0, hi = ax === "x" ? y1 : x1;
+              const on = (fl.columns ?? []).filter((p) => Math.abs((ax === "x" ? p[0] : p[1]) - c) < 0.05).map((p) => (ax === "x" ? p[1] : p[0]));
+              const s0 = Math.max(...on.filter((v) => v <= lo + 0.05), -Infinity), s1 = Math.min(...on.filter((v) => v >= hi - 0.05), Infinity);
+              const A = Number.isFinite(s0) ? s0 : lo, B = Number.isFinite(s1) ? s1 : hi, P = (v) => (ax === "x" ? [c, v] : [v, c]);
+              setFloor({ beams: [...fl.beams, { a: P(A), b: P(B), type: null, lvl: +(fl.h / 2).toFixed(2) }] });
+            }} />
               <button onClick={() => delList("stairs")} className="mt-2 text-left text-[12px] text-red-600">ลบบันไดนี้</button></>}
             {lineL && (<div className="grid grid-cols-2 gap-3">
               <Field label="ชื่อ"><input value={lineL.name ?? ""} onChange={(e) => setList("lineLoads", { name: e.target.value })} className="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-[13px]" /></Field>
@@ -487,6 +495,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             {beam && (<div className="grid grid-cols-2 gap-3">
               <Field label="Type"><Select value={beam.type ?? ""} onChange={(v) => setBeam({ type: v === "" ? null : Number(v) })} options={[["", "อัตโนมัติ"], ...types.map((t, i) => [i, t.name])]} /></Field>
               <Field label={beam.arc?.s ? "ยาวตามส่วนโค้ง" : "ยาว"} unit="m"><div className="flex h-11 items-center text-sm tabular-nums">{fmt(arcGeom(beam.a, beam.b, beam.arc?.s)?.L ?? Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1]), 2)}</div></Field>
+              <Field label="ระดับคาน (ม. จากพื้นชั้นล่าง)">
+                <NumberInput value={beam.lvl ?? ""} step="0.05" onChange={(v) => setBeam({ lvl: v > 0 ? v : undefined })} /></Field>
+              <p className="-mt-1 text-[11px] text-gray-500">เว้นว่าง = คานระดับพื้นชั้นนี้ · ใส่ค่า = คานกลางชั้น เช่น คานรับชานพักบันได (วางบนเสาของชั้นนี้ ไม่รับพื้น)</p>
               <Field label="บทบาทที่จุดตัดคาน (ไม่มีเสา)"><Select value={beam.role ?? ""} onChange={(v) => setBeam({ role: v || undefined })} options={[["", "อัตโนมัติ (คานที่มีเสามากกว่า / ช่วงสั้นกว่า = คานหลัก)"], ["main", "คานหลัก — คานอื่นวางบนคานนี้"], ["secondary", "คานซอย — วางบนคานที่ตัดผ่าน"]]} /></Field>
               {(() => { const mine = an.lines.filter((l) => l.members.includes(sel.i)), rests = mine.flatMap((l) => l.carriers.map((c) => an.lines.find((o) => o.id === c.host)?.id + 1)).filter(Boolean), carries = an.lines.filter((o) => o.carriers.some((c) => mine.some((l) => l.id === c.host))).map((o) => o.id + 1);
                 return <p className="self-end text-[12px] text-gray-600">{rests.length ? `วางบนแนว ${[...new Set(rests)].join(", ")}` : "วางบนเสา"}{carries.length ? ` · รับแนว ${[...new Set(carries)].join(", ")}` : ""}</p>; })()}

@@ -42,4 +42,26 @@ const { analyzeFrame: aF } = await import("../web/engine/frame.js"); const yj = 
 const rr = aF({ ...yj.frame, footTypes: [{ kind: "spread", name: "F", Bx: 0, By: 0, t: 0.3, Df: 1.2, bar: "DB 12", s: 0.15 }], soil: { qa: 6000, gamma: 1800 } });
 const re = rr.footings.filter((f) => f.reshaped), ok4 = re.length > 0 && re.every((f) => f.ok && f.r.Bx !== f.r.By);
 console.log(`${ok4 ? "ok  " : "FAIL"} clashing spread footings reshaped to rectangles: ${re.map((f) => `${f.r.Bx}x${f.r.By}`).join(", ")}`);
-process.exit(ok && ok2 && ok3 && ok4 ? 0 : 1);
+// stair with a landing on a beam inside the storey (user 2026-11-04): foot on the floor below, landing on the landing beam (lvl 1.5),
+// head on this floor — three beams loaded; the 3D frame puts the landing beam at +1.5 on the columns (split) and balances
+let okS = false, okS3 = false;
+{
+  const fl = (name, h, t) => ({ name, h, t, finish: t ? 100 : 0, live: t ? 200 : 0, columns: [[0, 0], [3, 0], [0, 4], [3, 4]], panels: {},
+    beams: [Bm(g(0, 0), g(3, 0)), Bm(g(0, 4), g(3, 4)), Bm(g(0, 0), g(0, 4)), Bm(g(3, 0), g(3, 4))] });
+  const f2 = fl("ชั้น 2", 3, 0.12);
+  f2.beams.push({ a: [0, 4], b: [3, 4], type: null, lvl: 1.5 }); // landing beam along the far edge, half way up
+  f2.stairs = [{ a: [0, 0], b: [3, 4], up: "+y", kind: "landing", t: 0.15, landingL: 1.2 }];
+  f2.panels = { }; // the panel under the stair is its well
+  const fr = { mat, beamTypes: DEFAULT_BEAM_TYPES, colTypes: DEFAULT_COLUMN_TYPES, floors: [fl("GB", 1.5, 0), f2], analysis: "envelope" };
+  const rr = analyzeFrame(fr), an = rr.floors[1], mid = an.lines.find((l) => l.lvl), msp = an.spans.find((s) => s.line === mid?.id);
+  const onMid = (mid?.slab ?? []).filter((l) => String(l.from).startsWith("บันได")).reduce((t, l) => t + ((l.wa + l.wb) / 2) * (l.b - l.a), 0);
+  const onFoot = rr.floors[0].lines.flatMap((l) => l.slab).filter((l) => String(l.from).startsWith("บันได")).reduce((t, l) => t + ((l.wa + l.wb) / 2) * (l.b - l.a), 0);
+  const onHead = an.lines.filter((l) => !l.lvl).flatMap((l) => l.slab).filter((l) => String(l.from).startsWith("บันได")).reduce((t, l) => t + ((l.wa + l.wb) / 2) * (l.b - l.a), 0);
+  const tot = an.stairs[0].total, T = tot.DL + tot.SDL + tot.LL;
+  okS = !!msp && onMid > 0 && onFoot > 0 && onHead > 0 && Math.abs(onMid + onFoot + onHead - T) < 1e-6 * T && msp.Mpos > 0;
+  console.log(`${okS ? "ok  " : "FAIL"} stair landing on a mid-level beam: foot ${onFoot.toFixed(0)} + landing ${onMid.toFixed(0)} + head ${onHead.toFixed(0)} = ${T.toFixed(0)} · landing beam M+ ${msp?.Mpos.toFixed(0)} (${msp?.typeName})`);
+  const f3 = rr.frame3d, z = f3?.nodes?.filter?.((n) => Math.abs(n.z - 3) < 1e-6 && !n.master).length;
+  okS3 = !!f3 && !f3.error;
+  console.log(`${okS3 ? "ok  " : "FAIL"} 3D frame with the landing beam ${f3?.error ?? ""} ${rr.warnings.filter((w) => /ชานพัก|เสถียร/.test(w)).join(" | ")}`);
+}
+process.exit(ok && ok2 && ok3 && ok4 && okS && okS3 ? 0 : 1);

@@ -392,3 +392,11 @@ Roof 3D: posts start at the plate top (H − 0.155), loose posts red. Print insi
 self-printing HTML (App print dialog: new tab / download). "ระยะเสาสมมติ" (plateSpan) shown only without columns / plates.
 PENDING (agreed): wall plates as real continuous beams (contBeam per plate line over the columns, M+ / M− / true deflection, continuous
 reactions to the columns, report V/M per line, default "cont"; frozen simpleBeam/pointBeam untouched). Then: "เหล็กที่มีขาย" stock list.
+2026-11-04 (evening) BUILT: wall plates continuous (roofMembers contRun: collinear plate chains solved with contBeam, uniform EI, unit-UDL
+superposition for self weight, per span M+/M−/true deflection, end shears → bear; dz.plateLines → RoofReport V/M diagrams; default
+plateSupport "cont"; single-span lines stay simple). floor.js: beam.lvl (m above the floor below) = beam inside the storey (own lines,
+no panels/walls/merging, columns of this floor support it); stair landing → "mid" (auto when a mid beam lies on the landing edge;
+StairInputs "สร้างคานชานพัก" draws it at H/2 between the nearest columns); frame3d puts it at zb + lvl and splits the columns there
+(columnsOf merges the pieces). sp.topFull (hogging at mid-span / lifted end → top bars full length; report table + inspector).
+mat.stirrupExempt (step 0, off by default): ACI min-stirrup exemption h ≤ 25 cm or V ≤ Vc/2, no Vp, torsion < ¼ cracking.
+slabDesign autoStair (riser/tread from H + opening, thinnest passing waist) → StairInputs "จัดขนาดบันไดอัตโนมัติ". PyNite/Excel NOT re-run.

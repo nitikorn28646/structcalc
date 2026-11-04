@@ -118,7 +118,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     if (tool === "stair") {
       if (Math.abs(p[0] - start[0]) < 0.3 || Math.abs(p[1] - start[1]) < 0.3) return;
       const up = Math.abs(p[0] - start[0]) >= Math.abs(p[1] - start[1]) ? "+x" : "+y";
-      commit({ stairs: [...stairs, { a: start, b: p, up, kind: "long", t: 0.12, riser: 0.17, tread: 0.25, finish: 100, live: 300, landingL: 1.2, landingTo: "below", side: 1 }] });
+      commit({ stairs: [...stairs, { a: start, b: p, up, kind: "long", t: 0.12, riser: 0.17, tread: 0.25, finish: 100, live: 300, landingL: 1.2, side: 1 }] });
       setSel({ kind: "stair", i: stairs.length }); setStart(null); return;
     }
     if (tool === "line") { const it = libItem?.kind === "line" ? libItem : null; commit({ lineLoads: [...lineLoads, { a: start, b: p, q: it?.v ?? 100, name: it?.name ?? "ราวกันตก" }] }); setStart(p); return; }
@@ -344,7 +344,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               <g key={`b${i}`}>
                 {isSel("beam", i) && <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke="#f79009" strokeOpacity={0.45} strokeWidth={14 * k} strokeLinecap="round" />}
                 {/* true width of the designed (or chosen) type, like the columns; never under 4 px; thin centre line on top */}
-                <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={Math.max(bw(i), 4 * k)} strokeLinecap="square" strokeOpacity={step === "wall" || step === "slab" ? 0.35 : 0.55} />
+                <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={Math.max(bw(i), 4 * k)} strokeLinecap="square" strokeOpacity={step === "wall" || step === "slab" ? 0.35 : 0.55} strokeDasharray={b.lvl > 0 ? `${10 * k} ${6 * k}` : undefined} />
+                {b.lvl > 0 && txt([m[0] + n[0] * (12 * k + bw(i) / 2), m[1] + n[1] * (12 * k + bw(i) / 2)], `คานกลางชั้น +${(+b.lvl).toFixed(2)}`, "#7a5af8", 10, "middle", 600)}
                 <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={1.3 * k} strokeDasharray={`${10 * k} ${3 * k} ${2 * k} ${3 * k}`} opacity={step === "wall" || step === "slab" ? 0.6 : 1} />
                 {result && ti !== undefined && txt([m[0] - n[0] * (11 * k + bw(i) / 2), m[1] - n[1] * (11 * k + bw(i) / 2)], `${types[ti]?.name}${sp.length && sp.every((x) => x.kind === "cantilever") ? "A" : ""}${bad ? " ✕" : ""}`, color, 11, "middle", 600)}
                 {/* a cantilever part of a longer drawn beam gets its own tag (B1A = B1, top bars the whole cantilever) */}

@@ -158,7 +158,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
             const bw = fl.beams.map((b, i) => ({ ...b, w: bt[i].t.b, h: bt[i].t.h }));
             const csz = (kk, i) => { const col = res.columns.find((x) => x.floor === kk && x.i === i); return [(col?.lv?.Bx ?? 20) / 100, (col?.lv?.By ?? 20) / 100]; };
             const jc = [...fl.columns.map((p, i) => { const [B, D] = csz(k, i); return { p, B, D }; }), ...(frame.floors[k + 1]?.columns ?? []).map((p, i) => { const [B, D] = csz(k + 1, i); return { p, B, D }; })];
-            const pieces = beamPieces(bw, jc.reduce((a, c) => { const o = a.find((x) => Math.hypot(x.p[0] - c.p[0], x.p[1] - c.p[1]) < 0.03); if (o) { o.B = Math.max(o.B, c.B); o.D = Math.max(o.D, c.D); } else a.push({ ...c }); return a; }, []));
+            const pieces = beamPieces(bw.map((b) => (b.lvl > 0 ? { ...b, a: [1e6, 1e6], b: [1e6 + 1, 1e6] } : b)), jc.reduce((a, c) => { const o = a.find((x) => Math.hypot(x.p[0] - c.p[0], x.p[1] - c.p[1]) < 0.03); if (o) { o.B = Math.max(o.B, c.B); o.D = Math.max(o.D, c.D); } else a.push({ ...c }); return a; }, []));
             return (
               <group key={k}>
                 {on.column && fl.columns.map((c, i) => {
@@ -169,9 +169,10 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                   const { sp, t } = bt[i], ti = sp?.typeIdx ?? b.type ?? 0;
                   const color = sp && !sp.ok ? "#f04438" : byType ? TYPE_COLORS[ti % TYPE_COLORS.length] : CONC;
                   const pick = onPick ? () => onPick({ floor: k, kind: "beam", i }) : undefined, isSel = selected?.floor === k && selected?.kind === "beam" && selected?.i === i;
-                  if (pieces[i]) return pieces[i].map(([p, q], j) => <Box key={`b${i}-${j}`} p={p} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={isSel ? "#f79009" : color} edges="#475467" onClick={pick} />);
+                  const zt = b.lvl > 0 ? zb + b.lvl : Zk; // a beam inside the storey (stair landing beam) at its own level
+                  if (pieces[i] && !(b.lvl > 0)) return pieces[i].map(([p, q], j) => <Box key={`b${i}-${j}`} p={p} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={isSel ? "#f79009" : color} edges="#475467" onClick={pick} />);
                   const pts = arcPolyline(b.a, b.b, b.arc?.s, 12);
-                  return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={isSel ? "#f79009" : color} onClick={pick} />);
+                  return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={zt - t.h} h={t.h} color={isSel ? "#f79009" : color} edges="#475467" onClick={pick} />);
                 })}
                 {on.slab && an?.panels.filter((p) => !p.open && !p.stairWell).map((p) => (
                   <Prism key={p.key} P={insetPolygon(p.P, p.P.map((q, j) => edgeWidth(bw, q, p.P[(j + 1) % p.P.length]) / 2))} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />

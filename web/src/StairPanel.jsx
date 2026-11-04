@@ -1,6 +1,8 @@
 // Step 4 stair editor, laid out like a design sheet: type and direction, geometry from the storey height (number of risers,
 // actual riser, run needed vs the drawn opening, building-code checks), loads with occupancy presets, the design of the waist
 // slab (diff-tested slab engine via slabDesign) and a dimensioned side section of the stair.
+import { useState } from "react";
+import { autoStair } from "../engine/slabDesign.js";
 import { Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import { STAIR_KINDS, stairLoads } from "../engine/floor.js";
@@ -20,7 +22,8 @@ export function stairGeom(st, H, r0) {
       ["2R + T = 0.60–0.65 ม.", 2 * Ra + T >= 0.6 - 1e-9 && 2 * Ra + T <= 0.65 + 1e-9, fmt(2 * Ra + T, 3)], ["ช่องบันไดยาวพอ", Lr - land >= runNeed - 0.01, `${fmt(runNeed, 2)} / ${fmt(Lr - land, 2)}`]] };
 }
 
-export function StairInputs({ st, set, H, r0 }) {
+export function StairInputs({ st, set, H, r0, mat, onLandingBeam }) {
+  const [auto, setAuto] = useState(null);
   const n = (k, label, unit, step, def) => <Field label={label} unit={unit}><NumberInput value={st[k] ?? def} step={step} onChange={(v) => set({ [k]: v })} /></Field>;
   const g = stairGeom(st, H, r0);
   return (
@@ -29,11 +32,17 @@ export function StairInputs({ st, set, H, r0 }) {
       <div className="col-span-2"><Field label="แบบบันได"><Select value={st.kind ?? "long"} onChange={(v) => set({ kind: v })} options={Object.entries(STAIR_KINDS)} /></Field></div>
       <Field label="ทิศขึ้น"><Select value={st.up ?? "+x"} onChange={(v) => set({ up: v })} options={[["+x", "→ +X"], ["-x", "← −X"], ["+y", "↑ +Y"], ["-y", "↓ −Y"]]} /></Field>
       {st.kind === "cant" ? <Field label="ยื่นจากด้าน"><Select value={st.side ?? 1} onChange={(v) => set({ side: Number(v) })} options={[[1, "ด้าน B"], [-1, "ด้าน A"]]} /></Field> : <div />}
+      <div className="col-span-2">
+        <button disabled={!r0 || !mat} onClick={() => { const a = autoStair(st, H, r0.Lr, mat); set(a.patch); setAuto(a.notes); }} className="rounded-md bg-brand-500 px-3 py-1 text-[12px] font-medium text-[#fff] disabled:opacity-40">จัดขนาดบันไดอัตโนมัติ</button>
+        <span className="ml-2 text-[11px] text-gray-500">ลูกตั้ง / ลูกนอนจากความสูงชั้นและช่องบันได แล้วหาท้องบันไดบางสุดที่ผ่าน</span>
+        {auto && <ul className="mt-1 list-disc pl-5 text-[11px] text-gray-600">{auto.map((t) => <li key={t}>{t}</li>)}</ul>}
+      </div>
       <Sub>รูปทรง (ขึ้นสูง {fmt(H, 2)} ม. ตามระดับชั้น)</Sub>
       {n("riser", "ลูกตั้ง (ออกแบบ)", "m", "0.005", 0.17)}{n("tread", "ลูกนอน", "m", "0.005", 0.25)}
       {n("t", "ท้องบันไดหนา", "m", "0.01", 0.12)}
       {st.kind === "landing" ? n("landingL", "ชานพักยาว", "m", "0.1", 1.2) : <div />}
-      {st.kind === "landing" && <div className="col-span-2"><Field label="คานรับชานพัก"><Select value={st.landingTo ?? "below"} onChange={(v) => set({ landingTo: v })} options={[["below", "ฝากคานชั้นล่าง"], ["this", "ฝากคานชั้นนี้"]]} /></Field></div>}
+      {st.kind === "landing" && onLandingBeam && <div className="col-span-2"><button onClick={onLandingBeam} className="rounded-md px-3 py-1 text-[12px] text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">+ สร้างคานชานพักที่ระดับ {fmt(H / 2, 2)} ม. (ขอบชานพัก ต่อถึงเสาที่ใกล้สุด)</button></div>}
+      {st.kind === "landing" && <div className="col-span-2"><Field label="คานรับชานพัก"><Select value={st.landingTo ?? ""} onChange={(v) => set({ landingTo: v || undefined })} options={[["", "อัตโนมัติ — คานชานพัก (ระดับกลางชั้น) ถ้าวาดไว้ ไม่มีก็ฝากคานชั้นล่าง"], ["mid", "คานชานพักระดับกลางชั้น"], ["below", "ฝากคานชั้นล่าง"], ["this", "ฝากคานชั้นนี้"]]} /></Field></div>}
       <p className="col-span-2 rounded-lg bg-gray-50 px-2 py-1.5 text-[12px] tabular-nums text-gray-600">{g.n} ลูกตั้ง × {fmt(g.Ra, 3)} ม. · {g.flights} ช่วงบันได ช่วงละ {g.perFlight} ขั้น · ต้องการยาว {fmt(g.runNeed, 2)} ม. (ช่องที่วาด {fmt(g.runAvail, 2)} ม.)</p>
       <Sub>น้ำหนักบรรทุก</Sub>
       <Field label="ประเภทการใช้งาน"><Select value={LIVE.some(([v]) => v === (st.live ?? 300)) ? st.live ?? 300 : ""} onChange={(v) => v && set({ live: Number(v) })} options={[...LIVE, ["", "กำหนดเอง"]]} /></Field>
