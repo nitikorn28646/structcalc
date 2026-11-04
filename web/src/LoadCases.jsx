@@ -28,18 +28,18 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
   const group = (list, keyOf) => { const m = new Map(); list.forEach((x) => { const k = keyOf(x); m.set(k, [...(m.get(k) ?? []), x]); }); return [...m.entries()]; };
   const floorItems = (field) => group(panels.filter((p) => !p.open && !p.stairWell && p.st !== "GS"), (p) => p[field]).map(([v, ps]) => ({
     id: `f-${field}-${v}`, text: `FLOOR −${fmt(Number(v), 0)} kg/m²`, note: `${field === "finish" ? "ปูผิว/ฝ้า" : "จร"} · ${ps.length} แผ่น (${ps.map((p) => p.key).slice(0, 6).join(", ")}${ps.length > 6 ? " …" : ""})`,
-    v: Number(v), polys: ps.map((p) => p.P), pick: ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })),
+    v: Number(v), polys: ps.map((p) => p.P), form: { kind: "floor", lc: field === "live" ? "LL" : "DL", v: Number(v) }, pick: ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })),
     set: (nv) => setFloor({ panels: { ...fl.panels, ...Object.fromEntries(ps.map((p) => [p.key, { ...(fl.panels?.[p.key] ?? {}), [field]: nv }])) } }),
   }));
   const lineItems = (pred) => group(lines.map((l, i) => ({ ...l, i })).filter(pred), (l) => `${l.g ?? "SP"}|${l.q}|${l.name ?? ""}`).map(([k, ls]) => ({
-    id: `l-${k}`, text: `UNI GY −${fmt(ls[0].q, 0)} kg/m`, note: `${ls[0].name || "น้ำหนักแผ่"}${ls[0].g === "WALL" ? " (ผนัง)" : ""} · ${ls.length} ช่วง`, v: ls[0].q, segs: ls.map((l) => [l.a, l.b]),
+    id: `l-${k}`, text: `UNI GY −${fmt(ls[0].q, 0)} kg/m`, note: `${ls[0].name || "น้ำหนักแผ่"}${ls[0].g === "WALL" ? " (ผนัง)" : ""} · ${ls.length} ช่วง`, v: ls[0].q, segs: ls.map((l) => [l.a, l.b]), form: { kind: "uni", lc: ls[0].g === "LL" ? "LL" : "DL", g: ls[0].g === "LL" ? "WALL" : ls[0].g ?? "SP", name: ls[0].name ?? "", v: ls[0].q },
     pick: ls.map((l) => { const bi = beams.findIndex((b) => near(b.a, l.a) && near(b.b, l.b)); return bi >= 0 ? { kind: "beam", i: bi } : null; }).filter(Boolean),
     set: (nv) => setFloor({ lineLoads: lines.map((l, i) => (ls.some((x) => x.i === i) ? { ...l, q: nv } : l)) }),
     del: () => setFloor({ lineLoads: lines.filter((_, i) => !ls.some((x) => x.i === i)) }),
   }));
   const pointItems = (pred) => group(points.map((q, i) => ({ ...q, i })).filter(pred), (q) => `${q.g ?? "SP"}|${q.P}|${q.name ?? ""}`).map(([k, qs]) => {
     const node = qs.every((q) => cols.some((c) => near(c, q.p)));
-    return { id: `p-${k}`, text: `${node ? "NODE FY" : "CON GY"} −${fmt(qs[0].P, 0)} kg`, note: `${qs[0].name || "น้ำหนักจุด"} · ${qs.length} จุด${qs[0].g === "LL" ? " (คิดเต็มทุกช่วงเหมือนน้ำหนักคงที่)" : ""}`, v: qs[0].P, pts: qs.map((q) => q.p),
+    return { id: `p-${k}`, text: `${node ? "NODE FY" : "CON GY"} −${fmt(qs[0].P, 0)} kg`, note: `${qs[0].name || "น้ำหนักจุด"} · ${qs.length} จุด${qs[0].g === "LL" ? " (คิดเต็มทุกช่วงเหมือนน้ำหนักคงที่)" : ""}`, v: qs[0].P, pts: qs.map((q) => q.p), form: { kind: node ? "node" : "con", lc: qs[0].g === "LL" ? "LL" : "DL", name: qs[0].name ?? "", v: qs[0].P },
       pick: qs.map((q) => { const ci = cols.findIndex((c) => near(c, q.p)); return ci >= 0 ? { kind: "column", i: ci } : null; }).filter(Boolean),
       set: (nv) => setFloor({ pointLoads: points.map((q, i) => (qs.some((x) => x.i === i) ? { ...q, P: nv } : q)) }),
       del: () => setFloor({ pointLoads: points.filter((_, i) => !qs.some((x) => x.i === i)) }) };
@@ -104,11 +104,11 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
       </div>
       <div className="max-h-[46vh] space-y-0.5 overflow-auto pr-1">
         {CASES.map(([k, label]) => (<div key={k}><Head k={k} label={label} />
-          {open[k] && <div className="ml-4 border-l border-gray-200 pl-1.5 dark:border-gray-700">{tree[k].length ? tree[k].map((it) => <Item key={it.id} it={it} cur={cur} setPickSet={setPickSet} />) : <p className="px-1 text-[11px] text-gray-400">ยังไม่มีรายการ</p>}</div>}</div>))}
+          {open[k] && <div className="ml-4 border-l border-gray-200 pl-1.5 dark:border-gray-700">{tree[k].length ? tree[k].map((it) => <Item key={it.id} it={it} cur={cur} setPickSet={setPickSet} active={it.form && JSON.stringify(it.form) === JSON.stringify({ ...it.form, ...Object.fromEntries(Object.keys(it.form).map((k) => [k, k === "v" ? Number(form.v) : form[k]])) })} onUse={it.form ? () => { setForm({ ...form, ...it.form }); setMsg(`รายการปัจจุบัน: ${it.text} — เลือกบนแปลนแล้วกด Assign`); } : null} />) : <p className="px-1 text-[11px] text-gray-400">ยังไม่มีรายการ</p>}</div>}</div>))}
         <Head k="C" label="3 : DL+LL (ชุดผสม)" tag="C" />
         {open.C && <div className="ml-4 border-l border-gray-200 pl-2 text-[11px] text-gray-500 dark:border-gray-700">1.0 DL + 1.0 LL (WSD) · น้ำหนักจรจัดเรียงทีละช่วงเพื่อหาค่ามากสุด · ลม / แผ่นดินไหว{onLateral ? <> ดูที่ <button onClick={onLateral} className="text-brand-500 hover:underline">แท็บลม / แผ่นดินไหว</button></> : null}</div>}
       </div>
-      <p className="mt-1 text-[10.5px] text-gray-400">ชี้รายการ = ไฮไลต์บนแปลน / 3D · แก้ตัวเลขแล้ว Enter = แก้ทุกชิ้นในรายการ</p>
+      <p className="mt-1 text-[10.5px] text-gray-400">ชี้รายการ = ไฮไลต์บนแปลน / 3D (ยังไม่ใช่การเลือก) · คลิกรายการ = ใช้เป็นน้ำหนักในฟอร์ม Assign · "เลือก" = เลือกชิ้นของรายการนั้นบนแปลน · แก้ตัวเลขแล้ว Enter = แก้ทุกชิ้นในรายการ</p>
     </Card>
     <Card title="เพิ่มน้ำหนัก (Add) → Assign">
       <div className="grid grid-cols-2 gap-2 text-[12px]">
@@ -125,17 +125,24 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
         <button onClick={() => setArmed(!armed)} className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-medium ring-1 ${armed ? "bg-[#f79009] text-white ring-[#f79009]" : "text-gray-700 ring-gray-300 hover:bg-gray-50 dark:text-gray-200"}`}>
           <MousePointerClick className="h-3.5 w-3.5" />{armed ? "กำลังใช้เคอร์เซอร์ Assign (คลิกเพื่อหยุด)" : "ใช้เคอร์เซอร์ Assign"}</button>
       </div>
+      {(() => { // the selection does not fit the load kind (user: assigned with UNI while slabs were picked)
+        const want = { floor: "panel", uni: "beam", con: "beam", node: "column" }[form.kind], have = Object.entries(sel).filter(([, n]) => n > 0).map(([k]) => k);
+        if (!have.length || have.includes(want)) return null;
+        const to = have.includes("panel") ? "floor" : have.includes("beam") ? "uni" : "node";
+        return <p className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-[#b54708]">ที่เลือกไว้เป็น{{ panel: "แผ่นพื้น", beam: "คาน", column: "เสา" }[have[0]]} แต่ชนิดน้ำหนักคือ {KINDS.find((k) => k[0] === form.kind)[1]} — <button onClick={() => setForm({ ...form, kind: to })} className="font-medium text-brand-600 underline">เปลี่ยนเป็น {KINDS.find((k) => k[0] === to)[1]}</button></p>;
+      })()}
       {msg && <p className="mt-1 text-[11px] text-brand-600">{msg}</p>}
       <p className="mt-1 text-[10.5px] text-gray-400">UNI ใส่ตลอดความยาวคาน · ผนังกรอกเป็น kg/m ได้เลย · Floor Load แทนค่าเดิมของแผ่น · น้ำหนักจุด LL คิดเต็มทุกช่วง (ปลอดภัย)</p>
     </Card>
   </>);
 }
 
-function Item({ it, cur, setPickSet }) {
+function Item({ it, cur, setPickSet, active, onUse }) {
   const [v, setV] = useState(it.v);
   return (
     <div onMouseEnter={() => highlight({ floor: cur, segs: it.segs ?? [], polys: it.polys ?? [], pts: it.pts ?? [], p: it.pts?.[0] ?? null, bad: false })} onMouseLeave={() => highlight(null)}
-      className="group flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-brand-50/60 dark:hover:bg-white/5">
+      onClick={(e) => { if (onUse && !["INPUT", "BUTTON"].includes(e.target.tagName)) onUse(); }} title={onUse ? "คลิก = ใช้รายการนี้ในฟอร์ม Assign" : undefined}
+      className={`group flex items-center gap-1.5 rounded px-1 py-0.5 ${onUse ? "cursor-pointer" : ""} ${active ? "bg-brand-50 ring-1 ring-brand-300 dark:bg-white/10" : "hover:bg-brand-50/60 dark:hover:bg-white/5"}`}>
       <span className="h-2 w-2 shrink-0 rounded-sm bg-[#12b76a]" />
       <div className="min-w-0 flex-1">
         <div className="truncate font-mono text-[11.5px] text-gray-800 dark:text-gray-200">{it.text}</div>
