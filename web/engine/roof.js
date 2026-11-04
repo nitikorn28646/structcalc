@@ -58,7 +58,7 @@ export function roofGeometry(roof, skeleton) {
   // on that line. (Before: the hip end-face was pulled onto the line, wrong for sheds and wings.)
   const out = (k) => { const a = eave[k], b = eave[(k + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]); return { a, u: [(b[0] - a[0]) / L, (b[1] - a[1]) / L], nrm: [(b[1] - a[1]) / L, -(b[0] - a[0]) / L] }; };
   const E = eave.map((_, k) => out(k)), span = Math.max(...eave.map((p) => Math.hypot(p[0] - eave[0][0], p[1] - eave[0][1]))), D = 4 * span + 10;
-  const lineOf = (k, withM = true) => { const e = E[k], sft = isG[k] || (withM && isM[k]) ? D : 0; return { p: [e.a[0] + e.nrm[0] * sft, e.a[1] + e.nrm[1] * sft], u: e.u }; };
+  const lineOf = (k, withM = true, f = 1) => { const e = E[k], sft = isG[k] || (withM && isM[k]) ? D * f : 0; return { p: [e.a[0] + e.nrm[0] * sft, e.a[1] + e.nrm[1] * sft], u: e.u }; };
   const meet = (l1, l2) => { const den = l1.u[0] * l2.u[1] - l1.u[1] * l2.u[0]; if (Math.abs(den) < 1e-9) return l2.p; const t = ((l2.p[0] - l1.p[0]) * l2.u[1] - (l2.p[1] - l1.p[1]) * l2.u[0]) / den; return [l1.p[0] + l1.u[0] * t, l1.p[1] + l1.u[1] * t]; };
   // a gable on an inner edge (its outward side runs into the building, e.g. the inside corner of an L) cannot be pushed out: such
   // edges become hips again (warned). Test: the outward ray from the edge's middle hits another edge of the outline.
@@ -76,7 +76,10 @@ export function roofGeometry(roof, skeleton) {
   const dm = eave.map((p, k) => (isM[k] ? edges[k].dm ?? 0.25 * Math.hypot(eave[(k + 1) % n][0] - p[0], eave[(k + 1) % n][1] - p[1]) : 0));
   // hip skeleton of the outline with the chosen edges pushed far out; faces per edge (3D points)
   const build = (withM) => {
-    const push = isG.some(Boolean) || (withM && isM.some(Boolean)), ext = push ? eave.map((_, k) => meet(lineOf((k + n - 1) % n, withM), lineOf(k, withM))) : eave;
+    // push distance: as far as the outline stays a simple ring (neighbours of a gable that converge — angled walls — would cross)
+    const push = isG.some(Boolean) || (withM && isM.some(Boolean)), mk = (f) => eave.map((_, k) => meet(lineOf((k + n - 1) % n, withM, f), lineOf(k, withM, f)));
+    let ext = eave;
+    if (push) for (let f = 1; f > 1e-3; f /= 2) { ext = mk(f); if (!crosses(ext) && signedArea(ext) > 0) break; }
     const sk = skeleton([[...ext, ext[0]]]);
     if (!sk) throw new Error("รูปร่างหลังคาไม่ถูกต้อง (ขอบตัดกันเอง)");
     // H is the wall-plate level where the rafters bear on the wall; the eave edge sits lower by overhang·tanθ

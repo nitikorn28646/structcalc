@@ -441,6 +441,6 @@ hip skeleton of that outline, faces cut back at the gable line (Sutherland–Hod
 = three gables; inner-corner / reflex-meeting gables demoted to hips (g.warnings); eaves meeting in a narrow gap → clear error. New edge
 type "manila" (dm = edge.dm or ¼ edge length): main faces cut beyond the dm line + hip skirts (second skeleton without manila pushes) in
 the strip, gablet wall between them; menus cycle ปั้นหยา → จั่ว → มนิลา. Faces/lines now built from 3D points (no skeleton indices).
-Tests: cli/roof-shapes.cjs (browser, 28 shapes: planar faces, faces tile the plan, area = plan/cosθ, framing) 28/28; cli/stair-check.mjs
+Tests: cli/roof-shapes.cjs (browser, 36 shapes incl. angled walls, hexagon, bay: planar faces, faces tile the plan, area = plan/cosθ, framing) 36/36; cli/stair-check.mjs
 (node, 10 stair kinds/landing supports: total load = loads on beams) 10/10. Stairs drawn on the floor they start from → stored on the
 floor above (FloorBoard onStairUp / stairsAbove dashed, click → that floor). Not supported yet: multi-level roofs (separate eave heights).
