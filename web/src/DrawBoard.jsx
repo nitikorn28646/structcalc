@@ -11,6 +11,7 @@ import { splitPlates } from "./RoofPage.jsx";
 import { useHighlight } from "./highlight.js";
 import { TextSizeControl, useTextScale } from "./uiPrefs.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { findOverlaps, mergeOverlaps } from "../engine/floor.js";
 
 const TOOLS = [
   ["select", "เลือก/ย้าย", MousePointer2, "คลิกเลือกเพื่อแก้ตัวเลข · ลากกรอบที่ว่าง = เลือกหลายชิ้น แล้วกด Delete ลบ (Shift+ลาก = เลื่อนแปลน) · ลากมุมผนัง เสา ดั้ง เพื่อย้าย · คลิกเส้นก่อนแล้วลากปลายเส้น · ลากพื้นที่ว่างเพื่อเลื่อนภาพ · หมุนล้อเมาส์เพื่อซูม"],
@@ -68,7 +69,11 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
   const subdiv = (P) => P.flatMap((v, i) => (i ? Array.from({ length: nsub }, (_, k) => +(P[i - 1] + ((v - P[i - 1]) * (k + 1)) / nsub).toFixed(4)) : [v]));
   // extra grid lines at any coordinate (plates or columns off the main axes)
   const merge = (A, extra = []) => [...new Set([...A, ...extra.map((v) => +(+v).toFixed(4))])].sort((p, q) => p - q);
-  const SX = merge(subdiv(GX), G.ax), SY = merge(subdiv(GY), G.ay);
+  // spare grid lines through every ดั้ง, X and Y (user 2026-11-04: drawing plates to the posts needed extra grid lines by hand)
+  const [dangGrid, setDangGrid] = useState(true), dX = dangGrid ? dangList.map((p) => p[0]) : [], dY = dangGrid ? dangList.map((p) => p[1]) : [];
+  const SX = merge(subdiv(GX), [...(G.ax ?? []), ...dX]), SY = merge(subdiv(GY), [...(G.ay ?? []), ...dY]);
+  // overlapping plates (drawn twice / one inside another), like overlapping beams: wall plates and interior plates each
+  const ovP = findOverlaps(plates), ovI = findOverlaps(inner), ovN = ovP.length + ovI.length;
   const xName = (i) => String.fromCharCode(65 + i), yName = (i) => String(GY.length - i); // 1 at the top, like the drawings
   const nodeName = (p) => { const i = GX.findIndex((x) => Math.abs(x - p[0]) < 1e-6), j = GY.findIndex((y) => Math.abs(y - p[1]) < 1e-6); return i >= 0 && j >= 0 ? `โหนด ${xName(i)}-${yName(j)}` : `โหนด (${fmt(p[0], 2)}, ${fmt(p[1], 2)})`; };
   const setGrid = (patch) => set("grid", { ...G, ...patch });
@@ -338,6 +343,11 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
 
       <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_260px]">
         <div className="relative min-h-[480px] overflow-hidden rounded-2xl border border-gray-200 bg-white">
+          <div className="absolute left-2 top-2 z-10 flex flex-wrap items-center gap-2 text-[12px]">
+            <label className="flex items-center gap-1 rounded-md bg-white/90 px-2 py-0.5 ring-1 ring-gray-200"><input type="checkbox" checked={dangGrid} onChange={(e) => setDangGrid(e.target.checked)} />กริดสำรองผ่านดั้ง</label>
+            {ovN > 0 && <span className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-red-700">อะเสซ้อนกัน {ovN} คู่ (เส้นแดงประ)
+              <button onClick={() => commit({ ...(ovP.length ? { plates: mergeOverlaps(plates) } : {}), ...(ovI.length ? { innerPlates: mergeOverlaps(inner) } : {}) })} className="rounded bg-red-600 px-1.5 py-0.5 font-medium text-white">รวมอะเสซ้อน</button></span>}
+          </div>
           <svg ref={svg} viewBox={`${vb.x} ${-(vb.y + vb.h)} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet"
             className={`h-full w-full select-none ${tool === "select" ? "cursor-grab" : "cursor-crosshair"}`}
             onPointerMove={onMove} onPointerDown={onDown} onPointerUp={() => { if (drag?.box) endBox(); setDrag(null); }} onPointerLeave={() => { setDrag(null); setCur(null); }}
@@ -362,6 +372,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
                 : <line key={`m${j}`} x1={P[0][0]} y1={-P[0][1]} x2={P[1][0]} y2={-P[1][1]} stroke="#f79009" strokeOpacity={0.5} strokeWidth={12 * k} strokeLinecap="round" />; })}
             {box && <rect x={Math.min(box.p0[0], box.p1[0])} y={-Math.max(box.p0[1], box.p1[1])} width={Math.abs(box.p1[0] - box.p0[0])} height={Math.abs(box.p1[1] - box.p0[1])}
               fill={box.p1[0] >= box.p0[0] ? "#465fff14" : "#12b76a14"} stroke={box.p1[0] >= box.p0[0] ? "#465fff" : "#12b76a"} strokeWidth={1.2 * k} strokeDasharray={box.p1[0] >= box.p0[0] ? "none" : `${5 * k} ${3 * k}`} />}
+            {[...ovP, ...ovI].map((o, j) => <line key={`ovp${j}`} x1={o.a[0]} y1={-o.a[1]} x2={o.b[0]} y2={-o.b[1]} stroke="#d92d20" strokeOpacity={0.6} strokeWidth={9 * k} strokeDasharray={`${8 * k} ${5 * k}`} pointerEvents="none"><title>อะเสซ้อนกัน {o.len.toFixed(2)} ม.</title></line>)}
             {hl && <g pointerEvents="none">
             {hl.to && <line x1={hl.p[0]} y1={-hl.p[1]} x2={hl.to[0]} y2={-hl.to[1]} stroke="#d92d20" strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />}
             <circle cx={hl.p[0]} cy={-hl.p[1]} r={16 * k} fill="#d92d2033" stroke={hl.bad ? "#d92d20" : "#12b76a"} strokeWidth={3 * k}><animate attributeName="r" values={`${12 * k};${24 * k};${12 * k}`} dur="1s" repeatCount="indefinite" /></circle>
