@@ -384,3 +384,11 @@ the browser WebGL context limit froze the page). Wall-plate plan: NG marked, cli
 OPEN ITEMS for the next session: (1) web copy published 2026-11-03 (Artifact version 3, without project files — open a .json with เปิด); (2) E2E expected re-saved; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
 torsion — likely the type list has no 20×40 with RB9 @0.10; check per-span reasons on the user's project); (4) Ole: 28 beams fail only on
 stirrup spacing d/2 (shallow GB 20×20, tiny shear) — ask whether to apply the ACI exemption (h ≤ 25 cm or v ≤ vc/2); columns RB6 @0.20 > 16db.
+
+2026-11-04 (later): floor.js buildLines keeps a secondary whole over a main beam when a piece past the crossing ends on nothing
+(`through` → interior carrier; the stub is a cantilever). Mutual corners without a column: the line with a stub past a column (≥ 2 columns)
+is the cantilever and carries the other at its tip (Yasothon GB corner 9/15 → 0.60 m cantilever, base ΣP 199.1 t; baselines re-saved).
+Roof 3D: posts start at the plate top (H − 0.155), loose posts red. Print inside the claude.ai frame: printReport({ standalone }) →
+self-printing HTML (App print dialog: new tab / download). "ระยะเสาสมมติ" (plateSpan) shown only without columns / plates.
+PENDING (agreed): wall plates as real continuous beams (contBeam per plate line over the columns, M+ / M− / true deflection, continuous
+reactions to the columns, report V/M per line, default "cont"; frozen simpleBeam/pointBeam untouched). Then: "เหล็กที่มีขาย" stock list.
