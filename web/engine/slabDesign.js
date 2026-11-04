@@ -26,17 +26,21 @@ export function designSlabs(an, floor, mat, sm = {}) {
     const name = `P${k + 1}`;
     if (pn.open || pn.stairWell || !(pn.t > 0)) return; // no slab here (a floor of ground / roof beams has thickness 0)
     if (pn.st !== "S") { out.push({ name, key: pn.key, kind: pn.st, note: pn.st === "PS" ? "พื้นสำเร็จ — ใช้ตามตารางผู้ผลิต (ช่วงพาด / น้ำหนักบรรทุก)" : "พื้นวางบนดิน — เสริมเหล็กกันร้าวตามแบบ" }); return; }
-    const cont = pn.P.map((_, e) => continuous(pn, e, an.panels)), extra = pn.g.SDL + pn.g.WALL + (pn.g.SP ?? 0), inp = { ...base, t: pn.t, extra, live: pn.g.LL };
+    // walls and point loads standing on the slab are spread over the panel for the beams (total load kept); for the slab's own moments
+    // they are taken as an equivalent uniform load ×2 (mat.slabLineFactor): a line load q across the middle of a strip of span S gives
+    // M = qS/4 = (2q/S)·S²/8, twice the moment of the same weight spread evenly (verification 2026-11-04)
+    const fW = mat.slabLineFactor ?? 2, conc = pn.g.WALL + (pn.g.SP ?? 0);
+    const cont = pn.P.map((_, e) => continuous(pn, e, an.panels)), extra = pn.g.SDL + fW * conc, inp = { ...base, t: pn.t, extra, live: pn.g.LL };
     try {
       if (pn.kind === "twoway") {
         const r = twoWay({ ...inp, S: pn.S, L: pn.L, case: 5 - cont.filter(Boolean).length, shortBar: pbar(pn), longBar: pbar(pn) });
-        out.push({ name, key: pn.key, kind: "S", way: "สองทาง", S: pn.S, L: pn.L, cont: cont.filter(Boolean).length, case: 5 - cont.filter(Boolean).length, r,
+        out.push({ concF: conc > 0 ? fW : null, name, key: pn.key, kind: "S", way: "สองทาง", S: pn.S, L: pn.L, cont: cont.filter(Boolean).length, case: 5 - cont.filter(Boolean).length, r,
           text: `${r.shortText} (สั้น) · ${r.longText} (ยาว)`, ok: r.nOk && r.minTOk && r.dOk && r.McSOk && r.McLOk });
       } else if (pn.kind === "oneway") {
         // spans across the short way: its ends are the two long edges
         const longEdges = pn.P.map((p, e) => [e, Math.hypot(pn.P[(e + 1) % 4][0] - p[0], pn.P[(e + 1) % 4][1] - p[1])]).filter(([, l]) => Math.abs(l - pn.L) < 1e-6).map(([e]) => cont[e]);
         const nC = longEdges.filter(Boolean).length, r = oneWay({ ...inp, L: pn.S, support: ["simple", "one_end", "both_ends"][nC], mainBar: pbar(pn), tempBar: pbar(pn) });
-        out.push({ name, key: pn.key, kind: "S", way: "ทางเดียว", S: pn.S, L: pn.L, cont: nC, r, text: `${r.mainText} (หลัก) · ${r.tempText} (กันร้าว)`, ok: r.nOk && r.minTOk && r.dOk && r.VcOk && r.McOk && r.uOk });
+        out.push({ concF: conc > 0 ? fW : null, name, key: pn.key, kind: "S", way: "ทางเดียว", S: pn.S, L: pn.L, cont: nC, r, text: `${r.mainText} (หลัก) · ${r.tempText} (กันร้าว)`, ok: r.nOk && r.minTOk && r.dOk && r.VcOk && r.McOk && r.uOk });
       } else out.push({ name, key: pn.key, kind: "S", note: "รูปไม่ใช่สี่เหลี่ยม — ออกแบบด้วยโมดูลพื้นแยก" });
     } catch (e) { out.push({ name, key: pn.key, kind: "S", note: e.message, ok: false }); }
   });

@@ -275,7 +275,10 @@ export function analyzeFrame(frame) {
   for (let it = 0; it < 4; it++) {
     g = gravity(frame, minTypes);
     stacks = designColumns(frame, g.cols);
-    if (!envelope) break;
+    if (!envelope) {
+      if (frame.lateral?.wind?.on || frame.lateral?.seismic?.on) g.warnings.push("เปิดแรงลม / แผ่นดินไหวไว้ แต่วิธีวิเคราะห์เป็น \"คานต่อเนื่อง\" — แรงด้านข้างไม่ได้ถูกวิเคราะห์ ให้ตั้งแรงที่ใช้ออกแบบเป็นค่ามากสุดของสองวิธี (ขั้น 6)");
+      break;
+    }
     lat = lateralLoads(frame, g);
     f3 = frame3dModel(frame, { floors: g.an, columns: g.cols }, lat ? { lateral: { cases: lat.cases, combos: lat.combos } } : {});
     if (f3.error) { g.warnings.push(`โครง 3 มิติ: ${f3.error} — ใช้ผลคานต่อเนื่อง`); f3 = null; break; }

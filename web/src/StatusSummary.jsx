@@ -34,7 +34,12 @@ export function projectStatus(frame, res, dz, roof = null) {
     status: c.check?.error ? "INC" : c.ok ? "PASS" : "FAIL", util: c.check?.util ?? null, why: c.ok ? "" : c.check?.error ?? (c.check?.sOk === false ? "ระยะเหล็กปลอกเกินที่ยอมให้" : c.check?.slenderOk === false ? "เสาชะลูดเกิน (klu/r)" : "กำลังรับแรงไม่พอ") });
   for (const f of res.footings) items.push({ cat: "ฐานราก", id: `${f.stack} (${FM.mark(f)})`, where: "c-footings", calc: `F-${FM.mark(f)}`, status: !f.r ? "INC" : f.ok ? "PASS" : "FAIL", util: f.util ?? null,
     why: !f.r ? f.error ?? "" : f.ok ? "" : f.r.qCornerOk === false ? "แรงดันดินที่มุม (โมเมนต์สองแกน) เกิน qa" : "ดูตารางฐานราก" });
-  const cats = ["หลังคา", "คาน", "เสา", "พื้น", "บันได", "ฐานราก"].map((cat) => {
+  // wind / earthquake: storey drift per case; switched on but not analysed (continuous method, 3D frame failed) = INCOMPLETE
+  const latOn = !!(frame.lateral?.wind?.on || frame.lateral?.seismic?.on);
+  if (latOn && !res.lateral) items.push({ cat: "แรงด้านข้าง", id: "ลม / แผ่นดินไหว", where: "c-criteria", status: "INC", util: null, why: "เปิดแรงด้านข้างไว้แต่ไม่ได้วิเคราะห์ — ต้องใช้โครง 3 มิติ (แรงที่ใช้ออกแบบ = ค่ามากสุดของสองวิธี)" });
+  for (const d of res.lateral?.drift ?? []) items.push({ cat: "แรงด้านข้าง", id: `ระยะเซ ${d.key} ${floors[d.floor]?.name ?? d.floor}`, where: "c-criteria", status: d.ok ? "PASS" : "FAIL", util: d.lim > 0 ? d.dd / d.lim : null,
+    why: d.ok ? "" : `ระยะเซระหว่างชั้น ${(d.dd * 1000).toFixed(1)} > ${(d.lim * 1000).toFixed(1)} มม.` });
+  const cats = ["หลังคา", "คาน", "เสา", "พื้น", "บันได", "ฐานราก", "แรงด้านข้าง"].map((cat) => {
     const l = items.filter((x) => x.cat === cat), n = (s) => l.filter((x) => x.status === s).length;
     return { cat, total: l.length, pass: n("PASS"), fail: n("FAIL"), nc: n("NC"), inc: n("INC"), status: n("FAIL") ? "FAIL" : n("INC") ? "INC" : l.length ? "PASS" : "NC" };
   }).filter((c) => c.total);

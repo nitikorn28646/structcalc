@@ -194,6 +194,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                 <Table head={["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "M สูงสุด (กก.-ม./ม.)", "เหล็กเสริม", "ผล"]}
                   rows={slabs.map((x) => [x.name, x.way ?? ({ C: "พื้นยื่น", ST: "บันได", PS: "PS", GS: "GS" })[x.kind] ?? x.kind, x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-",
                     x.cont !== undefined ? `${x.cont} ด้าน${x.case ? ` (กรณี ${x.case})` : ""}` : "-", x.r ? fmt(x.r.M ?? Math.max(...x.r.MS), 0) : "-", x.text ?? x.note, x.r ? pass(x.ok) : "-"])} />
+                {slabs.some((x) => x.concF) && <Note>แผ่นที่มีผนังหรือน้ำหนักจุดวางบนพื้น ({slabs.filter((x) => x.concF).map((x) => x.name).join(", ")}): น้ำหนักนั้นคิดเป็นน้ำหนักแผ่สม่ำเสมอเทียบเท่า × {slabs.find((x) => x.concF).concF} สำหรับโมเมนต์ของพื้น (น้ำหนักเส้น q กลางช่วง S ให้ M = qS/4 = (2q/S)·S²/8) — น้ำหนักที่ส่งลงคานใช้ค่าจริง</Note>}
                 {slabs.filter((x) => x.r).map((x) => <Figure key={x.name} caption={`${x.name} — ${x.way ?? ({ C: "พื้นยื่น", ST: "บันได" })[x.kind]} · โมเมนต์ต่อความกว้าง 1 ม.${x.kind === "C" && x.note ? ` (ไม่รวมราว)` : ""}`}><SlabStrip row={x} /></Figure>)}</>)}
             </Sec>
           );
