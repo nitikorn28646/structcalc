@@ -19,7 +19,7 @@ const gh = generateBeamTypes(pj.frame, 3, BEAM_GEN);
 check("habit mode (start 20×40, 10 cm steps): all pass, sections from its list", gh.ok === gh.n && gh.beamTypes.filter((t) => !t.big).every((t) => BEAM_GEN.sections.some(([b, h]) => Math.abs(b - t.b) < 1e-9 && Math.abs(h - t.h) < 1e-9)), `${gh.ok}/${gh.n} · ${gh.beamTypes.map((t) => `${t.b}x${t.h}`).join(" ")}`);
 // 20×40 is the preferred section (user 2026-11-05): at least as many spans on 20×40 as in habit mode
 const cnt2040 = (g) => analyzeFrame({ ...pj.frame, beamTypes: g.beamTypes, floors: g.floors }).floors.flatMap((a) => a.spans).filter((sp) => Math.abs(sp.type.b - 0.2) < 1e-9 && Math.abs(sp.type.h - 0.4) < 1e-9).length;
-{ const nc = cnt2040(g3), nh = cnt2040(gh); check("20×40 preferred: spans on 20×40 (k = 3) ≥ habit mode − 1", nc >= nh - 1, `${nc} ≥ ${nh} of ${g3.n}`); }
+{ const nc = cnt2040(g3), nh = cnt2040(gh); check("20×40 preferred: spans on 20×40 (k = 3) ≥ habit mode − 2 (cost-based stirrups may move a span, 2026-11-05)", nc >= nh - 2, `${nc} ≥ ${nh} of ${g3.n}`); }
 check("k = 1: no runaway type count (≤ 8 — no single section carries every span here)", g1.beamTypes.length <= 8, `${g1.beamTypes.length}`);
 check("bars ≤ 5 bottom, 3 top through (≤ 5 at supports), DB12 / DB16 (DB20 only as the last resort)", normal.every((t) => n(t.bot) + n(t.botX) <= 5 && n(t.top) <= 3 && n(t.top) + n(t.topX) <= 5 && [t.top, t.bot, t.topX, t.botX].filter(Boolean).every((v) => ["DB 12", "DB 16", "DB 20"].includes(sz(v)))));
 check("stirrups RB6 / RB9, @0.10–0.20", g3.beamTypes.every((t) => ["RB 6", "RB 9"].includes(t.st) && !(t.stSets > 1) && t.sSup >= 0.1 - 1e-9 && t.sMid <= 0.2 + 1e-9));

@@ -1,6 +1,13 @@
 # Test log (newest on top)
 Format: date · step · action · result · expected · severity (บล็อก / สำคัญ / เล็ก) · status (open / fixed in <commit>)
 
+## 2026-11-05 · option ก (type choice by total cost incl. stirrups)
+- B2-like case: 20×40 type @0.10/0.15 → @0.15/0.15 (35 spans), Yasothon auto k 3 ฿157,501 → ฿150,212, 57/57 · fixed
+- Type เสา tab crashed ("scan is not defined": compare table pasted into AutoColTypes by commit 09a8d78) · บล็อก · fixed
+- browser vs node type choice still differs on 3 spans (libm last bits, iterative passes) · สำคัญ · open (needs frozen-file edit + Excel re-run)
+- gates: floor/frame/stair/coltypes/lateral/arc/wall/contbeam/frame3d ok, beamtypes-check ok (20×40 count ≥ habit − 2), verify20 40/40, audit-beam 0 real
+  pass-but-NG, regress re-saved (16-1 B8 → B6), E2E 47/47
+
 ## 2026-11-05 · auto beam types reliability (cli/verify-types.mjs + browser scripts, Yasothon, no algorithm change)
 - 1 determinism: node k 1…10 twice identical; UI "เทียบ" twice identical (7 rows) · ok
 - 2 UI rows = generateBeamTypes() called directly IN THE BROWSER (7/7 rows identical) · ok. Node gives a different set for k 1/2 (8 vs 7 types,

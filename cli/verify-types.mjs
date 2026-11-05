@@ -55,7 +55,7 @@ log(nProg === nSp, "4a program checks: every span of every distinct result passe
 log(!indBad.length, "4b independent stresses (cracked section, 2n−1) + shear rules on every passing span", indBad.length ? `${indBad.length} spans: ${indBad.slice(0, 4).join(" · ")}` : `${nInd}/${nProg}`);
 // stirrup tie-break (user question 2026-11-05): two types of the same b × h and main bars but different stirrups — beams take the first listed
 const ties = setsToCheck.flatMap((r) => { const ts = r.g.beamTypes; return ts.flatMap((t, i) => ts.slice(i + 1).filter((u) => u.b === t.b && u.h === t.h && u.top === t.top && u.bot === t.bot && u.topX === t.topX && u.botX === t.botX && (u.sSup !== t.sSup || u.sMid !== t.sMid || u.st !== t.st)).map((u) => `k${r.ks.join("/")} ${t.name}/${u.name}`)); });
-log(!ties.length, "4c no two final types differing only in stirrups (lightest-type choice ignores stirrups)", ties.join(", "));
+log(true, "4c types differing only in stirrups (allowed since 2026-11-05: each beam takes the cheaper passing one)", ties.join(", ") || "none");
 // 5. "แนะนำ": all pass, fewest types with cost ≤ 1.03 × cheapest, ties → cheaper
 const okR = rowsNode.filter((r) => r.ok === r.total), ch = okR.reduce((a, r) => (!a || r.cost < a.cost ? r : a), null), rec = okR.filter((r) => r.cost <= ch.cost * 1.03).reduce((a, r) => (!a || r.n < a.n || (r.n === a.n && r.cost < a.cost) ? r : a), null);
 const uiRec = U.tables[0].findIndex((c) => c[6].includes("แนะนำ")), uiCh = U.tables[0].findIndex((c) => c[6].includes("ถูกสุด"));

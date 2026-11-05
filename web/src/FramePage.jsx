@@ -177,13 +177,6 @@ function AutoColTypes({ frame, set, res }) {
       </div>
       <p className="mt-1.5 text-[11px] text-gray-500">แต่ละต้นหาหน้าตัดถูกสุดที่ผ่านทุกชั้น (เสาสี่เหลี่ยมจัตุรัส 20–50 ซม. · 4/6/8/12 เส้น DB12 → DB16 → DB20 · ρ 1–2.5 % · ปลอก RB6/RB9 ระยะห่างสุดที่ผ่าน 16d<sub>b</sub>/48d<sub>t</sub>) แล้วแบ่งเสาเป็นกลุ่มตามขนาดที่ต้องการ type = หน้าตัดที่ผ่านทุกต้นในกลุ่มของแต่ละชั้น · แทนที่ type เสาเดิมทั้งหมด (แก้ต่อในตารางได้)</p>
       {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
-      {scan?.rows.length > 0 && (<div className="mt-2 overflow-x-auto"><table className="w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">
-        <th className="py-1 pr-2">ขอ</th><th className="pr-2">ได้ (type)</th><th className="pr-2">ขนาด</th><th className="pr-2 text-right">ช่วงบน 20×40</th><th className="pr-2 text-right">ผ่าน</th><th className="pr-2 text-right">ค่าคาน ≈ บาท</th><th></th></tr></thead>
-        <tbody>{scan.rows.map((r) => (<tr key={r.k} className={`border-t border-gray-100 dark:border-gray-800 ${r === fewest ? "bg-brand-50 dark:bg-brand-500/10" : ""}`}>
-          <td className="py-1 pr-2">{(r.ks ?? [r.k]).join(", ")}</td><td className="pr-2">{r.n}</td><td className="pr-2">{r.sizes}</td><td className="pr-2 text-right">{r.n2040}/{r.total}</td>
-          <td className={`pr-2 text-right ${r.ok === r.total ? "text-green-600" : "text-red-600"}`}>{r.ok}/{r.total}</td><td className="pr-2 text-right">{Math.round(r.cost).toLocaleString()}</td>
-          <td className="text-right">{r === fewest && <span className="mr-2 text-[11px] text-brand-600">แนะนำ</span>}{r === cheapest && r !== fewest && <span className="mr-2 text-[11px] text-gray-500">ถูกสุด</span>}<button onClick={() => apply(r)} className="rounded-md px-2 py-0.5 text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ใช้ชุดนี้</button></td></tr>))}</tbody></table>
-        <p className="mt-1 text-[11px] text-gray-500">"ขอ" = จำนวนกลุ่มตอนเริ่ม · ขอต่างกันแต่ได้ชุดเดียวกันรวมเป็นแถวเดียว · แนะนำ = ผ่านทุกช่วง จำนวน type น้อยที่สุดที่ราคาไม่เกินชุดถูกสุด 3 %</p></div>)}
     </div>
   );
 }

@@ -491,3 +491,11 @@ types 20×40, 20×50, 20×60 ×2, 25×70, 57/57; 36/57 spans on 20×40. UI selec
 (merge, unused dropped, re-analysis, repair, trim change it; different starting splits → different sets). FramePage AutoBeamTypes button
 "เทียบจำนวน type (1–10)": runs k = 1…10 one per tick, distinct results in a table (asked k's, types, sizes, spans on 20×40, pass, cost),
 "แนะนำ" = all pass + fewest types within 3 % of the cheapest, "ใช้ชุดนี้" applies. Yasothon: k 4/5 → 5 types ฿152k recommended, k 6/7 → 7 types ฿150k cheapest.
+2026-11-05 (user option ก): floor.js typeWeight = typeCostM (concrete + formwork + all steel incl. stirrups, BEAM_PRICE) — beams take the
+cheapest passing type, so types differing only in stirrups no longer tie (B2 @0.10 → @0.15 case fixed; Yasothon k 3 ฿157.5k → ฿150.2k,
+types 5 → 8, all pass). Type CHOICES use robustSpan(sp) = forces × (1 + 1e-9) (floor.js auto pick, frame.js re-type loop, beamTypes
+designBH / trimType); reported checks stay full precision; frame.js flags sp.nearLimit (fails at × (1 + 1e-6)) with a warning per floor.
+OPEN (not achieved, user told): node vs Chromium libm differ in the last bits (pow/**, sin, cos, exp, log, cbrt, atan2; sqrt / hypot / + − × ÷
+identical) — also inside frozen beam/slab/column; the iterative type passes can still choose differently (Yasothon: 3 spans, both pass in the
+env that made them). Use the in-app result; full fix = replace ** / pow in frozen files (needs the Excel re-run). Fixed on the way: the
+compare table had been pasted into AutoColTypes too ("scan is not defined" → Type เสา tab crashed) — removed. E2E expected base 199.0 t.
