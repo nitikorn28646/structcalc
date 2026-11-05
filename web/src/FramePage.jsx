@@ -112,9 +112,26 @@ function AutoBeamTypes({ frame, set, res }) {
       setMsg({ ok: g.ok === g.n, text: `ได้ ${n} type${n < k ? ` (ขอ ${k} กลุ่ม — กลุ่มที่ได้หน้าตัดเดียวกันรวมกัน และ type ที่ไม่มีคานใช้ถูกตัดออก)` : ""} · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})` });
     } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(false); }
   }, 30); };
+  // compare type counts (user 2026-11-05: "6 and 14 types both gave 4 types with different bars — how do I choose?"): the number asked is only
+  // the number of groups at the start (merging, unused types, re-analysis, repair and trimming change it), so try 1…10 and show the
+  // distinct results; one click applies a row. Runs one k per tick so the page stays responsive.
+  const [scan, setScan] = useState(null);
+  const compare = () => { setScan({ rows: [], k: 1, done: false }); const rows = [], seen = new Set();
+    const step = (k) => setTimeout(() => { try {
+      const g = generateBeamTypes(frame, k); if (g) { const key = JSON.stringify(g.beamTypes.map(({ name, ...t }) => t));
+        const r2 = analyzeFrame({ ...frame, beamTypes: g.beamTypes, floors: g.floors }), sps = r2.floors.flatMap((a) => a.spans), n2040 = sps.filter((sp) => Math.abs(sp.type.b - 0.2) < 1e-9 && Math.abs(sp.type.h - 0.4) < 1e-9).length;
+        if (!seen.has(key)) { seen.add(key); rows.push({ k, g, n: g.beamTypes.length, cost: g.cost, ok: g.ok, total: g.n, n2040, sizes: [...new Set(g.beamTypes.map((t) => `${Math.round(t.b * 100)}×${Math.round(t.h * 100)}`))].join(", ") }); }
+        else { const r = rows.find((x) => JSON.stringify(x.g.beamTypes.map(({ name, ...t }) => t)) === key); if (r) r.ks = [...(r.ks ?? [r.k]), k]; } }
+      } catch { /* a failed k is skipped */ }
+      setScan({ rows: [...rows], k, done: k >= 10 }); if (k < 10) step(k + 1); }, 20);
+    step(1); };
+  const apply = (r) => { set("beamTypes", r.g.beamTypes); set("floors", r.g.floors); set("beamAutoK", r.n); setMsg({ ok: r.ok === r.total, text: `ใช้ ${r.n} type (จากการขอ ${(r.ks ?? [r.k]).join(", ")}) · ค่าคาน ≈ ${Math.round(r.cost).toLocaleString()} บาท` }); };
+  const okRows = (scan?.rows ?? []).filter((r) => r.ok === r.total), cheapest = okRows.reduce((a, r) => (!a || r.cost < a.cost ? r : a), null);
+  const fewest = okRows.filter((r) => cheapest && r.cost <= cheapest.cost * 1.03).reduce((a, r) => (!a || r.n < a.n || (r.n === a.n && r.cost < a.cost) ? r : a), null); // within 3 % of the cheapest, fewest types
   return (
     <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-white/[0.03]">
       <div className="flex flex-wrap items-center gap-2">
+        <button disabled={busy || (scan && !scan.done)} onClick={compare} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50 disabled:opacity-60">{scan && !scan.done ? `กำลังเทียบ… (ลอง ${scan.k}/10)` : "เทียบจำนวน type (1–10)"}</button>
         <button disabled={busy} onClick={() => run(Math.max(nNow, k0) + 1, true)} className="rounded-lg bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600 disabled:opacity-60">{busy ? "กำลังจัด type…" : `เพิ่ม type คานอัตโนมัติ (มี ${nNow} → ลอง ${nNow + 1})`}</button>
         <span className="flex items-center gap-1 text-[12px] text-gray-600">หรือกำหนด<input type="number" min={1} max={20} value={want} onChange={(e) => setWant(Math.max(1, Math.min(20, Math.round(Number(e.target.value) || 1))))} className="h-8 w-14 rounded border border-gray-300 bg-transparent px-1 text-right" />type
           <button disabled={busy} onClick={() => run(want)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50 disabled:opacity-60">จัด {want} type</button></span>
@@ -126,6 +143,13 @@ function AutoBeamTypes({ frame, set, res }) {
       </div>
       <p className="mt-1.5 text-[11px] text-gray-500">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ถูกที่สุดที่ผ่าน (กว้าง 0.20 / 0.30 ม. ลึก 0.30–0.80 ม. ทีละ 10 ซม. เหล็ก ≤ 2 ชั้น) เรียงตามราคาแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดถูกที่สุดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2, … เรียงตามขนาดคาน (ตัด type ที่ไม่มีคานใช้) · คานยื่นใช้ type ที่เหล็กหัวเสาพอ ชื่อ B1A (เหล็กบนยาวตลอด) · แทนที่ type คานทั้งหมดและตั้งทุกคานเป็นอัตโนมัติ (ย้อนกลับได้ Ctrl+Z) · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p>
       {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
+      {scan?.rows.length > 0 && (<div className="mt-2 overflow-x-auto"><table className="w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">
+        <th className="py-1 pr-2">ขอ</th><th className="pr-2">ได้ (type)</th><th className="pr-2">ขนาด</th><th className="pr-2 text-right">ช่วงบน 20×40</th><th className="pr-2 text-right">ผ่าน</th><th className="pr-2 text-right">ค่าคาน ≈ บาท</th><th></th></tr></thead>
+        <tbody>{scan.rows.map((r) => (<tr key={r.k} className={`border-t border-gray-100 dark:border-gray-800 ${r === fewest ? "bg-brand-50 dark:bg-brand-500/10" : ""}`}>
+          <td className="py-1 pr-2">{(r.ks ?? [r.k]).join(", ")}</td><td className="pr-2">{r.n}</td><td className="pr-2">{r.sizes}</td><td className="pr-2 text-right">{r.n2040}/{r.total}</td>
+          <td className={`pr-2 text-right ${r.ok === r.total ? "text-green-600" : "text-red-600"}`}>{r.ok}/{r.total}</td><td className="pr-2 text-right">{Math.round(r.cost).toLocaleString()}</td>
+          <td className="text-right">{r === fewest && <span className="mr-2 text-[11px] text-brand-600">แนะนำ</span>}{r === cheapest && r !== fewest && <span className="mr-2 text-[11px] text-gray-500">ถูกสุด</span>}<button onClick={() => apply(r)} className="rounded-md px-2 py-0.5 text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ใช้ชุดนี้</button></td></tr>))}</tbody></table>
+        <p className="mt-1 text-[11px] text-gray-500">"ขอ" = จำนวนกลุ่มตอนเริ่ม · ขอต่างกันแต่ได้ชุดเดียวกันรวมเป็นแถวเดียว · แนะนำ = ผ่านทุกช่วง จำนวน type น้อยที่สุดที่ราคาไม่เกินชุดถูกสุด 3 %</p></div>)}
     </div>
   );
 }
@@ -153,6 +177,13 @@ function AutoColTypes({ frame, set, res }) {
       </div>
       <p className="mt-1.5 text-[11px] text-gray-500">แต่ละต้นหาหน้าตัดถูกสุดที่ผ่านทุกชั้น (เสาสี่เหลี่ยมจัตุรัส 20–50 ซม. · 4/6/8/12 เส้น DB12 → DB16 → DB20 · ρ 1–2.5 % · ปลอก RB6/RB9 ระยะห่างสุดที่ผ่าน 16d<sub>b</sub>/48d<sub>t</sub>) แล้วแบ่งเสาเป็นกลุ่มตามขนาดที่ต้องการ type = หน้าตัดที่ผ่านทุกต้นในกลุ่มของแต่ละชั้น · แทนที่ type เสาเดิมทั้งหมด (แก้ต่อในตารางได้)</p>
       {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
+      {scan?.rows.length > 0 && (<div className="mt-2 overflow-x-auto"><table className="w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">
+        <th className="py-1 pr-2">ขอ</th><th className="pr-2">ได้ (type)</th><th className="pr-2">ขนาด</th><th className="pr-2 text-right">ช่วงบน 20×40</th><th className="pr-2 text-right">ผ่าน</th><th className="pr-2 text-right">ค่าคาน ≈ บาท</th><th></th></tr></thead>
+        <tbody>{scan.rows.map((r) => (<tr key={r.k} className={`border-t border-gray-100 dark:border-gray-800 ${r === fewest ? "bg-brand-50 dark:bg-brand-500/10" : ""}`}>
+          <td className="py-1 pr-2">{(r.ks ?? [r.k]).join(", ")}</td><td className="pr-2">{r.n}</td><td className="pr-2">{r.sizes}</td><td className="pr-2 text-right">{r.n2040}/{r.total}</td>
+          <td className={`pr-2 text-right ${r.ok === r.total ? "text-green-600" : "text-red-600"}`}>{r.ok}/{r.total}</td><td className="pr-2 text-right">{Math.round(r.cost).toLocaleString()}</td>
+          <td className="text-right">{r === fewest && <span className="mr-2 text-[11px] text-brand-600">แนะนำ</span>}{r === cheapest && r !== fewest && <span className="mr-2 text-[11px] text-gray-500">ถูกสุด</span>}<button onClick={() => apply(r)} className="rounded-md px-2 py-0.5 text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ใช้ชุดนี้</button></td></tr>))}</tbody></table>
+        <p className="mt-1 text-[11px] text-gray-500">"ขอ" = จำนวนกลุ่มตอนเริ่ม · ขอต่างกันแต่ได้ชุดเดียวกันรวมเป็นแถวเดียว · แนะนำ = ผ่านทุกช่วง จำนวน type น้อยที่สุดที่ราคาไม่เกินชุดถูกสุด 3 %</p></div>)}
     </div>
   );
 }

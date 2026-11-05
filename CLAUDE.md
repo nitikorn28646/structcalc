@@ -487,3 +487,7 @@ tries 20×40 first (cheapest bars that pass), else the cheapest passing section 
 common type are split in halves (was: dearest span's own design for the group → repair made 12 types for k = 1). checkSpan: vDone forces
 with a candidate depth that makes the span deep (L < 4h) use sp.Vmax. Repair: at most k + 2 types, then the type itself grows. Yasothon k 3:
 types 20×40, 20×50, 20×60 ×2, 25×70, 57/57; 36/57 spans on 20×40. UI select "20×40 ก่อน แล้วถูกที่สุด" | "ตามลำดับเดิม".
+2026-11-05 (user: "6 and 14 types both gave 4 types with different bars — how to choose?"): the asked k is only the number of starting groups
+(merge, unused dropped, re-analysis, repair, trim change it; different starting splits → different sets). FramePage AutoBeamTypes button
+"เทียบจำนวน type (1–10)": runs k = 1…10 one per tick, distinct results in a table (asked k's, types, sizes, spans on 20×40, pass, cost),
+"แนะนำ" = all pass + fewest types within 3 % of the cheapest, "ใช้ชุดนี้" applies. Yasothon: k 4/5 → 5 types ฿152k recommended, k 6/7 → 7 types ฿150k cheapest.
