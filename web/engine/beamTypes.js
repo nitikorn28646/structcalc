@@ -253,5 +253,24 @@ export function generateBeamTypes(frame, k, g0 = null) {
   const area = (x) => { const b = parseBars(x); return b ? b.n * BARS[b.bar].A : 0; }, steel = (t) => area(t.top) + area(t.bot) + area(t.topX) + area(t.botX);
   const types = best.types.filter((_, i) => used.has(i)).sort((a, b) => a.b * a.h - b.b * b.h || a.h - b.h || steel(a) - steel(b) || beamCost(a, g) - beamCost(b, g))
     .map((t, i) => ({ ...t, name: `B${i + 1}` }));
-  return { beamTypes: types, floors: f.floors, ...best.s, unmatched: best.unmatched, big: best.big ?? [], asked: k };
+  const pr = pruneUnusedTypes({ ...f, beamTypes: types });
+  return { beamTypes: pr.beamTypes, floors: pr.floors, ...best.s, unmatched: best.unmatched, big: best.big ?? [], asked: k };
+}
+
+// drop beam types that no span uses (user 2026-11-05: the applied set showed types with 0 spans). Removing a type can change which
+// type the self-weight passes start from, so repeat until every listed type is used (≤ 5 rounds). Beams fixed to a type keep it
+// (indices remapped); names of the form B<n> are renumbered in order, custom names stay.
+export function pruneUnusedTypes(frame, rounds = 5) {
+  let f = frame, res = null;
+  for (let it = 0; it < rounds; it++) {
+    res = analyzeFrame(f);
+    const used = new Set(res.floors.flatMap((a) => a.spans).map((sp) => sp.typeIdx));
+    for (const fl of f.floors) for (const b of fl.beams ?? []) if (b.type != null) used.add(b.type);
+    if (used.size >= f.beamTypes.length || !used.size) break;
+    const map = new Map(); f.beamTypes.forEach((_, i) => used.has(i) && map.set(i, map.size));
+    let n = 0; const beamTypes = f.beamTypes.filter((_, i) => used.has(i)).map((t) => (/^B\d+$/.test(t.name ?? "") ? { ...t, name: `B${++n}` } : (n++, t)));
+    const floors = f.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map((b) => (b.type == null ? b : { ...b, type: map.get(b.type) })) }));
+    f = { ...f, beamTypes, floors }; res = null;
+  }
+  return { beamTypes: f.beamTypes, floors: f.floors, res };
 }

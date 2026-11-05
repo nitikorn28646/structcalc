@@ -16,7 +16,7 @@ import { SVGRenderer } from "echarts/renderers";
 import { BrickWall, Building2, Columns3, Grid3x3, Layers, Plus, Ruler, Trash2, TriangleAlert } from "lucide-react";
 import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
-import { beamCost, generateBeamTypes } from "../engine/beamTypes.js";
+import { beamCost, generateBeamTypes, pruneUnusedTypes } from "../engine/beamTypes.js";
 import { generateColumnTypes } from "../engine/columnTypes.js";
 import { findOverlaps, mergeOverlaps } from "../engine/floor.js";
 import { locateWarning } from "./warnLocate.js";
@@ -125,7 +125,7 @@ function AutoBeamTypes({ frame, set, res }) {
       } catch { /* a failed k is skipped */ }
       setScan({ rows: [...rows], k, done: k >= 10 }); if (k < 10) step(k + 1); }, 20);
     step(1); };
-  const apply = (r) => { set("beamTypes", r.g.beamTypes); set("floors", r.g.floors); set("beamAutoK", r.n); setMsg({ ok: r.ok === r.total, text: `ใช้ ${r.n} type (จากการขอ ${(r.ks ?? [r.k]).join(", ")}) · ค่าคาน ≈ ${Math.round(r.cost).toLocaleString()} บาท` }); };
+  const apply = (r) => { const pr = pruneUnusedTypes({ ...frame, beamTypes: r.g.beamTypes, floors: r.g.floors }); set("beamTypes", pr.beamTypes); set("floors", pr.floors); set("beamAutoK", pr.beamTypes.length); setMsg({ ok: r.ok === r.total, text: `ใช้ ${pr.beamTypes.length} type (จากการขอ ${(r.ks ?? [r.k]).join(", ")}) · ค่าคาน ≈ ${Math.round(r.cost).toLocaleString()} บาท` }); };
   const okRows = (scan?.rows ?? []).filter((r) => r.ok === r.total), cheapest = okRows.reduce((a, r) => (!a || r.cost < a.cost ? r : a), null);
   const fewest = okRows.filter((r) => cheapest && r.cost <= cheapest.cost * 1.03).reduce((a, r) => (!a || r.n < a.n || (r.n === a.n && r.cost < a.cost) ? r : a), null); // within 3 % of the cheapest, fewest types
   return (
@@ -181,7 +181,16 @@ function AutoColTypes({ frame, set, res }) {
   );
 }
 
-function TypeTable({ types, setTypes, an }) {
+// delete beam type i (user 2026-11-05): beams fixed to it go back to auto, later indices shift down, and names of the form B<n> are
+// renumbered in order (B1, B2, …) so no number is skipped; custom names stay
+export function deleteBeamType(frame, i) {
+  const left = frame.beamTypes.filter((_, j) => j !== i);
+  let n = 0; const beamTypes = left.map((t) => (/^B\d+$/.test(t.name ?? "") ? { ...t, name: `B${++n}` } : (n++, t)));
+  const floors = frame.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map((b) => (b.type == null ? b : b.type === i ? { ...b, type: null } : b.type > i ? { ...b, type: b.type - 1 } : b)) }));
+  return { beamTypes, floors };
+}
+
+function TypeTable({ types, setTypes, an, delType }) {
   const set = (i, k, v) => setTypes(types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const used = (i) => an?.spans.filter((s) => s.typeIdx === i) ?? [];
   const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] tabular-nums";
@@ -204,7 +213,7 @@ function TypeTable({ types, setTypes, an }) {
             <td className="px-1 w-14"><select value={t.stSets ?? 1} onChange={(e) => set(i, "stSets", Number(e.target.value))} className={cell} title="จำนวนชุดปลอก (2 = ปลอก 2 ชุดซ้อน)"><option value={1}>1</option><option value={2}>2</option></select></td>
             <td className="px-1 w-16">{num(i, "sSup", 0.025)}</td><td className="px-1 w-16">{num(i, "sMid", 0.025)}</td>
             <td className="px-1 text-gray-500">{used(i).length} ช่วง</td>
-            <td><button onClick={() => setTypes(types.filter((_, j) => j !== i))} disabled={types.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></td>
+            <td><button onClick={() => delType(i)} disabled={types.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></td>
           </tr>))}</tbody>
       </table>
       <button onClick={() => setTypes([...types, { ...types[types.length - 1], name: `B${types.length + 1}` }])} className="mt-2 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่ม type</button>
@@ -218,8 +227,15 @@ function TypeTable({ types, setTypes, an }) {
 const colWhy = (c) => (c.check.error ? c.check.error : !c.check.sOk ? `ปลอก @${fmt(c.lv.s, 2)} > ${fmt(c.check.r.sTie / 100, 3)} ม. (16db)` : !c.check.r.pgOk ? "pg นอก 1–8%"
   : !Number.isFinite(c.check.r.R) ? "ชะลูดเกิน" : `${fmt(c.check.util * 100, 0)}%${c.ok ? "" : " ไม่ผ่าน"}`);
 
+// delete column type i: stacks picked to it go back to auto, later picks shift down, C<n> names renumbered in order
+export function deleteColType(frame, i) {
+  let n = 0; const colTypes = frame.colTypes.filter((_, j) => j !== i).map((t) => (/^C\d+$/.test(t.name ?? "") ? { ...t, name: `C${++n}` } : (n++, t)));
+  const colPick = Object.fromEntries(Object.entries(frame.colPick ?? {}).filter(([, v]) => v !== i).map(([k, v]) => [k, v > i ? v - 1 : v]));
+  return { colTypes, colPick };
+}
+
 // column types (C1, C2, …) with one section per level, bottom up
-function ColTypeTable({ types, setTypes, res, floors }) {
+function ColTypeTable({ types, setTypes, res, floors, delType }) {
   const setLv = (i, j, k, v) => setTypes(types.map((t, a) => (a !== i ? t : { ...t, levels: t.levels.map((lv, b) => (b === j ? { ...lv, [k]: v } : lv)) })));
   const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] tabular-nums";
   const num = (i, j, k, step) => <input type="number" step={step} defaultValue={types[i].levels[j][k]} key={types[i].levels[j][k]} onBlur={(e) => setLv(i, j, k, Number(e.target.value))} className={`${cell} compact-num`} />;
@@ -237,7 +253,7 @@ function ColTypeTable({ types, setTypes, res, floors }) {
           <div className="mb-1 flex items-center gap-2 font-semibold"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }} />
             <input defaultValue={t.name} key={t.name} onBlur={(e) => setTypes(types.map((x, a) => (a === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className={`${cell} !w-14 font-semibold`} />
             <span className="font-normal text-gray-500">ใช้ {res.stacks.filter((s) => s.typeIdx === i).length} ต้น</span>
-            <button onClick={() => setTypes(types.filter((_, a) => a !== i))} disabled={types.length < 2} className="ml-auto text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></div>
+            <button onClick={() => delType(i)} disabled={types.length < 2} className="ml-auto text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></div>
           <table className="w-full border-collapse">
             <thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["ระดับ (ล่าง → บน)", "ใช้ใต้ชั้น", "Bx (ซม.)", "By (ซม.)", "จำนวนเหล็ก", "เหล็กยืน", "ปลอก", "@ (ม.)", ""].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
             <tbody>{t.levels.map((lv, j) => (
@@ -386,8 +402,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </Card>
       </div>
     </div>
-  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
-    : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
+  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+    : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} delType={(i) => { const r = deleteColType(frame, i); set("colTypes", r.colTypes); set("colPick", r.colPick); }} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (() => {
       // every slab / cantilever slab / stair: this floor or all floors, bars by position, section drawing; row → flashes on the plan
