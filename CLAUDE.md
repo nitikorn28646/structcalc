@@ -506,3 +506,10 @@ no code changed): 32 cases + every column of Yasothon / user's house; independen
 (false NG); K2 rectangular: ex compared with eb of By (column.js); K3 min eccentricity only about x; K4 slenderness r = 0.25·Bx (not the least
 side); K5 column bar clear spacing not checked (8-DB20 in 20×20 passes); K6 tension columns pass (P = max(P, 1)); decisions K7 braced
 (unbraced: Yasothon 3 NG), K8 colMethod axial ignores 3D moments (Yasothon 3/43 NG with them). Fixes not made — waiting for the user.
+COLUMN AUDIT 2 (2026-11-05, cli/audit-column2.mjs <project> [--json] + audit-column2-report.mjs; https://claude.ai/artifact/RRbSNhXabrjJ9kzrCZdCp8;
+no code changed): storey stability index Q = 1.55ΣP·Δo/(V·lc) from an own first-order 3D solve (0.7Ig col / 0.35Ig beams, diaphragm masters),
+k from ψ (alignment-chart equations; leaning column k = 1), 4 variants Axial/Frame × Braced/Unbraced + decision by Q, X / Y / biaxial; USD separate.
+Yasothon: ชั้น 2 Q 0.081 → sway → Frame-by-Q 30/43 (8 × 20×20 strength, 3 kLu/r > 100, 2 corner ตอม่อ 3D moments); user house braced by Q → 38/38
+(but 19 top posts have no beam at the top: cantilever k ≈ 2.1 → kLu/r 105 if the roof gives no bracing). Program = independent with the same rules
+(no program-pass/independent-NG). New K9: slenderness only when Lu/B > 15 then case 2 (R jumps 1 → 0.59). Gap: 3D has no live-load pattern cases.
+Proposed (waiting): K3/K5/K6 + all slenderness (Q, k from ψ, r) in frame.js; K1/K2 in column.js (frozen) + Excel diff re-run.
