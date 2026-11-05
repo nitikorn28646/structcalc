@@ -545,4 +545,4 @@ WP1 K1/K2 BUILT (2026-11-05, user "ทำเลย"; column.js default path): K2
 paired them the other way: narrow rectangles bending about the weak axis were "mode I", moment ignored); K1 — R′ (mode III) via tensionR():
 the sheet's value where it exists, the governing-axis value where it is NaN (ex = 0), otherwise the smaller of the two (never less reduction).
 All 16 Excel diff cases give IDENTICAL output before/after (local check) → tied column stays 12/16; two new cases for the Windows run
-(difftest k2-rect-20x50-my, k1-mx-only-slender — expected to differ from the Excel = documented defects). colstab-check 20/20, regress identical.
+(difftest k2-rect-20x50-my, k1-mx-only-slender — expected to differ from the Excel = documented defects). colstab-check 19/19, regress identical.
