@@ -6,7 +6,7 @@
 // node cli/audit-beam.mjs [--case N] [--md out.md]
 import fs from "fs";
 import { analyzeFloor, vAtD } from "../web/engine/floor.js"; // the program (only to obtain its results)
-import { designGroup } from "../web/engine/beamTypes.js"; // the program's automatic section + bar selection (to audit its choice)
+import { designGroup, BEAM_COST } from "../web/engine/beamTypes.js"; // the program's automatic section + bar selection (to audit its choice)
 
 // ---------- independent data (not the program's tables) ----------
 const BAR = { "DB12": [1.131, 1.2], "DB16": [2.011, 1.6], "DB20": [3.142, 2.0], "DB25": [4.909, 2.5], "RB6": [0.283, 0.6], "RB9": [0.636, 0.9], "DB10": [0.785, 1.0] };
@@ -97,7 +97,7 @@ function autoTypes(cs, mat) {
   let types = cs.types.map((t, i) => ({ name: `T${i + 1}`, ...t }));
   for (let it = 0; it < 4; it++) {
     const an = analyzeFloor(buildFloor(cs, xs, Ltot, seg), types, mat); let changed = false;
-    types = seg.map(([a, b, i]) => { const sp = an.spans.find((x) => Math.abs(x.x0 - a) < 1e-6 && Math.abs(x.x1 - b) < 1e-6); const d = sp && designGroup([sp], mat);
+    types = seg.map(([a, b, i]) => { const sp = an.spans.find((x) => Math.abs(x.x0 - a) < 1e-6 && Math.abs(x.x1 - b) < 1e-6); const d = sp && designGroup([sp], mat, BEAM_COST);
       if (!d) return { ...types[i], name: `A${i + 1}`, none: true }; const t = { ...d.t, name: `A${i + 1}`, st: d.t.st }; if (JSON.stringify(t) !== JSON.stringify({ ...types[i], name: t.name })) changed = true; return t; });
     if (!changed) break;
   }

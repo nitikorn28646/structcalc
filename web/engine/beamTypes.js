@@ -106,8 +106,23 @@ function trimType(t, sps, mat, g) {
   return best;
 }
 
+// cost mode (audit 2026-11-05, user: "Minimize Total Beam Cost"): every b × h of widths × depths (5 cm steps) is tried with its cheapest
+// bar arrangement and the cheapest passing one is kept; sections are tried in order of their concrete + formwork cost and the search
+// stops when that alone exceeds the best total found. "habit" = the designer's order, first passing (BEAM_GEN.sections, user 2026-11-04).
+export const BEAM_COST = { ...BEAM_GEN, mode: "cost", widths: [0.2, 0.25, 0.3], depths: [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
+  bigWidths: [0.4], bigDepths: [0.85, 0.9, 0.95, 1.0] };
+const costSections = (g) => g.widths.flatMap((b) => g.depths.map((h) => [b, h])).sort((x, y) => (x[0] * x[1] * g.price.conc + (x[0] + 2 * x[1]) * g.price.form) - (y[0] * y[1] * g.price.conc + (y[0] + 2 * y[1]) * g.price.form));
+export const bigGen = (g) => (g.mode === "cost" ? { ...g, widths: [...g.widths, ...(g.bigWidths ?? [])], depths: [...g.depths, ...(g.bigDepths ?? [])] } : { ...g, sections: [...g.sections, ...(g.bigSections ?? [])] });
 // the first section × bar size in the designer's order that passes every span in sps (BEAM_GEN.sections, then bars DB12 → DB16)
 export function designGroup(sps, mat, g = BEAM_GEN) {
+  if (g.mode === "cost") {
+    let best = null;
+    for (const [b, h] of costSections(g)) {
+      if (best && b * h * g.price.conc + (b + 2 * h) * g.price.form >= best.cost) break; // concrete + formwork alone already dearer
+      for (const bar of g.bars) { const t = designBH(sps, b, h, bar, mat, g); if (t) { const c = beamCost(t, g); if (!best || c < best.cost - 1e-6) best = { t, cost: c }; } }
+    }
+    return best;
+  }
   for (const [b, h] of g.sections) for (const bar of g.bars) {
     const t = designBH(sps, b, h, bar, mat, g);
     if (t) return { t, cost: beamCost(t, g) };
@@ -128,7 +143,7 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
   const own = spans.map((sp) => ({ sp, d: designGroup([sp], mat, g) }));
   // spans that nothing within the limits carries (e.g. a transfer girder): extended limits for those spans only (user 2026-11-03:
   // b up to 0.40, h up to 1.00 m), one type for all of them if one passes, else one each — flagged big ("คานใหญ่พิเศษ")
-  const gBig = { ...g, sections: [...g.sections, ...(g.bigSections ?? [])] }; // same habit, larger sections only
+  const gBig = bigGen(g); // same rules, larger sections only
   const over = own.filter((o) => !o.d), bigTypes = [], bigIds = [];
   if (over.length) {
     const all = designGroup(over.map((o) => o.sp), mat, gBig);
@@ -138,8 +153,19 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
   const unmatched = over.map((o) => o.sp.id).filter((id) => !bigIds.includes(id));
   const list = own.filter((o) => o.d).sort((a, b) => a.d.cost - b.d.cost);
   const n = Math.max(1, Math.min(k, list.length)), types = [];
+  // group boundaries: equal counts (habit) or, in cost mode, the partition of the cost-sorted list into n contiguous groups that minimises
+  // Σ (cost per metre of the group's heaviest own design × the group's length) — dynamic programming (audit 2026-11-05: equal counts put
+  // spans needing 20×50 into the 20×70 of the worst span of their third)
+  let cuts = Array.from({ length: n + 1 }, (_, i) => Math.round((i * list.length) / n));
+  if (g.mode === "cost" && n > 1) {
+    const N = list.length, len = list.map((o) => o.sp.len), pre = [0]; len.forEach((v) => pre.push(pre[pre.length - 1] + v));
+    const c = (i, j) => list[j - 1].d.cost * (pre[j] - pre[i]); // items i..j−1, the last is the dearest
+    const F = Array.from({ length: n + 1 }, () => new Array(N + 1).fill(Infinity)), P = Array.from({ length: n + 1 }, () => new Array(N + 1).fill(0)); F[0][0] = 0;
+    for (let m = 1; m <= n; m++) for (let j = m; j <= N; j++) for (let i = m - 1; i < j; i++) { const v = F[m - 1][i] + c(i, j); if (v < F[m][j]) { F[m][j] = v; P[m][j] = i; } }
+    cuts = [N]; for (let m = n, j = N; m > 0; m--) { j = P[m][j]; cuts.unshift(j); }
+  }
   for (let i = 0; i < n; i++) {
-    const grp = list.slice(Math.round((i * list.length) / n), Math.round(((i + 1) * list.length) / n));
+    const grp = list.slice(cuts[i], cuts[i + 1]);
     if (!grp.length) continue;
     const d = designGroup(grp.map((o) => o.sp), mat, g) ?? grp[grp.length - 1].d;
     types.push({ ...d.t, cost: d.cost, count: grp.length });
@@ -154,7 +180,8 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
 // 3D frame), so the types are re-derived from a fresh analysis up to 4 times; the set with the most passing spans, then the
 // lowest cost, is kept. All drawn beams go back to "auto" (the analysis then takes the cheapest passing type per beam).
 import { analyzeFrame } from "./frame.js";
-export function generateBeamTypes(frame, k, g = BEAM_GEN) {
+export function generateBeamTypes(frame, k, g0 = null) {
+  const g = g0 ?? (frame.beamAutoMode === "habit" ? BEAM_GEN : BEAM_COST); // default: minimum cost (user 2026-11-05)
   let f = { ...frame, floors: frame.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map((b) => ({ ...b, type: null })) })) };
   let r = analyzeFrame(f), best = null;
   const env = new Map();
@@ -178,7 +205,7 @@ export function generateBeamTypes(frame, k, g = BEAM_GEN) {
       for (const [ti, sps] of [...new Set(fail.map((sp) => sp.typeIdx))].map((ti) => [ti, fail.filter((sp) => sp.typeIdx === ti)])) {
         const t = types[ti], bar = parseBars(t.top)?.bar ?? "DB 12", grown = designBH(sps.map((sp) => ({ ...sp, vDone: true })), t.b, t.h, bar, f.mat, g, t);
         if (grown) types[ti] = { ...t, ...grown, name: t.name };
-        else { const gR = { ...g, bars: [...g.bars, "DB 20"], sections: [...g.sections, ...(g.bigSections ?? [])] }; // last resort only: DB20 (user habit DB12 → DB16 → DB20) and the big sections
+        else { const gR = { ...bigGen(g), bars: [...g.bars, "DB 20"] }; // last resort only: DB20 (user habit DB12 → DB16 → DB20) and the big sections
           for (const d of [designGroup(sps.map((sp) => ({ ...sp, vDone: true })), f.mat, gR)].concat(sps.map((sp) => designGroup([{ ...sp, vDone: true }], f.mat, gR))).filter(Boolean).slice(0, 1 + sps.length))
             if (!types.some((x) => JSON.stringify({ ...x, name: "", auto: true }) === JSON.stringify({ ...d.t, name: "", auto: true }))) types.push({ ...d.t, name: `B${types.length + 1}`, auto: true }); } // nothing in this b × h: an own type for these spans (auto beams take it)
       }

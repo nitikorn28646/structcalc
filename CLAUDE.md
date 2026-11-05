@@ -474,3 +474,11 @@ run in analyzeFloor and frame.js final checks); F9 wall plates EI per span (roof
 type in their b × h carries → beamtypes-check 57/57 (k 1 and 3; test allows DB20). Audit after: 42/98 pass, 0 pass-but-independent-NG,
 0 cut-off violations, CRITICAL 0. verify20 40/40 (its 0.5Ig deflection check skips Branson spans — audit-beam checks those). E2E 47/47.
 Regress baseline re-saved. Still UNVERIFIED: F11 shear limits (0.795 / 1.32√f′c kept); every ACI 318-11 clause vs the วสท. text.
+BEAM COST AUDIT 2026-11-05 (cli/audit-opt.mjs: per drawn beam every b × h with its cheapest bars, whole frame re-analysed per candidate;
+report https://claude.ai/artifact/8vm1X2hEFx2Ur3rRAJZJLv). Yasothon 15 beams: 8.8 % over the per-beam optimum (habit k = 3); causes: list
+from 20×40 in 10 cm steps, first-passing order, equal-count groups, few types. FIX (user "แก้เลย"): engine/beamTypes.js BEAM_COST (mode "cost",
+b 0.20/0.25/0.30 × h 0.30–0.80 step 0.05, big 0.40 × 0.85–1.00), designGroup cheapest passing (sections by concrete + formwork cost, early
+stop), groups by DP (min Σ heaviest own cost/m × length); frame.beamAutoMode "cost" (default) | "habit" (old order), select "วิธีเลือก" in the
+Type คาน card. Cost vs habit (57 spans): k1 218k/242k, k2 154k/168k, k5 146k/154k, k8 144k/149k; k3 158k (3 types) vs 155k (habit got 5 via
+repair). beamtypes-check updated (cost grid, habit still from 20×40, cost ≤ habit at k 5). audit-beam auto uses BEAM_COST: 0 real
+pass-but-NG (1 borderline 0.04 %).
