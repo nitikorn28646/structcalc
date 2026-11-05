@@ -8,6 +8,7 @@ import { frame3dModel, columnPatternSets } from "./frame3d.js";
 import { storeyStability, columnSlender } from "./colStability.js";
 import { tiedColumn } from "./column.js";
 import { PILES, pileCap, spreadFooting } from "./footing.js";
+import { punchingFull } from "./footingExtra.js";
 import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
 
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
@@ -94,9 +95,10 @@ function designSpread(tt, P, pier, mat, fo, Mx, My) {
       // takes gross + 6Mx/(Bx·By²) + 6My/(By·Bx²). Kept outside spreadFooting (diff-tested); load parts kept for the report.
       const A = Bx * By, Wf = t * A * 2400, Ws = Math.max(0, Df - t) * gamma * A, gross = (P + Wf + Ws) / A, mY = (6 * Math.abs(Mx)) / (Bx * By ** 2), mX = (6 * Math.abs(My)) / (By * Bx ** 2);
       Object.assign(r, { Wf, Ws, A, gross, mX, mY, qCorner: gross + mX + mY, qCornerMin: gross - mX - mY, qCornerOk: gross + mX + mY <= qa + 1e-6 });
-      const util = Math.max(r.qmaxX, r.qmaxY, r.qCorner) / qa;
-      r.limOk = util <= (fo.utilMax ?? 1) + 1e-9;
-      const ok = spreadOk(r) && r.qCornerOk && r.limOk;
+      Object.assign(r, punchingFull(r, P, A)); // conventional punching (engine/footingExtra.js), stricter than the sheet
+      const util = Math.max(Math.max(r.qmaxX, r.qmaxY, r.qCorner) / qa, r.vpFull / r.vcp);
+      r.limOk = Math.max(r.qmaxX, r.qmaxY, r.qCorner) / qa <= (fo.utilMax ?? 1) + 1e-9;
+      const ok = spreadOk(r) && r.qCornerOk && r.vpFullOk && r.limOk;
       r.Bx = Bx; r.By = By; r.piles = [];
       if (tt.nb > 1) r.longText = `${r.nLong}-${bar} @ ${sL.toFixed(3)}`;
       if (tt.nbS > 1) r.shortText = `${r.nShort}-${barS} @ ${sS.toFixed(3)}`;

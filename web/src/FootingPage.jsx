@@ -1,6 +1,7 @@
 ﻿import { Download, Layers, Ruler, Weight, Wrench } from "lucide-react";
 import { GRADES, SLAB_BARS } from "../engine/tables.js";
 import { PILES, pileCap, spreadFooting } from "../engine/footing.js";
+import { punchingFull } from "../engine/footingExtra.js";
 import PileChart, { pileLoads } from "./PileChart.jsx";
 import { pileCapModel } from "./drawings.js";
 import { Badge, Card, Field, NumberInput, Select } from "./ui.jsx";
@@ -23,11 +24,11 @@ const GRADE_OPTS = Object.entries(GRADES).map(([k, g]) => [k, `${g} (${k})`]);
 const BAR_OPTS = Object.keys(SLAB_BARS);
 
 export function runFooting(f) {
-  try { return { r: f.type === "pile" ? pileCap(f) : spreadFooting(f) }; } catch (e) { return { error: e.message }; }
+  try { if (f.type === "pile") return { r: pileCap(f) }; const r = spreadFooting(f); Object.assign(r, punchingFull(r, f.P, f.Bx * f.By)); return { r }; } catch (e) { return { error: e.message }; }
 }
 export const footingOk = (r) => (r.piles
   ? r.pileOk && r.dOk && r.vOk && r.vpOk && r.vppOk && r.AsOkL && r.AsOkS && r.perimOk && r.ancOk && r.bearingOk
-  : r.qOk && r.qminOk && r.dOk && r.vOk && r.vpOk && r.AsOkL && r.AsOkS && r.perimOkL && r.perimOkS && r.ancOkL && r.ancOkS && r.bearingOk);
+  : r.qOk && r.qminOk && r.dOk && r.vOk && r.vpOk && r.vpFullOk !== false && r.AsOkL && r.AsOkS && r.perimOkL && r.perimOkS && r.ancOkL && r.ancOkS && r.bearingOk);
 const PILE_OPTS = Object.keys(PILES).map((k) => [k, PILES[k].bored ? `เข็มเจาะ ${k} ม.` : `เข็มตอก ${k}`]);
 
 function Row({ label, value, unit, ok }) {
@@ -132,6 +133,7 @@ export function FootingPage({ f, set, dark }) {
             <Row label="ความลึก d ต้องการ / มี" value={`${fmt(Math.max(r.dReqX, r.dReqY))} / ${fmt(r.dShort)}`} unit="cm" ok={r.dOk} />
             <Row label="เฉือนแบบคาน v ≤ 0.29√f'c" value={`${fmt(Math.max(r.vX, r.vY))} / ${fmt(r.vc)}`} unit="ksc" ok={r.vOk} />
             <Row label="เฉือนทะลุ v ≤ 0.53√f'c" value={`${fmt(Math.max(r.vpX, r.vpY))} / ${fmt(r.vcp)}`} unit="ksc" ok={r.vpOk} />
+            {r.vpFull != null && <Row label="เฉือนทะลุ (แรงเต็ม V/(b₀·d))" value={`${fmt(r.vpFull)} / ${fmt(r.vcp)}`} unit="ksc" ok={r.vpFullOk} />}
             <Row label={r.nTri ? "As ต่อแถบ ต้องการ / ใส่ (3 แถบ)" : "As ทางยาว ต้องการ / ใส่"} value={`${fmt(Math.max(r.AsReqL, r.AsMinL))} / ${fmt(r.AsProvL)}`} unit="cm²" ok={r.AsOkL} />
             {!r.nTri && <Row label="As ทางสั้น ต้องการ / ใส่" value={`${fmt(Math.max(r.AsReqS, r.AsMinS))} / ${fmt(r.AsProvS)}`} unit="cm²" ok={r.AsOkS} />}
             <Row label="แรงยึดเหนี่ยว (เส้นรอบรูป)" value={`${fmt(r.perimReqL)} / ${fmt(r.perimL)}`} unit="cm" ok={pc ? r.perimOk : r.perimOkL && r.perimOkS} />

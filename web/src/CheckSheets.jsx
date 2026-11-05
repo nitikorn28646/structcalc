@@ -95,9 +95,10 @@ export function FootingSheet({ f, mark, count }) {
         !sp && ["แรงต่อเข็มสูงสุด", "P/n + M·x/Σx² + น้ำหนักฐาน", "", n0(r.Ptmax), "กก."],
         ["ความลึกที่ต้องการ", "d = √(M/(R·b))", "", `${n2(Math.max(r.dReqX ?? 0, r.dReqY ?? 0))} / ${n2(Math.min(r.dLong ?? 0, r.dShort ?? 0))}`, "ซม."],
         ["แรงเฉือนทางเดียว", "v = V/(b·d) ≤ vc = 0.29√f′c", "", `${n2(vX)} / ${n2(r.vc)}`, "กก./ซม.²"],
-        ["แรงเฉือนทะลุ", "vp = V/(b₀·d) ≤ vcp = 0.53√f′c", "", `${n2(vp)} / ${n2(r.vcp)}`, "กก./ซม.²"]].filter(Boolean)}
+        ["แรงเฉือนทะลุ", "vp = V/(b₀·d) ≤ vcp = 0.53√f′c", "", `${n2(vp)} / ${n2(r.vcp)}`, "กก./ซม.²"],
+        sp && r.vpFull != null && ["แรงเฉือนทะลุ (แรงเต็มนอกหน้าตัดวิกฤต)", "v = (P − qn·(bx+d)(by+d)) / (b₀·d)", `(${n0(f.P)} − …) / (${n0(r.b0Full)} × ${n2(r.dPunch)})`, `${n2(r.vpFull)} / ${n2(r.vcp)}`, "กก./ซม.²"]].filter(Boolean)}
       checks={[sp ? ["แรงดันดินสูงสุด (มุมฐาน) ≤ qa", r.qCorner ?? Math.max(r.qmaxX, r.qmaxY), inp.qa, "กก./ม.²", r.qOk && r.qCornerOk !== false] : ["แรงต่อเข็ม ≤ น้ำหนักปลอดภัย", r.Ptmax, r.Pallow, "กก.", r.pileOk],
-        ["ความลึก d ต้องการ ≤ ที่มี", Math.max(r.dReqX ?? 0, r.dReqY ?? 0), Math.min(r.dLong ?? 0, r.dShort ?? 0), "ซม.", r.dOk], ["แรงเฉือนทางเดียว", vX, r.vc, "กก./ซม.²", r.vOk], ["แรงเฉือนทะลุ", vp, r.vcp, "กก./ซม.²", r.vpOk],
+        ["ความลึก d ต้องการ ≤ ที่มี", Math.max(r.dReqX ?? 0, r.dReqY ?? 0), Math.min(r.dLong ?? 0, r.dShort ?? 0), "ซม.", r.dOk], ["แรงเฉือนทางเดียว", vX, r.vc, "กก./ซม.²", r.vOk], ["แรงเฉือนทะลุ", vp, r.vcp, "กก./ซม.²", r.vpOk], ...(sp && r.vpFull != null ? [["แรงเฉือนทะลุ (แรงเต็ม)", r.vpFull, r.vcp, "กก./ซม.²", r.vpFullOk]] : []),
         ["เหล็กแนวยาว As ต้องการ ≤ ที่ใส่", Math.max(r.AsReqL ?? 0, r.AsMinL ?? 0), r.AsProvL, "ซม.²", r.AsOkL], ["เหล็กแนวสั้น As ต้องการ ≤ ที่ใส่", Math.max(r.AsReqS ?? 0, r.AsMinS ?? 0), r.AsProvS, "ซม.²", r.AsOkS],
         r.bearing != null && ["หน่วยแรงแบกทาน", r.bearing, r.fnb1, "กก./ซม.²", r.bearingOk]].filter(Boolean)}
       note={!f.ok && f.r?.limOk === false ? "เกินขีดจำกัดการใช้ดิน / เข็มที่กำหนด" : undefined} />

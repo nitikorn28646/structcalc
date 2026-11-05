@@ -546,3 +546,6 @@ paired them the other way: narrow rectangles bending about the weak axis were "m
 the sheet's value where it exists, the governing-axis value where it is NaN (ex = 0), otherwise the smaller of the two (never less reduction).
 All 16 Excel diff cases give IDENTICAL output before/after (local check) → tied column stays 12/16; two new cases for the Windows run
 (difftest k2-rect-20x50-my, k1-mx-only-slender — expected to differ from the Excel = documented defects). colstab-check 19/19, regress identical.
+FOOTING PUNCHING (2026-11-05): the frozen spreadFooting takes ½ the load outside the d/2 section over the full perimeter (v = ½·V/(b₀d), Excel
+replicated, diff 8/8). engine/footingExtra.js punchingFull = conventional V/(b₀d) (d = smaller depth) → r.vpFull / vpFullOk, used by frame.js
+designSpread (ok/util) and the single footing tool; report rows added. 163 spread footings in 43 test projects: none fails (worst 0.90).
