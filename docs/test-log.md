@@ -1,6 +1,17 @@
 # Test log (newest on top)
 Format: date · step · action · result · expected · severity (บล็อก / สำคัญ / เล็ก) · status (open / fixed in <commit>)
 
+## 2026-11-05 · auto beam types reliability (cli/verify-types.mjs + browser scripts, Yasothon, no algorithm change)
+- 1 determinism: node k 1…10 twice identical; UI "เทียบ" twice identical (7 rows) · ok
+- 2 UI rows = generateBeamTypes() called directly IN THE BROWSER (7/7 rows identical) · ok. Node gives a different set for k 1/2 (8 vs 7 types,
+  ฿154,294 vs ฿152,414): the analysis differs in the last digits between node and Chromium (ΣM+ 71408.31949066 vs …065, ~1e-13) and that flips
+  knife-edge choices (beam.js roundDown(s, 2), lightest-type-per-beam) · เล็ก (both sets pass) · open — remedy: tolerance / rounding of forces before discrete choices
+- 3 same grid (b 20/25/30, h 30–80 + big, DB12/16/20, RB6/RB9, @0.10/0.15/0.20), same mode, same mat for every k · ok
+- 4 every span of the 7 UI sets: independent cracked-section stresses + shear rules 398/398 ok; re-analysed in node 398/399 (3-3 at k 8, same
+  cause as 2) · 4c two final types that differ only in stirrups (k 9/10 B1/B2) — the per-beam "lightest type" weight ignores stirrups, ties go
+  to the first listed (often the denser) → user's B2 @0.10 that also passes at @0.15 · สำคัญ (economy, not safety) · open
+- 5 "แนะนำ" recomputed from the UI table: cheapest ฿149,548 (k 6/7, 7 types), limit +3 % = ฿154,034, fewest types within it = k 4/5 (5 types, ฿152,338) · ok
+
 ## 2026-11-04 · beam design audit (cli/audit-beam.mjs, report https://claude.ai/artifact/2jTd6Kfik4f9ZvJgBfJpiM)
 - F1 CRITICAL doubly with k < d′/d passed (As′ < 0) · fixed (NG + provided-bar stress gate)
 - F2 CRITICAL deep span V at d ≈ 0 · fixed (spans < 4h use the largest V)
