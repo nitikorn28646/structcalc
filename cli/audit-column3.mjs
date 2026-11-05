@@ -14,6 +14,7 @@
 import fs from "fs";
 import { analyzeFrame } from "../web/engine/frame.js";
 import { frame3dModel, solveFrame3D } from "../web/engine/frame3d.js";
+import { windForces, DEFAULT_LATERAL } from "../web/engine/lateral.js";
 const BAR = { "DB 12": [1.131, 1.2], "DB 16": [2.011, 1.6], "DB 20": [3.142, 2.0], "DB 25": [4.909, 2.5], "RB 6": [0.283, 0.6], "RB 9": [0.636, 0.9] };
 const file = process.argv[2], pj = JSON.parse(fs.readFileSync(file)), fr = pj.frame;
 const mat = { fcPrime: 240, fy: 4000, Es: 2040000, ...fr.mat }; mat.fcPrime = fr.mat.fcCol ?? fr.mat.fcPrime ?? 240; mat.cover = fr.mat.coverCol ?? fr.mat.cover ?? 3;
@@ -93,6 +94,24 @@ const flex = Object.keys(PAT).map((name, p) => ({ name, fl: [0, 1].map((ax) => {
   return fr.floors.map((_, k) => { const d = DI.findIndex((x) => Math.abs(x.z - Z[k]) < 1e-6), db = k ? DI.findIndex((x) => Math.abs(x.z - Z[k - 1]) < 1e-6) : -1;
     const dd = Math.abs((d >= 0 ? u[DI[d].master * 6 + ax] : 0) - (db >= 0 ? u[DI[db].master * 6 + ax] : 0)), V = F.filter((q) => DI.find((x) => x.master === q.n).z >= Z[k] - 1e-6).reduce((s, q) => s + Math.abs(q.F[ax]), 0);
     return dd / V; }); }) }));
+const rawQ = Object.keys(PAT).map((name, p) => ({ name, ax: [0, 1].map((ax) => { const F = latCases[p * 2 + ax].lateral, u = own.cases[p * 2 + ax].u;
+  return fr.floors.map((_, k) => { const d = DI.findIndex((x) => Math.abs(x.z - Z[k]) < 1e-6), db = k ? DI.findIndex((x) => Math.abs(x.z - Z[k - 1]) < 1e-6) : -1;
+    const dd = Math.abs((d >= 0 ? u[DI[d].master * 6 + ax] : 0) - (db >= 0 ? u[DI[db].master * 6 + ax] : 0)), V = F.filter((q) => DI.find((x) => x.master === q.n).z >= Z[k] - 1e-6).reduce((s, q) => s + Math.abs(q.F[ax]), 0);
+    const mxJ = Math.max(...DI[d].slaves.map((i) => { const x = N3j(i), lo = k ? nodeBelow(i) : -1; return Math.abs(u[i * 6 + ax] - (lo >= 0 ? u[lo * 6 + ax] : 0)); }));
+    return { V, dd, mxJ }; }); }) }));
+function N3j(i) { return i; }
+function nodeBelow(i) { const n = LI.nodes[i], zb = LI.nodes.filter((q) => !q.master && q.z < n.z - 1e-6).reduce((a, q) => Math.max(a, q.z), -1); return LI.nodes.findIndex((q) => !q.master && Math.abs(q.z - zb) < 1e-6 && Math.hypot(q.x - n.x, q.y - n.y) < 0.035); }
+// real wind (มยผ. 1311-50, program defaults) as Vus of the wind combinations: Δo and Vus from the SAME case (factor cancels in Q)
+const WND = windForces({ ...fr, lateral: { ...DEFAULT_LATERAL, ...(fr.lateral ?? {}), wind: { ...DEFAULT_LATERAL.wind, ...(fr.lateral?.wind ?? {}), on: true } } });
+const wCases = [0, 1].map((ax) => ({ lateral: DI.map((d) => { const k = Z.findIndex((z) => Math.abs(z - d.z) < 1e-6), F = WND[ax ? "y" : "x"].floors[k]?.F ?? 0; return { n: d.master, F: ax ? [0, F, 0] : [F, 0, 0] }; }) }));
+const wSol = solveFrame3D({ ...LI, diaphragms: DI, pDelta: false, factors: { beam: 0.35, column: 0.7, J: 0.2 }, cases: wCases });
+const wind = [0, 1].map((ax) => fr.floors.map((f, k) => { const u = wSol.cases[ax].u, d = DI.findIndex((x) => Math.abs(x.z - Z[k]) < 1e-6), db = k ? DI.findIndex((x) => Math.abs(x.z - Z[k - 1]) < 1e-6) : -1;
+  const dd = Math.abs((d >= 0 ? u[DI[d].master * 6 + ax] : 0) - (db >= 0 ? u[DI[db].master * 6 + ax] : 0)), V = WND[ax ? "y" : "x"].floors.slice(k).reduce((s, q) => s + q.F, 0);
+  return { V, dd, rows: [["1.2D + 1.0L + 1.6W", 1.2, 1.0, 1.6], ["0.9D + 1.6W", 0.9, 0, 1.6], ["0.75(1.4D + 1.7L + 1.7W)", 1.05, 1.275, 1.275]].map(([name, cD, cL, cW]) => {
+    const Pu = cD * SD[k] + cL * SL[k], Vu = cW * V, Do = cW * dd; return { name, Pu, Vu, Do, lc: f.h ?? 3, Q: (Pu * Do) / (Vu * (f.h ?? 3)) }; }) }; }));
+// linearity proof: the same pattern ×1000 gives the same Δo/V
+const big = solveFrame3D({ ...LI, diaphragms: DI, pDelta: false, factors: { beam: 0.35, column: 0.7, J: 0.2 }, cases: [{ lateral: latCases[0].lateral.map((q) => ({ ...q, F: q.F.map((v) => v * 1000) })) }] });
+const lin = (() => { const d = DI.findIndex((x) => Math.abs(x.z - Z[nF > 1 ? 1 : 0]) < 1e-6), m = DI[d].master; return big.cases[0].u[m * 6] / 1000 / own.cases[0].u[m * 6]; })();
 const COMBOS = [
   { name: "D + L", src: "WSD (โปรแกรม, ใช้งาน)", cD: 1, cL: 1 }, { name: "D + 0.75L + 0.75W", src: "WSD (โปรแกรม)", cD: 1, cL: 0.75 }, { name: "0.6D + W", src: "WSD (โปรแกรม)", cD: 0.6, cL: 0 },
   { name: "1.4D", src: "ACI 318-11 (9-1)", cD: 1.4, cL: 0 }, { name: "1.2D + 1.6L", src: "ACI 318-11 (9-2)", cD: 1.2, cL: 1.6 }, { name: "1.2D + 1.0L + 1.6W", src: "ACI 318-11 (9-4)", cD: 1.2, cL: 1.0 },
@@ -170,6 +189,10 @@ for (const c of rA.columns) {
     const ax = wsd({ ...cs0, P: c.Pd ?? c.Pbot, Mx: 0, My: 0 }, R); return { gov: g?.t.name, uX: g?.w.uX, uY: g?.w.uY, uB: g?.w.uB, axial: ax.uB, detail: [...new Set([...(g?.w.detail ?? []), ...ax.detail])], ok: (!g || g.w.ok) && ax.ok, R: g?.w.R ?? ax.R, onlyTension: !g }; };
   // tension (N < 0 in some pattern): As·fs ≥ T, fs = 1,700 ksc (UNVERIFIED: ว.ส.ท. 0.5fy ≤ 1,700 / ACI 318-63 §1003 24 ksi ≈ 1,690); USD φAs·fy ≥ Tu (φ 0.9)
   const As = lv.n * BAR[cs0.bar][0], Tmin = Math.min(...trip.map((t) => t.N)), Tu = -(1.2 * sp.D[0] + 1.6 * Math.min(0, ...sp.Ls.map((q) => q[0])) + 1.6 * 0) , tension = Tmin < 0 ? { T: -Tmin, cap: As * 1700, ok: -Tmin <= As * 1700, fsAct: -Tmin / As, half: -Tmin / As <= 0.5 * mat.fy } : null;
+  const pdr = Math.max(1, pdM.Mx > 50 ? pdel.Mx / pdM.Mx : 1, pdM.My > 50 ? pdel.My / pdM.My : 1);
+  const chkA = (() => { const ev = trip.filter((t) => t.N > 1).map((t) => ({ t, w: wsd({ ...cs0, P: t.N, Mx: t.Mx * pdr, My: t.My * pdr }, Rn) })), g = ev.reduce((a, e) => (!a || e.w.uB > a.w.uB ? e : a), null);
+    const ax = wsd({ ...cs0, P: c.Pd ?? c.Pbot, Mx: 0, My: 0 }, Rn); return { uB: g?.w.uB, uX: g?.w.uX, uY: g?.w.uY, axial: ax.uB, ok: (!g || g.w.ok) && ax.ok, detail: [...new Set([...(g?.w.detail ?? []), ...ax.detail])] }; })();
+  // raw k from column.js formulas WITHOUT the h′ ≥ h / ≥ 2h floor (as coded)
   const dec = chk(Rd), decC = chk(RdC), allB = chk(Rn), all63 = chk(R63);
   // USD (separate): Pu = 1.2D + 1.6L of the full-load case, moment magnifier ACI 318-11 10.10.6 (non-sway, Cm = 1) / 10.10.7 Q method (sway)
   const Pu = 1.2 * sp.D[0] + 1.6 * sp.L[0], Mxu = Math.max(Math.abs(1.2 * sp.D[1] + 1.6 * sp.L[1]), Math.abs(1.2 * sp.D[2] + 1.6 * sp.L[2])), Myu = Math.max(Math.abs(1.2 * sp.D[3] + 1.6 * sp.L[3]), Math.abs(1.2 * sp.D[4] + 1.6 * sp.L[4]));
@@ -183,9 +206,9 @@ for (const c of rA.columns) {
     MxPat: Math.max(...trip.map((t) => t.Mx)), MyPat: Math.max(...trip.map((t) => t.My)), pdRatio: Math.max(pdM.Mx > 50 ? pdel.Mx / pdM.Mx : 1, pdM.My > 50 ? pdel.My / pdM.My : 1), pdel, first: pdM,
     psi: Object.fromEntries(Object.entries(ps).map(([k2, v]) => [k2, v.map((q) => ({ psi: q.psi, psiEl: q.psiEl, base: q.base, beams: q.beams }))])), k: kk,
     klr: { x63: (kk.x.k63f * Lu) / (0.3 * lv.By), y63: (kk.y.k63f * Lu) / (0.3 * lv.Bx), xCh: (kk.x.sway * Lu) / (0.3 * lv.By), yCh: (kk.y.sway * Lu) / (0.3 * lv.Bx), prog: Lu / (0.25 * lv.Bx) },
-    prog: { ok: c.ok, util: c.check?.util }, sway: sw, tension, dec, decC, allB, all63, usd: { Pu, Mxu, Myu, magX, magY, ratio: usdR?.ratio ?? usdR, Pcx, Pcy } });
+    prog: { ok: c.ok, util: c.check?.util }, sway: sw, tension, A: chkA, pdr, dec, decC, allB, all63, usd: { Pu, Mxu, Myu, magX, magY, ratio: usdR?.ratio ?? usdR, Pcx, Pcy } });
 }
-const out = { file, baseFixity: fr.baseFixity ?? "pinned", lateral: !!fr.lateral?.on, kref: KREF, Qtab, QACI, QSRV, sway, flexNames: Object.keys(PAT), rows, nLLcases: LLm.length };
+const out = { rawQ, lin, wind, Z, file, baseFixity: fr.baseFixity ?? "pinned", lateral: !!fr.lateral?.on, kref: KREF, Qtab, QACI, QSRV, sway, flexNames: Object.keys(PAT), rows, nLLcases: LLm.length };
 const J = process.argv.indexOf("--json"); if (J > 0) fs.writeFileSync(process.argv[J + 1], JSON.stringify(out, (k, v) => (v === Infinity ? "∞" : v)));
 const f2 = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : "∞");
 console.log(file, "k check", KREF.map((r) => `${r.m}(${r.a},${r.b}) ${f2(r.k)}/${r.ref}`).join(" · "));

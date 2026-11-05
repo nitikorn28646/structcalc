@@ -522,3 +522,10 @@ live raises column M (governing set mostly "N max"). Tension column Yasothon F2 
 (floors ≥ 1 / ≥ 2): 34/43 (chart k 31/43); user house 38/38 (19 top posts: kLu/r 100–112 only if the roof gives no lateral tie).
 Plan (waiting for approval): slenderness in ONE place — frame.js picks case/stiffness, column.js computes R once (optional per-direction input,
 K1/K2 fixes, Excel re-run); K3/K5/K6, first-order moments for R, 3D live patterns in frame.js/frame3d.js. ACI 318-63 / ว.ส.ท. coefficients UNVERIFIED.
+COLUMN CLARIFICATION (2026-11-05, READ ONLY; audit-column3.mjs now also outputs rawQ / wind / lin; cli/audit-column4-report.mjs;
+https://claude.ai/artifact/Q3hqSi7bK55TNwUrSMzPNB): Q with the program's real wind (มยผ. defaults) as Vus — Pu, Vus, Δo from the same case:
+Yasothon ชั้น 2 1.2D+1.0L+1.6W Q 0.062 (X) → sway either way; user house ≤ 0.021. 3D solver = global P-Δ (Kg 4 passes), only column END moments
+passed → no local P-δ; frame mode doubles P-Δ with R; axial mode in a sway storey with Lu/B ≤ 15 has NO slenderness at all. 13 columns: fail by all
+methods 2 (GB corner stubs), method-dependent 10, pass all 1; round-3 rule 9 NG / 4 pass confirmed. Plan WP1 K1/K2 (column.js + Excel) ·
+WP2 K3/K5/K6 (frame.js) · WP3 3D live patterns · WP4 slenderness in one place (storeyStability/columnRestraint → column.js optional R input).
+Proposed until sources are verified: k = larger of 318-63 h′ and chart, every column check carries basis "UNVERIFIED". Waiting for approval.
