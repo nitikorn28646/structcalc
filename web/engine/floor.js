@@ -935,7 +935,9 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
       const res = solveBeam({ x, sup, EI, loads });
       ln.beamIn = { x, sup, EI, loads }; // kept for the PyNite differential test (cli/frame3d-export.mjs)
       if (res.error) {
-        if (last) warnings.push(`แนวคาน ${ln.id + 1}: ${res.error} — วางเสาหรือให้ปลายคานวางบนคานอื่น`);
+        // say how much load this line drops (it is NOT passed on to any column — review 2026-11-05: roof points on a floating beam vanished)
+        const lost = loads.reduce((t, l) => t + (l.P ?? ((l.wa + l.wb) / 2) * (l.b - l.a)), 0);
+        if (last) warnings.push(`แนวคาน ${ln.id + 1}: ${res.error} — น้ำหนัก ${Math.round(lost).toLocaleString()} กก. บนคานนี้ไม่ได้ส่งลงเสา (ผลไม่ครบ) · วางเสาหรือให้ปลายคานวางบนคานอื่น`);
         done.set(ln.id, { reaction: () => 0 }); Object.assign(ln, { error: res.error, res: null, loads, pts }); continue;
       }
       const Rat = (t) => { const k = x.findIndex((v) => Math.abs(v - t) < 1e-3); return k >= 0 ? res.R[k] : 0; };

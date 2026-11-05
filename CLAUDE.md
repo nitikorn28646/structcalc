@@ -557,3 +557,9 @@ w/2 + 0.10 m) is supported (bearLoose under "rcBeam", no "ไม่มีอะ�
 10 cases (Yasothon ±supports / L240, user files, rc/span/beam plate modes, posts on RC beams): roof load off = points sent (≤ 2 kg) in all;
 3D base rises = points (+ heavier beams when types change); accumulated column loads +10 % (max of continuous / simple reactions, by design);
 "moved" points (rc/beam modes on a floor with no RC beams) are snapped to the nearest column with a warning. Independent roof total ±5 %.
+ROOF ON RC BEAMS (2026-11-05, user "ริมนอกผมไม่ได้สร้างอะเส … ให้คาน คสล รับเลย"): roofMembers — with no wall plate drawn, outline edges lying along an
+RC roof beam (roof.guide.beams) get NO steel plate: rafter reactions + posts/inner-plate ends go down at the rafter spacing (bearDirect, like
+"rc"); a DRAWN wall plate on an RC beam is designed as "beam" (anchors @plateAnchor, load into the beam; not part of a continuous line);
+an interior plate on an RC beam is dropped (its posts stand on the beam). floor.js: a beam line that cannot be solved (no supports) now says
+how much load it drops ("ไม่ได้ส่งลงเสา (ผลไม่ครบ)"). cli/roof-loadpath-rc.cjs 10 cases: roof load off = points sent (≤ 3 kg) in all; beams
+carry their share (cases 7–10). E2E 47/47, regress identical.

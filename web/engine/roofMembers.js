@@ -269,7 +269,11 @@ export function designRoof(g, fr, roof, d) {
   }
   // interior plates (B): two crossing inside both are not two simple spans side by side — the shorter one (stiffer) is the main
   // plate, the other is cut at the crossing and rests on it (same rule as the RC beams; ties: the one drawn first)
-  const raw = (roof.innerPlates ?? []).map((ln, k) => ({ a: ln.a, b: ln.b, k })).filter((ln) => Math.hypot(ln.b[0] - ln.a[0], ln.b[1] - ln.a[1]) >= 0.3);
+  // an interior plate lying along an RC roof beam of the structure is not a steel member: the posts on it stand on the RC beam (user 2026-11-05)
+  const onGuide = (ln) => (roof.guide?.beams ?? []).some((b) => { const dx = b.b[0] - b.a[0], dy = b.b[1] - b.a[1], L2 = dx * dx + dy * dy || 1, tol = Math.max((b.w ?? 0.2) / 2, 0.05) + 0.1;
+    const dist = (pt) => { const t = Math.max(0, Math.min(1, ((pt[0] - b.a[0]) * dx + (pt[1] - b.a[1]) * dy) / L2)); return Math.hypot(pt[0] - (b.a[0] + t * dx), pt[1] - (b.a[1] + t * dy)); };
+    return dist(ln.a) <= tol && dist(ln.b) <= tol && dist([(ln.a[0] + ln.b[0]) / 2, (ln.a[1] + ln.b[1]) / 2]) <= tol; });
+  const raw = (roof.innerPlates ?? []).map((ln, k) => ({ a: ln.a, b: ln.b, k })).filter((ln) => Math.hypot(ln.b[0] - ln.a[0], ln.b[1] - ln.a[1]) >= 0.3 && !onGuide(ln));
   const crossings = [];
   for (let changed = true, guard = 0; changed && guard < 200; guard++) {
     changed = false;
@@ -343,8 +347,14 @@ export function designRoof(g, fr, roof, d) {
   // applied to the whole span result — an approximation) · "beam" on an RC ring beam all along: the plate only spans between
   // anchor bolts d.plateAnchor (m, default 1.0); its load and the point loads go straight down into the RC beam.
   // d.plateDefl: deflection limit L/360 (default) or L/240 (roof without a hung ceiling); stress check unchanged (Fb = 0.6Fy)
-  const plateRun = (section, count, L, pl = []) => {
-    const mode = d.plateSupport ?? "cont", Ld = mode === "beam" ? Math.min(L, d.plateAnchor > 0.1 ? d.plateAnchor : 1.0) : L, onBeam = mode === "beam";
+  // a wall-plate span lying along an RC roof beam of the structure (roof.guide.beams, user 2026-11-05) rests on that beam: it is
+  // designed as "beam" (anchors) and its load goes into the beam, whatever d.plateSupport says; spans with no beam under them keep it
+  const gBeams = roof.guide?.beams ?? [];
+  const autoPlates = !roof.plates?.length; // no wall plate drawn: the outline edges stand in for them
+  const segDist = (pt, b) => { const dx = b.b[0] - b.a[0], dy = b.b[1] - b.a[1], L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((pt[0] - b.a[0]) * dx + (pt[1] - b.a[1]) * dy) / L2)); return Math.hypot(pt[0] - (b.a[0] + t * dx), pt[1] - (b.a[1] + t * dy)); };
+  const onRCBeam = (sp) => (d.plateSupport ?? "cont") !== "rc" && gBeams.some((b) => { const tol = Math.max((b.w ?? 0.2) / 2, 0.05) + 0.1; return segDist(sp.p, b) <= tol && segDist(sp.q, b) <= tol && segDist(lerp(sp.p, sp.q, 0.5), b) <= tol; });
+  const plateRun = (section, count, L, pl = [], mode0 = null) => {
+    const mode = mode0 ?? d.plateSupport ?? "cont", Ld = mode === "beam" ? Math.min(L, d.plateAnchor > 0.1 ? d.plateAnchor : 1.0) : L, onBeam = mode === "beam";
     const r = !onBeam && pl.length ? pointBeam({ ...base, section, selfW: section.w * count, transfer: ra.Rwall / D, L: Ld, count, loads: pl })
       : simpleBeam({ ...base, section, selfW: section.w * count, transfer: ra.Rwall / D, L: Ld, count });
     const km = 1, kd = 1, lim = d.plateDefl === 240 ? 240 : 360; // "cont" lines are solved as continuous beams (contRun); a lone span stays simple
@@ -382,7 +392,7 @@ export function designRoof(g, fr, roof, d) {
       if (Math.abs(u[0] * v[1] - u[1] * v[0]) > 1e-3) return;
       if ([[a.p, b.p], [a.p, b.q], [a.q, b.p], [a.q, b.q]].some(([x, y]) => same(x, y))) par[root(j)] = root(i);
     }));
-    const byLine = new Map(); aSpans.forEach((sp, k) => { const r = root(k); if (!byLine.has(r)) byLine.set(r, []); byLine.get(r).push(k); });
+    const byLine = new Map(); aSpans.forEach((sp, k) => { if (onRCBeam(sp)) return; const r = root(k); if (!byLine.has(r)) byLine.set(r, []); byLine.get(r).push(k); }); // spans on an RC beam are not part of a steel continuous line
     for (const [line, ks0] of byLine) {
       // order along the line; spans drawn the other way round are flipped (their point loads a measured from p)
       const u = dir(aSpans[ks0[0]]), o = aSpans[ks0[0]].p, tt = (pt) => (pt[0] - o[0]) * u[0] + (pt[1] - o[1]) * u[1];
@@ -417,9 +427,12 @@ export function designRoof(g, fr, roof, d) {
   };
   // "rc" (user 2026-11-04): the rafters sit straight on the RC ring beam (คาน RB) — no steel wall plate is designed; the rafter
   // reactions and the posts / interior plates standing on the wall line go down where they are (points at the rafter spacing)
+  // an outline edge the program put in as a wall plate (none drawn) that runs along an RC roof beam: no steel plate at all — the rafters
+  // sit on the RC beam (user 2026-11-05: "ริมนอกผมไม่ได้สร้างอะเส … ให้คาน คสล รับเลย"), loads down at the rafter spacing like "rc"
+  const rcDirect = (sp) => (d.plateSupport ?? "cont") === "rc" || (autoPlates && onRCBeam(sp));
   const bearDirect = [];
-  if ((d.plateSupport ?? "cont") === "rc") {
-    for (const sp of aSpans) {
+  {
+    for (const sp of aSpans.filter(rcDirect)) {
       const n = Math.max(1, Math.round(sp.L / D)), W = wR * sp.L;
       for (let i = 0; i < n; i++) bearDirect.push({ p: lerp(sp.p, sp.q, (i + 0.5) / n).slice(0, 2), P: W / n, from: "จันทัน" });
       for (const l of sp.loads.filter((x) => x.P > 0)) bearDirect.push({ p: lerp(sp.p, sp.q, l.a / sp.L).slice(0, 2), P: l.P, from: l.from });
@@ -431,11 +444,12 @@ export function designRoof(g, fr, roof, d) {
     members.slice(plate0).forEach((m) => { const kk = aSpans.findIndex((sp) => sp.id === m.id); if (kk >= 0 && m.r?.section) plateEI.set(kk, (d.E * m.r.section.Ix * (m.r.count ?? m.count ?? 1)) / 1e4); });
     members.splice(plate0); }
   for (const [k, sp] of (d.plateSupport ?? "cont") === "rc" ? [] : aSpans.entries()) {
-    const pl = sp.loads.filter((l) => l.P > 0), cl = contLines.get(k);
+    if (rcDirect(sp)) continue; // rafters straight on the RC beam (bearDirect above)
+    const pl = sp.loads.filter((l) => l.P > 0), onRC = onRCBeam(sp), cl = onRC ? null : contLines.get(k);
     addMember("plate", "plate", "plate", sp.id, sp.label, sp.p, sp.q, sp.L,
-      (section, count) => (cl ? contRun(cl, section, count) : sp.free ? cantRun(section, count, sp.L, pl, sp.free === "p" ? "q" : "p") : plateRun(section, count, sp.L, pl)), { ...(sp.free ? { free: sp.free } : {}), loads: pl, ...(cl ? { contLine: sp.line } : {}) });
-    const m = members[members.length - 1], mode = d.plateSupport ?? "cont";
-    if (mode === "beam" && !sp.free) { // straight down along the RC beam: the plate load at the anchors + each point load where it stands
+      (section, count) => (onRC ? plateRun(section, count, sp.L, pl, "beam") : cl ? contRun(cl, section, count) : sp.free ? cantRun(section, count, sp.L, pl, sp.free === "p" ? "q" : "p") : plateRun(section, count, sp.L, pl)), { ...(sp.free && !onRC ? { free: sp.free } : {}), loads: pl, ...(cl ? { contLine: sp.line } : {}), ...(onRC ? { onRCBeam: true } : {}) });
+    const m = members[members.length - 1], mode = onRC ? "beam" : d.plateSupport ?? "cont";
+    if (mode === "beam" && (!sp.free || onRC)) { // straight down along the RC beam: the plate load at the anchors + each point load where it stands
       const n = Math.max(1, Math.min(200, Math.round(sp.L / (d.plateAnchor > 0.1 ? d.plateAnchor : 1.0)))), W = m.r.w * sp.L;
       m.bear = Array.from({ length: n + 1 }, (_, i) => ({ p: lerp(sp.p, sp.q, i / n).slice(0, 2), P: (W / n) * (i === 0 || i === n ? 0.5 : 1) }))
         .concat(pl.map((l) => ({ p: lerp(sp.p, sp.q, l.a / sp.L).slice(0, 2), P: l.P })));
