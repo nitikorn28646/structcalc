@@ -381,7 +381,7 @@ src/Cage3D.jsx (ColumnCageParts / FootingCageParts + canvas wrappers), BeamCage3
 (<Still3D id node/> queued to one off-screen <SnapshotStation/> canvas in App → PNG pictures; never put many live canvases in the report:
 the browser WebGL context limit froze the page). Wall-plate plan: NG marked, click → PlatePick card (type / section / single-double).
 
-OPEN ITEMS for the next session: (1) web copy published 2026-11-03 (Artifact version 3, without project files — open a .json with เปิด); (2) E2E expected re-saved; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
+OPEN ITEMS for the next session: (1) web copy published 2026-11-05 (Artifact version 51, without project files — open a .json with เปิด); (2) E2E expected re-saved; (3) user asked why beam types jump B1 → B6/B7 (auto picks B6 when B2–B5 fail stirrups /
 torsion — likely the type list has no 20×40 with RB9 @0.10; check per-span reasons on the user's project); (4) Ole: 28 beams fail only on
 stirrup spacing d/2 (shallow GB 20×20, tiny shear) — ask whether to apply the ACI exemption (h ≤ 25 cm or v ≤ vc/2); columns RB6 @0.20 > 16db.
 
@@ -499,3 +499,4 @@ OPEN (not achieved, user told): node vs Chromium libm differ in the last bits (p
 identical) — also inside frozen beam/slab/column; the iterative type passes can still choose differently (Yasothon: 3 spans, both pass in the
 env that made them). Use the in-app result; full fix = replace ** / pow in frozen files (needs the Excel re-run). Fixed on the way: the
 compare table had been pasted into AutoColTypes too ("scan is not defined" → Type เสา tab crashed) — removed. E2E expected base 199.0 t.
+2026-11-05: web copy republished (v51); PyNite re-run frame3d 9/9, contBeam 2/2 (yasothon-pdelta 8.3 % = −1.1 vs −1.2 kg, inside abs tol); FrameReport criteria lists the added ACI 318-11 checks (min stirrups, torsion, Branson, cut-offs, deep-span V, near-limit); E2E 47/47.
