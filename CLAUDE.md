@@ -513,3 +513,12 @@ Yasothon: ชั้น 2 Q 0.081 → sway → Frame-by-Q 30/43 (8 × 20×20 stre
 (but 19 top posts have no beam at the top: cantilever k ≈ 2.1 → kLu/r 105 if the roof gives no bracing). Program = independent with the same rules
 (no program-pass/independent-NG). New K9: slenderness only when Lu/B > 15 then case 2 (R jumps 1 → 0.59). Gap: 3D has no live-load pattern cases.
 Proposed (waiting): K3/K5/K6 + all slenderness (Q, k from ψ, r) in frame.js; K1/K2 in column.js (frozen) + Excel diff re-run.
+COLUMN AUDIT 3 (2026-11-05, READ ONLY; cli/audit-column3.mjs <project> [--json] + audit-column3-report.mjs; https://claude.ai/artifact/5EecyKeekWTkgSWjQUQSeW):
+Q per storey per real combination (ΣD/ΣL from an L-only 3D case, Δo/Vus first order 0.70/0.35Ig): the 0.081 of round 2 was 0.052 × 1.55 (no
+combination) — dropped; Yasothon ชั้น 2 Q 0.065 (ACI 1.2D+1.6L) → sway, user house ≤ 0.028. Round-2 ψ was wrong (3D element length instead of the
+span to the next column → k too low). column.js h′ (0.78 + 0.22r′, 2(…)) has no h′ ≥ h floor; K9 = case-1 threshold (L/B 15 ≡ h/r 60 at r 0.25B)
+with the case-2 formula chosen by frame.js. Program 3D moments include P-Delta (≤ 1.6 % here) → frame mode × 1/R counts P-Δ twice. Pattern
+live raises column M (governing set mostly "N max"). Tension column Yasothon F2 (3.50, 7.90) −1.9 t, 6-DB12 OK. Yasothon with Q + 318-63 h′
+(floors ≥ 1 / ≥ 2): 34/43 (chart k 31/43); user house 38/38 (19 top posts: kLu/r 100–112 only if the roof gives no lateral tie).
+Plan (waiting for approval): slenderness in ONE place — frame.js picks case/stiffness, column.js computes R once (optional per-direction input,
+K1/K2 fixes, Excel re-run); K3/K5/K6, first-order moments for R, 3D live patterns in frame.js/frame3d.js. ACI 318-63 / ว.ส.ท. coefficients UNVERIFIED.
