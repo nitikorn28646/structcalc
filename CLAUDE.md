@@ -549,3 +549,6 @@ All 16 Excel diff cases give IDENTICAL output before/after (local check) → tie
 FOOTING PUNCHING (2026-11-05): the frozen spreadFooting takes ½ the load outside the d/2 section over the full perimeter (v = ½·V/(b₀d), Excel
 replicated, diff 8/8). engine/footingExtra.js punchingFull = conventional V/(b₀d) (d = smaller depth) → r.vpFull / vpFullOk, used by frame.js
 designSpread (ok/util) and the single footing tool; report rows added. 163 spread footings in 43 test projects: none fails (worst 0.90).
+ROOF UI (2026-11-05): grid show/hide button on every board; imported RC roof beams (guide.beams, with type width) drawn as a blue band + legend
+(were thin grey lines under the grid); automatic สะพาน OFF by default (design.autoSupports === true to turn on; Yasothon set true so its roof is
+unchanged) — user: auto purple supports/ตุ๊กตา looked like real members. E2E new house base 101.3 → 102.1 t (longer rafter spans), re-saved.

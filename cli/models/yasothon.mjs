@@ -88,7 +88,7 @@ const roof = { roofNo: "R1", slope: 30, overhang: 1.2, H: 7.25, snap: 0.5, suppo
   frame: { rafterSp: 1.0, purlinSp: 0.32, maxSpan: 2.5, postSp: 2.5 },
   columns: COLS.filter(([, y]) => y > 0), plates: pts.map((a, i) => ({ a, b: pts[(i + 1) % pts.length] })), dang: null,
   innerPlates: [[[6, 3.4], [6, 7.9]], [[3.5, 6.9], [3.5, 2.4]], [[3.75, 7.9], [3.75, 2.4]], [[2.25, 6.9], [2.25, 2.4]], [[11.75, 7.9], [11.75, 3.4]], [[9.75, 7.9], [9.75, 3.4]], [[7.75, 7.9], [7.75, 3.4]], [[5.75, 7.9], [5.75, 2.4]], [[5.25, 7.9], [5.25, 2.4]], [[4.25, 7.9], [4.25, 2.4]]].map(([a, b]) => ({ a, b })), // auto (อะเสรับดั้ง)
-  design: { roofing: "cpac", battenW: 0.6, minT: 2.3, minSec: "100x50x20x2.3", live: 30, wind: 50, extra: 15, grade: "Fe-24", E: 2100000, sagRows: 1, rodFy: 2400, plateSpan: 4,
+  design: { autoSupports: true, roofing: "cpac", battenW: 0.6, minT: 2.3, minSec: "100x50x20x2.3", live: 30, wind: 50, extra: 15, grade: "Fe-24", E: 2100000, sagRows: 1, rodFy: 2400, plateSpan: 4,
     pick: { purlin: "batten", rafter: "auto:C", hip: "auto:C", ridge: "auto:C", support: "auto:C", plate: "auto:C", post: "auto:C" }, counts: { hip: 2, ridge: 2, support: 2, plate: 2, post: 2 } } };
 const project = { app: "StructCalc", version: 1, beam: { project: { name: "บ้านพักอาศัย คสล. 2 ชั้น — คุณหนูเลียง สีลาทอง", owner: "คุณหนูเลียง สีลาทอง", location: "หมู่ 11 ต.กระจาย อ.ป่าติ้ว จ.ยโสธร", engineer: "", license: "", beamNo: "B1", floor: "", date: "2026-10-31" } }, roof, frame };
 // porch edge (EN-03/04): the curved beam is a quarter circle (user, 2026-11-02) bulging out towards the corner (6, 1.0)

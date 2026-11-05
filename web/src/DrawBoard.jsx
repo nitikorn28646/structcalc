@@ -381,8 +381,10 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
             <circle cx={hl.p[0]} cy={-hl.p[1]} r={16 * k} fill="#d92d2033" stroke={hl.bad ? "#d92d20" : "#12b76a"} strokeWidth={3 * k}><animate attributeName="r" values={`${12 * k};${24 * k};${12 * k}`} dur="1s" repeatCount="indefinite" /></circle>
             {hl.to && <circle cx={hl.to[0]} cy={-hl.to[1]} r={7 * k} fill="#d92d20" />}
           </g>}
-            {guide && <g opacity={0.55} pointerEvents="none">
-              {(guide.beams ?? []).map((b, i) => <line key={`gb${i}`} x1={b.a[0]} y1={-b.a[1]} x2={b.b[0]} y2={-b.b[1]} stroke="#98a2b3" strokeWidth={2 * k} />)}
+            {guide && <g opacity={0.8} pointerEvents="none">
+              {/* RC roof-level beams of the linked floor (user 2026-11-05: they were thin grey lines hidden under the grid) — true width band */}
+              {(guide.beams ?? []).map((b, i) => <g key={`gb${i}`}><line x1={b.a[0]} y1={-b.a[1]} x2={b.b[0]} y2={-b.b[1]} stroke="#0ba5ec" strokeOpacity={0.45} strokeWidth={Math.max(b.w ?? 0.2, 6 * k)} />
+                <line x1={b.a[0]} y1={-b.a[1]} x2={b.b[0]} y2={-b.b[1]} stroke="#0086c9" strokeWidth={1.2 * k} strokeDasharray={`${8 * k} ${3 * k}`} /></g>)}
               {guide.outline?.length > 2 && <polygon points={ring(guide.outline)} fill="none" stroke="#667085" strokeWidth={1.5 * k} strokeDasharray={`${6 * k} ${4 * k}`} />}
             </g>}
             {/* wall plates at their true width seen from above: flange width × count (2C back to back = twice), as designed */}
@@ -527,6 +529,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
               <div key={t} className="flex items-center gap-2 py-0.5"><i className="h-2 w-4 rounded-full" style={{ background: c }} />{t}<span className="ml-auto text-gray-500">{n}</span></div>
             ))}
             <div className="flex items-center gap-2 py-0.5"><i className="h-2.5 w-2.5 rounded-full border-2 border-[#12b76a]" />ดั้ง<span className="ml-auto text-gray-500">{posts.length} ต้น</span></div>
+            {(guide?.beams?.length ?? 0) > 0 && <div className="flex items-center gap-2 py-0.5"><i className="h-1.5 w-3 rounded-sm bg-[#0ba5ec]/60" />คานหลังคา คสล. (จากโครงสร้าง)<span className="ml-auto text-gray-500">{guide.beams.length} เส้น</span></div>}
             <div className="flex items-center gap-2 py-0.5"><i className="h-2 w-2 rotate-45 bg-[#7a5af8]" />ตุ๊กตา (ใต้สะพาน)<span className="ml-auto text-gray-500">{(fr?.posts ?? []).filter((p) => p.kind === "ตุ๊กตา").length} ต้น</span></div>
           </section>
           <section className="space-y-1.5 rounded-2xl border border-gray-200 bg-white p-3">

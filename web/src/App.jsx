@@ -246,7 +246,7 @@ export default function App() {
   const roofFromStructure = () => {
     const r = roofFromFrame(frame, fres);
     if (r.error) { setNotice({ ok: false, text: r.error }); return; }
-    const { linkFloor, pts, columns, grid, H } = r, beams = (frame.floors[linkFloor]?.beams ?? []).map((b) => ({ a: b.a, b: b.b }));
+    const { linkFloor, pts, columns, grid, H } = r, beams = (frame.floors[linkFloor]?.beams ?? []).filter((b) => !b.lvl).map((b) => ({ a: b.a, b: b.b, w: frame.beamTypes?.[b.type]?.b ?? 0.2 }));
     const patch = { columns, grid, H, fromFrame: true, guide: { outline: pts, beams } };
     remember(); setRoofState((x) => { const next = { ...x, ...patch }; try { localStorage.setItem("structcalc.roof", JSON.stringify(next)); } catch { /* ignore */ } return next; });
     setFrame("roofLink", { on: true, floor: linkFloor });

@@ -60,7 +60,7 @@ export function runRoof(roof0, sk) {
   if (!sk) return {};
   if (!(roof0?.pts?.length >= 3)) return { empty: true };
   const roof = { ...roof0, ...splitPlates(roof0) };
-  try { const g = roofGeometry(roof, sk); const fr = frameRoof(g, roof, roof.supports ?? (roof.design?.autoSupports === false ? [] : null)); /* สะพาน: auto unless the engineer draws them */ return { g, fr, dz: designRoof(g, fr, roof, roof.design) }; } catch (e) { return { error: e.message }; }
+  try { const g = roofGeometry(roof, sk); const fr = frameRoof(g, roof, roof.supports ?? (roof.design?.autoSupports === true ? null : [])); /* สะพาน: none unless drawn or "auto" ticked (user 2026-11-05: auto ones looked like real members) */ return { g, fr, dz: designRoof(g, fr, roof, roof.design) }; } catch (e) { return { error: e.message }; }
 }
 
 export const FRAME_COLORS = { purlin: "#98a2b3", rafter: "#b54708", support: "#7a5af8", post: "#0e9384" };
@@ -391,7 +391,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
         </Card>
         <Card title="สะพานรับจันทัน" icon={GitCommitHorizontal}>
           {/* user 2026-11-04: on an RC ring beam the engineer places the supports — no automatic ones */}
-          <label className="mb-2 flex items-center gap-2 text-[12px] text-gray-600"><input type="checkbox" checked={roof.design?.autoSupports !== false && !roof.supports} onChange={(e) => { setD("autoSupports", e.target.checked); if (e.target.checked) set("supports", null); else if (!roof.supports) set("supports", []); }} />
+          <label className="mb-2 flex items-center gap-2 text-[12px] text-gray-600"><input type="checkbox" checked={roof.design?.autoSupports === true && !roof.supports} onChange={(e) => { setD("autoSupports", e.target.checked); if (e.target.checked) set("supports", null); else if (!roof.supports) set("supports", []); }} />
             สร้างสะพานอัตโนมัติ (เอาออก = ไม่มีสะพาน หรือวาดเองด้วยเครื่องมือ "สะพาน")</label>
           <div className="space-y-1.5 text-[13px]">
             {fr?.supports.map((s, i) => (
