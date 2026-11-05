@@ -37,6 +37,11 @@ CASES = [
     ("slender-case1-axial", v(L=4.5, Bx=25, By=25, nx=4, ny=4, P=25000, Mx=0, My=0, frameCase=1)),
     ("slender-tension", v(L=4.0, Bx=25, By=25, nx=4, ny=4, P=5000, Mx=200, My=2000, frameCase=3, fy=4000)),
     ("sd50-db25", v(Bx=35, By=35, nx=4, ny=4, mainBar="DB 25", fy=5000, fcPrime=280, P=70000, Mx=2500, My=1000)),
+    # column audit WP1 (2026-11-05): expected Excel defects, the program does NOT replicate them —
+    # K2 axis pairing (narrow 20x50, My about the weak axis: the sheet compares ex with the By-depth limits → mode I, the program mode II)
+    ("k2-rect-20x50-my", v(Bx=20, By=50, nx=4, ny=8, fy=4000, fcPrime=180, P=20000, Mx=100, My=1000)),
+    # K1 tension-controlled slender column with Mx only: the sheet's R' = f(ebx/ex) with ex = 0 (#DIV/0! expected), the program uses ey/eby
+    ("k1-mx-only-slender", v(L=4.5, Bx=25, By=25, nx=4, ny=4, P=4000, Mx=1800, My=0, frameCase=2, fy=4000)),
 ]
 
 

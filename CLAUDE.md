@@ -541,3 +541,8 @@ res.stability.storeys; warnings for sway storeys. Yasothon (axial default): colu
 216–223 > 100, sway, top without a beam in one direction; their roof levels fail ties @0.20 because no type passes the stack). User house 38/38.
 cli/colstab-check.mjs 18/18 (in the gate); audit-column3: 0 program-pass / independent-NG. Baselines re-saved (regress, E2E 47). WP1 (K1/K2 in
 the default column.js path, needs Excel diff on Windows) NOT done. TypeTable "ใช้ N ช่วง" now counts all floors (was the selected floor only).
+WP1 K1/K2 BUILT (2026-11-05, user "ทำเลย"; column.js default path): K2 — ex (My, depth Bx) now classified with eay/eby, ey with eax/ebx (the sheet
+paired them the other way: narrow rectangles bending about the weak axis were "mode I", moment ignored); K1 — R′ (mode III) via tensionR():
+the sheet's value where it exists, the governing-axis value where it is NaN (ex = 0), otherwise the smaller of the two (never less reduction).
+All 16 Excel diff cases give IDENTICAL output before/after (local check) → tied column stays 12/16; two new cases for the Windows run
+(difftest k2-rect-20x50-my, k1-mx-only-slender — expected to differ from the Excel = documented defects). colstab-check 20/20, regress identical.

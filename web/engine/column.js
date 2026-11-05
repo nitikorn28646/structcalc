@@ -109,6 +109,13 @@ export const SPIRAL_KEYS = ["LdRatio", "slender", "Ag", "Ast", "pg", "pgOk", "C"
   "Fb", "Fa", "Pac", "Pas", "Pa", "Po", "I", "Ms", "ea", "eb", "e", "Pb", "Ma", "Mb", "Mo", "mode", "rTop",
   "rBot", "klr", "R", "Pd", "Mpd", "fa", "fb", "ratio", "Dc", "rhoS", "sReq", "sMax", "sReqOk"];
 
+// R′ for tension control (mode III): the sheet's form max(R, 1 − (1 − R)·ebx/ex); with the governing axis' e / eb where the sheet's value
+// is undefined (ex = 0), otherwise the smaller of the two — K1 fix without lowering any reduction the sheet gives (2026-11-05)
+function tensionR(R, r, e, eb) {
+  const sheet = r.ex > 0 ? Math.max(R, 1 - ((1 - R) * r.ebx) / r.ex) : NaN, gov = e > 0 ? Math.max(R, 1 - ((1 - R) * eb) / e) : R;
+  return Number.isFinite(sheet) ? Math.min(sheet, gov) : gov;
+}
+
 export function tiedColumn(inp) {
   const r = {};
   const bar = SLAB_BARS[inp.mainBar], tie = SLAB_BARS[inp.tieBar];
@@ -168,7 +175,10 @@ export function tiedColumn(inp) {
   r.Moy = 0.4 * AsY * fy * (Bx - 2 * r.dPrime);
 
   // governing case from the larger eccentricity
-  const [e, ea, eb] = r.ex >= r.ey ? [r.ex, r.eax, r.ebx] : [r.ey, r.eay, r.eby];
+  // K2 (column audit 2026-11-05, approved WP1): ex = My/P bends about y (depth Bx) → its limits are eay (Msy, Iy) and eby = ebf·(Bx − d′);
+  // ey = Mx/P (depth By) → eax, ebx. The reference sheet pairs ex with eax/ebx (the By-depth values) — same for square columns, wrong for
+  // rectangular ones (Excel defect, not replicated). All 16 Excel diff cases give identical output after the fix (checked 2026-11-05).
+  const [e, ea, eb] = r.ex >= r.ey ? [r.ex, r.eay, r.eby] : [r.ey, r.eax, r.ebx];
   r.mode = e < ea ? "I" : ea < e && e < eb ? "II" : e > eb ? "III" : "NONE";
 
   // slenderness reduction
@@ -184,7 +194,7 @@ export function tiedColumn(inp) {
     // with the governing axis' e / eb (e, eb above). Without inp.slenderR the original path below runs unchanged (Excel diff-tested).
     r.slender = inp.slenderR.R < 1;
     r.klr = inp.slenderR.klr;
-    r.R = r.mode === "III" && e > 0 ? Math.max(inp.slenderR.R, 1 - ((1 - inp.slenderR.R) * eb) / e) : inp.slenderR.R;
+    r.R = r.mode === "III" ? tensionR(inp.slenderR.R, r, e, eb) : inp.slenderR.R;
   } else {
   const rows = slenderRows(lu, rad, rT, rB);
   const c = inp.frameCase;
@@ -195,7 +205,9 @@ export function tiedColumn(inp) {
   r.klr = row ? row.klr : NaN;
   r.R = row ? row.R : NaN;
   // R' for tension control (defined through ebx/ex, so undefined when ex = 0)
-  if (r.mode === "III" && row) r.R = r.ex === 0 ? NaN : Math.max(row.R, 1 - ((1 - row.R) * r.ebx) / r.ex);
+  // K1 (approved WP1): R′ with the governing axis' e / eb — the sheet used ebx/ex, NaN when only Mx acts (ex = 0) → false NG
+  // so the governing pair is used where the sheet's value does not exist, else the smaller of the two (never less reduction than the sheet)
+  if (r.mode === "III" && row) r.R = tensionR(row.R, r, e, eb);
   }
 
   // design actions (slender columns: magnified by 1/R)
