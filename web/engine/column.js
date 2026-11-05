@@ -179,6 +179,13 @@ export function tiedColumn(inp) {
     (stiffness(inp.beamBL.b, inp.beamBL.t, inp.beamBL.L) + stiffness(inp.beamBR.b, inp.beamBR.t, inp.beamBR.L));
   r.rTop = rT;
   r.rBot = rB;
+  if (inp.slenderR) {
+    // external slenderness (frame workflow, engine/colStability.js, 2026-11-05): R and klu/r decided there once; R′ for tension control
+    // with the governing axis' e / eb (e, eb above). Without inp.slenderR the original path below runs unchanged (Excel diff-tested).
+    r.slender = inp.slenderR.R < 1;
+    r.klr = inp.slenderR.klr;
+    r.R = r.mode === "III" && e > 0 ? Math.max(inp.slenderR.R, 1 - ((1 - inp.slenderR.R) * eb) / e) : inp.slenderR.R;
+  } else {
   const rows = slenderRows(lu, rad, rT, rB);
   const c = inp.frameCase;
   let row = null;
@@ -189,6 +196,7 @@ export function tiedColumn(inp) {
   r.R = row ? row.R : NaN;
   // R' for tension control (defined through ebx/ex, so undefined when ex = 0)
   if (r.mode === "III" && row) r.R = r.ex === 0 ? NaN : Math.max(row.R, 1 - ((1 - row.R) * r.ebx) / r.ex);
+  }
 
   // design actions (slender columns: magnified by 1/R)
   const amp = r.slender ? 1 / r.R : 1;

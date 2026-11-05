@@ -256,7 +256,7 @@ export function solveFrame3D({ nodes, members, nodeLoads = [], lateral = [], E, 
     const cs = cases.map((c) => ({ ...c, fls: prep.map((e, k) => nodalLoads(c.loads?.[k]?.loads, c.loads?.[k]?.torque, e.L)) }));
     const us = solveK(N, cs);
     if (!us) return { ...out, error: `โครงสร้างไม่มีเสถียรภาพภายใต้แรงด้านข้าง${where()}` };
-    out.cases = cs.map((c, q) => { const r = endForces(us[q], c.fls); return { u: us[q], R: reactions(c, r), members: memberOut(r, (k) => c.loads?.[k]?.loads ?? []) }; });
+    out.cases = cs.map((c, q) => { const r = endForces(us[q], c.fls); return c.light ? { f: r } : { u: us[q], R: reactions(c, r), members: memberOut(r, (k) => c.loads?.[k]?.loads ?? []) }; });
   }
   return out;
 }
@@ -313,7 +313,7 @@ export function frame3dModel(frame, res, opt = {}) {
       for (let s = 0; s + 1 < xs.length; s++) {
         const x0 = xs[s], x1 = xs[s + 1], L = x1 - x0, ty = typeAt((x0 + x1) / 2), p0 = at(x0), p1 = at(x1);
         const loads = [
-          ...dist.flatMap((l) => { const a = Math.max(l.a, x0), b = Math.min(l.b, x1), w = (t) => l.wa + ((l.wb - l.wa) * (t - l.a)) / (l.b - l.a || 1); return b - a > 1e-9 ? [{ a: a - x0, b: b - x0, wa: w(a), wb: w(b), g: l.g }] : []; }),
+          ...dist.flatMap((l) => { const a = Math.max(l.a, x0), b = Math.min(l.b, x1), w = (t) => l.wa + ((l.wb - l.wa) * (t - l.a)) / (l.b - l.a || 1); return b - a > 1e-9 ? [{ a: a - x0, b: b - x0, wa: w(a), wb: w(b), g: l.g, ...(l.from != null ? { from: l.from } : {}) }] : []; }),
           ...pts.filter((p) => p.at >= x0 - 1e-9 && (p.at < x1 - 1e-9 || s === xs.length - 2)).map((p) => ({ at: p.at - x0, P: p.P, g: "SP" })),
         ];
         const ov = (q) => Math.max(0, Math.min(q.b, x1) - Math.max(q.a, x0)), torque = (ln.torsion ?? []).map((q) => q.m * ov(q)).filter(Boolean), torqueL = (ln.torsion ?? []).map((q) => (q.mL ?? 0) * ov(q)).filter(Boolean);
@@ -327,7 +327,7 @@ export function frame3dModel(frame, res, opt = {}) {
   });
   // lateral loads (opt.lateral = { cases: [{ key, F: [[Fx, Fy] per floor] }], combos }): every floor is a rigid diaphragm with a
   // master node at the centroid of its joints; the live load is solved as its own case so that D = (D + L) − L
-  const latOn = !!opt.lateral?.cases?.length, diaphragms = [];
+  const latOn = !!opt.lateral?.cases?.length || !!opt.buildOnly, diaphragms = [];
   if (latOn) Z.forEach((zk) => {
     const slaves = nodes.map((n, i) => (Math.abs(n.z - zk) < 1e-6 && !n.fixed && !n.pinned ? i : -1)).filter((i) => i >= 0);
     if (slaves.length < 2) return;
@@ -336,8 +336,10 @@ export function frame3dModel(frame, res, opt = {}) {
   });
   const cases = latOn ? [
     { key: "L", loads: members.map((m) => ({ loads: (m.loads ?? []).filter((l) => l.g === "LL"), torque: m.torqueL ?? [] })) },
-    ...opt.lateral.cases.map((c) => ({ key: c.key, lateral: diaphragms.map((d) => { const k = Z.findIndex((zk) => Math.abs(zk - d.z) < 1e-6); return { n: d.master, F: [c.F[k]?.[0] ?? 0, c.F[k]?.[1] ?? 0, 0] }; }) })),
+    ...(opt.lateral?.cases ?? []).map((c) => ({ key: c.key, lateral: diaphragms.map((d) => { const k = Z.findIndex((zk) => Math.abs(zk - d.z) < 1e-6); return { n: d.master, F: [c.F[k]?.[0] ?? 0, c.F[k]?.[1] ?? 0, 0] }; }) })),
   ] : [];
+  // buildOnly (column stability, engine/colStability.js): the model with floor diaphragms, not solved
+  if (opt.buildOnly) return { nodes, members, nodeLoads, diaphragms, Z, E: EcOf(frame.mat), warnings };
   const E = EcOf(frame.mat), sol = solveFrame3D({ nodes, members, nodeLoads, lateral: [], E, pDelta: opt.pDelta ?? true, diaphragms, cases });
   if (sol.error && !sol.members) return { error: sol.error, warnings };
   if (sol.error) warnings.push(sol.error);
@@ -389,4 +391,36 @@ export function frame3dModel(frame, res, opt = {}) {
   });
   const drifts = Object.fromEntries(opt.lateral.cases.map((c) => [c.key, driftOf(byKey[c.key])]));
   return { ...out, combos, drifts, diaphragms };
+}
+
+// live-load patterns for the column forces (WP3, user approval 2026-11-05): the live load of every panel (loads tagged "LL" with the
+// same floor + `from`; other live loads and live torsion per element) is one on/off case, solved first order with the model's stiffness
+// (one factorisation). D = (D + L) − ΣL. For each column the on/off set that maximises each end moment (±, both axes) and N (max / min)
+// gives a CONSISTENT (N, Mx, My) triple — all three from the same pattern. Returns Map "floor|ci" → [{ name, N, Mx, My }].
+export function columnPatternSets(f3) {
+  const { nodes, members, nodeLoads, E } = f3.input, groups = new Map();
+  members.forEach((m, i) => {
+    for (const l of m.loads ?? []) if (l.g === "LL") { const k = `${m.floor}|${l.from ?? `e${i}`}`; if (!groups.has(k)) groups.set(k, new Map()); const g = groups.get(k); g.set(i, [...(g.get(i) ?? []), l]); }
+    if ((m.torqueL ?? []).length) { const k = `t${i}`; groups.set(k, new Map([[i, { torque: m.torqueL }]])); }
+  });
+  const keys = [...groups.keys()];
+  if (!keys.length) return new Map();
+  const cases = keys.map((k) => ({ light: true, loads: members.map((_, i) => { const v = groups.get(k).get(i); return Array.isArray(v) ? { loads: v, torque: [] } : v ? { loads: [], torque: v.torque } : { loads: [], torque: [] }; }) }));
+  const sol = solveFrame3D({ nodes, members, nodeLoads, E, pDelta: false, cases });
+  if (!sol.members || !sol.cases) return new Map();
+  const q5 = (f) => [f[0], f[5], f[11], f[4], f[10]]; // N (compression +), Mx bottom/top, My bottom/top
+  const pieces = new Map(); members.forEach((m, i) => { if (m.kind !== "column") return; const k = `${m.floor}|${m.ci}`; pieces.set(k, [...(pieces.get(k) ?? []), i]); });
+  const out = new Map();
+  for (const [k, ps] of pieces) {
+    const per = ps.map((p) => { const L = sol.cases.map((c) => q5(c.f[p])), all = q5(sol.members[p].f), sum = L.reduce((a, q) => a.map((v, j) => v + q[j]), [0, 0, 0, 0, 0]); return { L, D: all.map((v, j) => v - sum[j]) }; });
+    const triple = (on) => { let N = -Infinity, Mx = 0, My = 0;
+      for (const { L, D } of per) { const t = D.map((v, j) => v + L.reduce((s, q, i) => s + (on[i] ? q[j] : 0), 0)); N = Math.max(N, t[0]); Mx = Math.max(Mx, Math.abs(t[1]), Math.abs(t[2])); My = Math.max(My, Math.abs(t[3]), Math.abs(t[4])); }
+      return { N, Mx, My }; };
+    const sets = [{ name: "D+L เต็ม", ...triple(keys.map(() => 1)) }];
+    per.forEach(({ L }) => [1, 2, 3, 4].forEach((q) => [1, -1].forEach((sg) => sets.push({ name: `pattern ${["", "Mx ล่าง", "Mx บน", "My ล่าง", "My บน"][q]} ${sg > 0 ? "+" : "−"}`, ...triple(L.map((v) => sg * v[q] > 0)) }))));
+    sets.push({ name: "pattern N สูงสุด", ...triple(per[0].L.map((v) => v[0] > 0)) }, { name: "pattern N ต่ำสุด", ...triple(per[0].L.map((v) => v[0] < 0)) });
+    // drop duplicates (same on/off result)
+    const seen = new Set(); out.set(k, sets.filter((x) => { const s2 = `${x.N.toFixed(1)}|${x.Mx.toFixed(1)}|${x.My.toFixed(1)}`; if (seen.has(s2)) return false; seen.add(s2); return true; }));
+  }
+  return out;
 }

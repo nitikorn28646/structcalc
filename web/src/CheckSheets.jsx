@@ -63,16 +63,19 @@ export function ColumnLevelSheet({ t, lv, c, floorName, mat, method }) {
     <CheckSheet id={`C-${t.name}-${lv.level}`} title={`การตรวจสอบเสา — ${t.name} ${lv.level}`} sub={`${lv.Bx} × ${lv.By} ซม. · ต้นวิกฤต ${c.stack} ใต้ ${floorName}`}
       info={[["Type / ระดับ", `${t.name} · ${lv.level}`], ["หน้าตัด", `${lv.Bx} × ${lv.By}`, "ซม."], ["ต้นวิกฤต", `${c.stack} ใต้ ${floorName}`], ["ความสูงชั้น", n2(c.L), "ม."], ["สูงสุทธิ lu", n2(c.Lu ?? c.L), "ม."],
         ["เหล็กยืน", `${lv.n}-${lv.mainBar}`], ["ปลอก", `${lv.tieBar} @${n2(lv.s)}`, "ม."]]}
-      input={[["f′c", n0(fcp), "กก./ซม.²"], ["fy", n0(mat.fy ?? 4000), "กก./ซม.²"], ["ระยะหุ้ม", n2(mat.coverCol ?? mat.cover ?? 3), "ซม."], ["k (ความยาวประสิทธิผล)", "1.0"], ["วิธีหาแรง", method === "frame" ? "P + Mx, My จากโครง 3 มิติ" : "P สะสม + e ขั้นต่ำ"]]}
+      input={[["f′c", n0(fcp), "กก./ซม.²"], ["fy", n0(mat.fy ?? 4000), "กก./ซม.²"], ["ระยะหุ้ม", n2(mat.coverCol ?? mat.cover ?? 3), "ซม."], ["k (ความยาวประสิทธิผล)", c.check.slender?.dirs ? c.check.slender.dirs.map((d) => `${d.ax}: ${n2(d.k)}`).join(" · ") : "1.0"], c.check.slender?.Q != null && ["ดัชนีเสถียรภาพชั้น Q", `${n3(c.check.slender.Q)} → ${c.check.slender.sway ? "เซได้ (sway)" : "ยึดรั้ง (non-sway)"}`], ["วิธีหาแรง", method === "frame" ? "P + Mx, My จากโครง 3 มิติ" : "P สะสม + e ขั้นต่ำ"]]}
       forces={[["P ออกแบบ", n0(P), "กก."], ["Mx (3D)", n0(c.f3?.Mx ?? 0), "กก.-ม."], ["My (3D)", n0(c.f3?.My ?? 0), "กก.-ม."], ["e ขั้นต่ำ", n2(e), "ซม."], ["M จาก e ขั้นต่ำ", n0((P * e) / 100), "กก.-ม."],
         c.check.combo && c.check.combo !== "D+L" && ["ชุดผสมแรงที่ควบคุม", c.check.combo]]}
       eqs={[["พื้นที่หน้าตัด / เหล็ก", "Ag = Bx·By, ρg = Ast/Ag", `${lv.Bx} × ${lv.By} · ${n2(r.Ast)} / ${n0(r.Ag)}`, `${n2(r.pg)} %`, ""],
-        ["ความชะลูด", "k·lu/r", "", n2(r.klr), ""], r.slender && ["ตัวคูณลดกำลัง (เสาชะลูด)", "R = 1.07 − 0.008·k·lu/r", `1.07 − 0.008 × ${n2(r.klr)}`, n3(r.R), ""],
+        ["ความชะลูด", "k·lu/r", "", n2(r.klr), ""], r.slender && ["ตัวคูณลดกำลัง (เสาชะลูด)", c.check.slender?.sway ? "R = 1.07 − 0.008·k·lu/r (sway)" : c.check.slender ? "R = 1.32 − 0.006·lu/r (non-sway) ≤ R เกณฑ์เดิม" : "R = 1.07 − 0.008·k·lu/r", c.check.slender ? `R ใหม่ ${n3(c.check.slender.Rnew)} · เดิม ${n3(c.check.slender.Rold)}` : `1.07 − 0.008 × ${n2(r.klr)}`, n3(r.R), ""],
         ["กำลังรับแรงอัดตามแกน", "Pa = 0.85·Ag·(0.25·f′c + fs·ρg)", "", n0(r.Pa), "กก."],
         !ax && ["หน่วยแรงอัด / ดัด", "fa = P/Ag, fb = M/S", "", `${n2(r.fa)} / ${n2(Math.max(r.fbx ?? 0, r.fby ?? 0))}`, "กก./ซม.²"]]}
       checks={[ax ? ["แรงอัด P ≤ Pa", P, r.Pa, "กก.", r.ok] : ["fa/Fa + fbx/Fb + fby/Fb ≤ 1", r.ratio, 1, "", r.ok],
         ["อัตราส่วนเหล็ก 1 % ≤ ρg ≤ 8 %", r.pg, 8, "%", r.pgOk, null], ["k·lu/r ≤ 100", r.klr, 100, "", c.check.slenderOk !== false],
-        ["ระยะปลอก ≤ min(16d_b, 48dₜ, ด้านแคบ)", lv.s * 100, r.sTie, "ซม.", c.check.sOk]]}
+        ["ระยะปลอก ≤ min(16d_b, 48dₜ, ด้านแคบ)", lv.s * 100, r.sTie, "ซม.", c.check.sOk],
+        c.check.fit && ["ระยะช่องว่างเหล็กยืน ≥ max(1.5d_b, 4 ซม.) (ACI 318-11 7.6.3)", c.check.fit.clear, c.check.fit.clearReq, "ซม.", c.check.fit.ok, null],
+        c.check.tension && ["แรงดึง T ≤ As·fs", c.check.tension.T, c.check.tension.cap, "กก.", c.check.tension.ok]].filter(Boolean)}
+      note={c.check.slender ? `${c.check.slender.basis} · e ขั้นต่ำตรวจทั้งสองแกน (ควบคุม: แกน ${c.check.eminAxis ?? "x"})` : undefined}
       figure={<ColumnDetail lv={lv} cover={mat.coverCol ?? mat.cover ?? 3} className="h-[40mm] w-full" />} />
   );
 }

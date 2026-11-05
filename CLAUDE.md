@@ -529,3 +529,15 @@ passed → no local P-δ; frame mode doubles P-Δ with R; axial mode in a sway s
 methods 2 (GB corner stubs), method-dependent 10, pass all 1; round-3 rule 9 NG / 4 pass confirmed. Plan WP1 K1/K2 (column.js + Excel) ·
 WP2 K3/K5/K6 (frame.js) · WP3 3D live patterns · WP4 slenderness in one place (storeyStability/columnRestraint → column.js optional R input).
 Proposed until sources are verified: k = larger of 318-63 h′ and chart, every column check carries basis "UNVERIFIED". Waiting for approval.
+COLUMN FIXES WP2 + WP3 + WP4 BUILT (2026-11-05, user "ทำเลย"): engine/colStability.js = the ONE slenderness point — storeyStability (Q per storey
+from a first-order 3D solve, 0.70/0.35Ig, diaphragms, ΣPu = max(1.4D, 1.2D + 1.6L), Δo/Vus from the real wind when on else ∝ w·h; frame3dModel
+opt.buildOnly) + columnSlender (ψ with spans to the next column, k = max(318-63 h′ with ≥ h / ≥ 2h, alignment chart) in sway storeys, non-sway R
+as column.js case 1, r = 0.25 × side per direction, R used = min(new, old rule) → never less reduction than before; basis text UNVERIFIED);
+column.js tiedColumn optional inp.slenderR {R, klr} (default path unchanged = Excel; R′ mode III with the governing e/eb → K1 fixed only on the
+new path). frame.js checkColumn(lv, P, L, mat, mom, slender): K3 e min about both axes (worse), K5 bar clear ≥ max(1.5db, 4 cm), K6 tension
+As·fs (allowableFs) + 3D tension load set; sway storeys get FIRST-order column moments (extra pDelta:false solve) so R does not double P-Δ;
+frame method: frame3d.js columnPatternSets (live load on/off per panel `from`, light cases, consistent N/Mx/My per pattern) → c.sets.
+res.stability.storeys; warnings for sway storeys. Yasothon (axial default): columns 43 → 39/43 (stacks 10.50,0.00 and 14.00,7.90: ชั้น 2 kLu/r
+216–223 > 100, sway, top without a beam in one direction; their roof levels fail ties @0.20 because no type passes the stack). User house 38/38.
+cli/colstab-check.mjs 18/18 (in the gate); audit-column3: 0 program-pass / independent-NG. Baselines re-saved (regress, E2E 47). WP1 (K1/K2 in
+the default column.js path, needs Excel diff on Windows) NOT done. TypeTable "ใช้ N ช่วง" now counts all floors (was the selected floor only).

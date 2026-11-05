@@ -190,7 +190,7 @@ export function deleteBeamType(frame, i) {
   return { beamTypes, floors };
 }
 
-function TypeTable({ types, setTypes, an, delType }) {
+function TypeTable({ types, setTypes, an, delType, res }) {
   const set = (i, k, v) => setTypes(types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const used = (i) => an?.spans.filter((s) => s.typeIdx === i) ?? [];
   const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] tabular-nums";
@@ -212,7 +212,7 @@ function TypeTable({ types, setTypes, an, delType }) {
             <td className="px-1 w-20"><select value={t.st} onChange={(e) => set(i, "st", e.target.value)} className={cell}>{["RB 6", "RB 9", "DB 10", "DB 12"].map((s) => <option key={s}>{s}</option>)}</select></td>
             <td className="px-1 w-14"><select value={t.stSets ?? 1} onChange={(e) => set(i, "stSets", Number(e.target.value))} className={cell} title="จำนวนชุดปลอก (2 = ปลอก 2 ชุดซ้อน)"><option value={1}>1</option><option value={2}>2</option></select></td>
             <td className="px-1 w-16">{num(i, "sSup", 0.025)}</td><td className="px-1 w-16">{num(i, "sMid", 0.025)}</td>
-            <td className="px-1 text-gray-500">{used(i).length} ช่วง</td>
+            <td className="px-1 text-gray-500" title="จำนวนช่วงทุกชั้น (ในวงเล็บ = ชั้นที่เลือกอยู่)">{res ? res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0) : used(i).length} ช่วง{res && <span className="text-gray-400"> ({used(i).length})</span>}</td>
             <td><button onClick={() => delType(i)} disabled={types.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></td>
           </tr>))}</tbody>
       </table>
@@ -224,7 +224,7 @@ function TypeTable({ types, setTypes, an, delType }) {
 }
 
 // result text of one column level: utilisation or the reason it fails
-const colWhy = (c) => (c.check.error ? c.check.error : !c.check.sOk ? `ปลอก @${fmt(c.lv.s, 2)} > ${fmt(c.check.r.sTie / 100, 3)} ม. (16db)` : !c.check.r.pgOk ? "pg นอก 1–8%"
+const colWhy = (c) => (c.check.error ? c.check.error : c.check.tension && !c.check.tension.ok ? `แรงดึง ${fmt(c.check.tension.T, 0)} > As·fs ${fmt(c.check.tension.cap, 0)} กก.` : c.check.fit && !c.check.fit.ok ? `ช่องว่างเหล็กยืน ${fmt(c.check.fit.clear, 1)} < ${fmt(c.check.fit.clearReq, 1)} ซม.` : c.check.slenderOk === false ? `ชะลูดเกิน k·lu/r ${fmt(c.check.r?.klr, 0)} > 100${c.check.slender?.sway ? " (ชั้นเซได้)" : ""}` : !c.check.sOk ? `ปลอก @${fmt(c.lv.s, 2)} > ${fmt(c.check.r.sTie / 100, 3)} ม. (16db)` : !c.check.r.pgOk ? "pg นอก 1–8%"
   : !Number.isFinite(c.check.r.R) ? "ชะลูดเกิน" : `${fmt(c.check.util * 100, 0)}%${c.ok ? "" : " ไม่ผ่าน"}`);
 
 // delete column type i: stacks picked to it go back to auto, later picks shift down, C<n> names renumbered in order
@@ -402,7 +402,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </Card>
       </div>
     </div>
-  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable types={types} setTypes={(v) => set("beamTypes", v)} an={an} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
     : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} delType={(i) => { const r = deleteColType(frame, i); set("colTypes", r.colTypes); set("colPick", r.colPick); }} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (() => {

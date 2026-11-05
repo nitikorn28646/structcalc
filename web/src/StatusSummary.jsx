@@ -31,7 +31,7 @@ export function projectStatus(frame, res, dz, roof = null) {
     }
   });
   for (const c of res.columns) items.push({ cat: "เสา", calc: frame.colTypes?.[c.typeIdx] && c.lv ? `C-${frame.colTypes[c.typeIdx].name}-${c.lv.level}` : null, id: `${c.stack ?? `(${c.p?.[0]?.toFixed?.(2)}, ${c.p?.[1]?.toFixed?.(2)})`} ใต้ ${floors[c.floor]?.name}`, where: "c-columns",
-    status: c.check?.error ? "INC" : c.ok ? "PASS" : "FAIL", util: c.check?.util ?? null, why: c.ok ? "" : c.check?.error ?? (c.check?.sOk === false ? "ระยะเหล็กปลอกเกินที่ยอมให้" : c.check?.slenderOk === false ? "เสาชะลูดเกิน (klu/r)" : "กำลังรับแรงไม่พอ") });
+    status: c.check?.error ? "INC" : c.ok ? "PASS" : "FAIL", util: c.check?.util ?? null, why: c.ok ? "" : c.check?.error ?? (c.check?.tension && !c.check.tension.ok ? "แรงดึงเกิน As·fs" : c.check?.fit?.ok === false ? "ช่องว่างเหล็กยืนน้อยเกิน" : c.check?.sOk === false ? "ระยะเหล็กปลอกเกินที่ยอมให้" : c.check?.slenderOk === false ? "เสาชะลูดเกิน (klu/r)" : "กำลังรับแรงไม่พอ") });
   for (const f of res.footings) items.push({ cat: "ฐานราก", id: `${f.stack} (${FM.mark(f)})`, where: "c-footings", calc: `F-${FM.mark(f)}`, status: !f.r ? "INC" : f.ok ? "PASS" : "FAIL", util: f.util ?? null,
     why: !f.r ? f.error ?? "" : f.ok ? "" : f.r.qCornerOk === false ? "แรงดันดินที่มุม (โมเมนต์สองแกน) เกิน qa" : "ดูตารางฐานราก" });
   // wind / earthquake: storey drift per case; switched on but not analysed (continuous method, 3D frame failed) = INCOMPLETE

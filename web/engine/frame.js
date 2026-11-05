@@ -3,8 +3,9 @@
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
 import { borePileRebar } from "./borePile.js";
 import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, cutoffs, robustSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
-import { BARS } from "./tables.js";
-import { frame3dModel } from "./frame3d.js";
+import { BARS, allowableFs } from "./tables.js";
+import { frame3dModel, columnPatternSets } from "./frame3d.js";
+import { storeyStability, columnSlender } from "./colStability.js";
 import { tiedColumn } from "./column.js";
 import { PILES, pileCap, spreadFooting } from "./footing.js";
 import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
@@ -12,20 +13,42 @@ import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
 export const stackKey = (p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
 
-// one column level: P (kg), clear height L (m), moments Mx / My (kg-m) from the 3D frame — at least the minimum eccentricity
-// about the first axis; braced frame (case 2, k = 1)
-export function checkColumn(lv, P, L, mat, mom = {}) {
+// one column level: P (kg), clear height L (m), moments Mx / My (kg-m) from the 3D frame.
+// slender (optional, engine/colStability.js columnSlender): { R, klr } decided once there and passed to tiedColumn as inp.slenderR —
+// frame.js does not reduce again; without it column.js keeps its own rule (frame case 2, k = 1, L/B > 15).
+// Column audit fixes (user approval 2026-11-05):
+//  K3 minimum eccentricity e = max(2.5 cm, 0.1·narrow side) applied about EACH axis in turn (two checks, the worse governs)
+//  K5 clear distance between longitudinal bars ≥ max(1.5·db, 4 cm) (ACI 318-11 7.6.3)
+//  K6 tension (P < 0): As·fs ≥ T with fs = allowableFs (the beam table, tables.js); the compression check runs with P = 1 kg for the record
+export function checkColumn(lv, P, L, mat, mom = {}, slender = null) {
   const [nx, ny] = faceBars(lv.n), e = Math.max(2.5, 0.1 * Math.min(lv.Bx, lv.By)); // cm
   const ST = { L: L * 100, bx: lv.Bx, by: lv.By }, BM = { L: 400, b: 20, t: 40 }; // stiffness data only enter frame cases 3–4
-  const inp = { ...mat, fcPrime: mat.fcCol ?? mat.fcPrime, cover: mat.coverCol ?? mat.cover, L, Bx: lv.Bx, By: lv.By, nx, ny, mainBar: lv.mainBar, tieBar: lv.tieBar, tieSets: 1, P: Math.max(P, 1), Mx: Math.max((Math.max(P, 1) * e) / 100, mom.Mx ?? 0), My: mom.My ?? 0,
-    frameCase: 2, beamTL: BM, beamTR: BM, beamBL: BM, beamBR: BM, colTop: ST, colThis: ST, colThisB: ST, colBot: ST };
+  const Pc = Math.max(P, 1), Mx0 = mom.Mx ?? 0, My0 = mom.My ?? 0;
+  const base = { ...mat, fcPrime: mat.fcCol ?? mat.fcPrime, cover: mat.coverCol ?? mat.cover, L, Bx: lv.Bx, By: lv.By, nx, ny, mainBar: lv.mainBar, tieBar: lv.tieBar, tieSets: 1, P: Pc,
+    frameCase: 2, beamTL: BM, beamTR: BM, beamBL: BM, beamBR: BM, colTop: ST, colThis: ST, colThisB: ST, colBot: ST, ...(slender ? { slenderR: { R: slender.R, klr: slender.klr } } : {}) };
   try {
-    const r = tiedColumn(inp), sOk = lv.s * 100 <= r.sTie + 1e-6;
-    // the slenderness reduction R = 1.07 − 0.008·klu/r is valid up to klu/r = 100; beyond it R ≤ 0.27 and falls below zero
-    // (a negative R gave a negative utilisation that passed) — such a column needs a second-order analysis: NG here
-    const slenderOk = Number.isFinite(r.R) && r.R > 0 && !(r.klr > 100 + 1e-9);
-    const util = r.mode === "I" ? r.axialRatio : r.ratio;
-    return { r, e, sOk, slenderOk, util: slenderOk && Number.isFinite(util) ? util : 9, ok: r.ok && r.pgOk && slenderOk && sOk };
+    const one = (Mx, My) => {
+      const r = tiedColumn({ ...base, Mx, My });
+      // the slenderness reduction R = 1.07 − 0.008·klu/r is valid up to klu/r = 100; beyond it R ≤ 0.27 and falls below zero
+      // (a negative R gave a negative utilisation that passed) — such a column needs a second-order analysis: NG here
+      const slenderOk = Number.isFinite(r.R) && r.R > 0 && !(r.klr > 100 + 1e-9);
+      const util = r.mode === "I" ? r.axialRatio : r.ratio;
+      return { r, slenderOk, util: slenderOk && Number.isFinite(util) ? util : 9 };
+    };
+    const cx = one(Math.max((Pc * e) / 100, Mx0), My0), cy = one(Mx0, Math.max((Pc * e) / 100, My0)); // K3
+    const g = cy.util > cx.util + 1e-12 ? { ...cy, eminAxis: "y" } : { ...cx, eminAxis: "x" }, r = g.r;
+    const sOk = lv.s * 100 <= r.sTie + 1e-6;
+    // K5 bar spacing on each face (nx bars on the two x-faces = nx/2 per face, corners shared)
+    const bar = BARS[lv.mainBar] ?? BARS[String(lv.mainBar).replace(/\s+/, " ")], tie = BARS[lv.tieBar] ?? BARS[String(lv.tieBar).replace(/\s+/, " ")];
+    const db = bar?.d ?? 1.2, dt = tie?.d ?? 0.6, dp = (mat.coverCol ?? mat.cover ?? 3) + dt + db / 2;
+    const clearOf = (side, nFace) => (nFace > 1 ? (side - 2 * dp) / (nFace - 1) - db : Infinity);
+    const clear = Math.min(clearOf(lv.Bx, nx / 2), clearOf(lv.By, ny / 2)), clearReq = Math.max(1.5 * db, 4), fitOk = clear >= clearReq - 1e-9;
+    // K6 tension
+    let tension = null;
+    if (P < -1) { const As = r.Ast, fs = allowableFs(mat.fy, mat.F), cap = As * fs; tension = { T: -P, As, fs, cap, ok: -P <= cap, util: -P / cap, fsAct: -P / As, half: -P / As <= 0.5 * mat.fy }; }
+    const util = tension ? Math.max(tension.util, g.util) : g.util;
+    return { r, e, eminAxis: g.eminAxis, sOk, slenderOk: g.slenderOk, fit: { clear, clearReq, ok: fitOk }, tension, slender, util,
+      ok: r.ok && r.pgOk && g.slenderOk && sOk && fitOk && (!tension || tension.ok), utilX: cx.util, utilY: cy.util };
   } catch (err) { return { error: err.message, ok: false, util: 9 }; }
 }
 
@@ -188,13 +211,22 @@ function gravity(frame, minTypes) {
   return { an, cols, warnings };
 }
 
+// load sets of one column: gravity design forces, a 3D tension case (K6: the frame can pull a column the accumulated reactions push),
+// the lateral combinations
+const loadSets = (c) => [{ name: "D+L", P: c.Pd ?? c.Pbot, M: c.M3 ?? {} }, ...(c.f3 && c.f3.N < -1 && !c.sets ? [{ name: "D+L แรงดึง (3D)", P: c.f3.N, M: {} }] : []),
+  ...(c.sets ?? []).map((x) => ({ name: x.name, P: x.N, M: { Mx: x.Mx, My: x.My } })),
+  ...(c.combos ?? []).map((x) => ({ name: x.name, P: x.N, M: { Mx: x.Mx, My: x.My } }))];
+// slenderness context per analysed column (WeakMap: not part of the results, nothing circular is saved)
+const STAB = new WeakMap();
+const slenderOf = (frame, c, lv) => { const ctx = STAB.get(c); return ctx ? columnSlender(frame, ctx.res, ctx.stab, { ...c, lv }) : null; };
+
 // column types per stack: fixed (frame.colPick) or the lightest type whose sections pass at every level
 // one column (a result of analyzeFrame) checked with a level section lv under every load combination: the governing check
 export function columnLevelCheck(frame, lv, c) {
   const mat = frame.mat;
   let worst = null;
-  for (const q of [{ name: "D+L", P: c.Pd ?? c.Pbot, M: c.M3 ?? {} }, ...(c.combos ?? []).map((x) => ({ name: x.name, P: x.N, M: { Mx: x.Mx, My: x.My } }))]) {
-    const chk = { ...checkColumn(lv, q.P, c.Leff ?? c.Lu ?? c.L, c.floor === 0 && mat.coverPier > 0 ? { ...mat, coverCol: mat.coverPier } : mat, q.M), combo: q.name, tension: q.P < 0, ...(c.Leff ? { cantilever: true, Lc: c.Lc } : {}) };
+  for (const q of loadSets(c)) {
+    const chk = { ...checkColumn(lv, q.P, c.Leff ?? c.Lu ?? c.L, c.floor === 0 && mat.coverPier > 0 ? { ...mat, coverCol: mat.coverPier } : mat, q.M, slenderOf(frame, c, lv)), combo: q.name, tension: q.P < 0, ...(c.Leff ? { cantilever: true, Lc: c.Lc } : {}) };
     if (!worst || (worst.ok && !chk.ok) || (chk.ok === worst.ok && chk.util > worst.util)) worst = chk;
   }
   return worst;
@@ -208,8 +240,8 @@ function designColumns(frame, cols) {
   // ตอม่อ (columns under the lowest floor, in the ground) take their own cover mat.coverPier (user 2026-11-04) when given
   const check = (lv, c) => {
     let worst = null;
-    for (const q of [{ name: "D+L", P: c.Pd ?? c.Pbot, M: c.M3 ?? {} }, ...(c.combos ?? []).map((x) => ({ name: x.name, P: x.N, M: { Mx: x.Mx, My: x.My } }))]) {
-      const chk = { ...checkColumn(lv, q.P, c.Leff ?? c.Lu ?? c.L, c.floor === 0 && mat.coverPier > 0 ? { ...mat, coverCol: mat.coverPier } : mat, q.M), combo: q.name, tension: q.P < 0, ...(c.Leff ? { cantilever: true, Lc: c.Lc } : {}) };
+    for (const q of loadSets(c)) {
+      const chk = { ...checkColumn(lv, q.P, c.Leff ?? c.Lu ?? c.L, c.floor === 0 && mat.coverPier > 0 ? { ...mat, coverCol: mat.coverPier } : mat, q.M, slenderOf(frame, c, lv)), combo: q.name, tension: q.P < 0, ...(c.Leff ? { cantilever: true, Lc: c.Lc } : {}) };
       if (!worst || (worst.ok && !chk.ok) || (chk.ok === worst.ok && chk.util > worst.util)) worst = chk;
     }
     return worst;
@@ -271,7 +303,7 @@ function lateralChecks(frame, lat, f3) {
 // (gravity, P-Delta); "continuous" = continuous beams only (as before 2026-11-02)
 export function analyzeFrame(frame) {
   const { beamTypes, mat } = frame, envelope = (frame.analysis ?? "envelope") === "envelope";
-  let g, stacks, f3 = null, minTypes = null, lat = null;
+  let g, stacks, f3 = null, minTypes = null, lat = null, stability = null;
   for (let it = 0; it < 4; it++) {
     g = gravity(frame, minTypes);
     stacks = designColumns(frame, g.cols);
@@ -346,6 +378,27 @@ export function analyzeFrame(frame) {
       if (fc && fc.N < -10) g.warnings.push(`เสา ${c.stack} (${frame.floors[c.floor].name}) รับแรงดึง ${Math.round(-fc.N).toLocaleString()} กก. ในโครง 3 มิติ (D+L) — ปลายคานยกหัวเสา: ต่อทาบเหล็กเสา/ยึดคานให้รับแรงดึง`);
       c.combos = (f3.combos ?? []).filter((cb) => cb.W || cb.E || cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, ...cb.columns.find((x) => x.floor === c.floor && x.ci === c.i) }));
     }
+    // slenderness at ONE place (engine/colStability.js): storey stability index Q, k per direction, R → tiedColumn once
+    const ctxRes = { floors: g.an, columns: g.cols };
+    try { stability = storeyStability(frame, ctxRes); } catch (err) { stability = null; g.warnings.push(`ตรวจเสถียรภาพชั้นไม่ได้: ${err.message} — ใช้เกณฑ์ความชะลูดเดิม`); }
+    if (stability) {
+      for (const c of g.cols) STAB.set(c, { res: ctxRes, stab: stability });
+      // sway storeys: the R of column.js covers the sway effect, so the column moments it reduces must be FIRST-order (the 3D moments
+      // above include P-Delta) — no double counting; non-sway storeys keep the P-Delta moments (R there is the member effect only)
+      const swayFl = new Set(stability.storeys.filter((s) => s.sway).map((s) => s.floor));
+      if (swayFl.size && g.cols.some((c) => swayFl.has(c.floor) && (colFrame || c.combos?.length))) {
+        const f1 = frame3dModel(frame, ctxRes, { pDelta: false, ...(lat ? { lateral: { cases: lat.cases, combos: lat.combos } } : {}) });
+        if (!f1.error) for (const c of g.cols) {
+          if (!swayFl.has(c.floor)) continue;
+          const fc = f1.columns.find((x) => x.floor === c.floor && x.ci === c.i);
+          if (colFrame && fc) c.M3 = { Mx: fc.Mx, My: fc.My, firstOrder: true };
+          if (c.combos?.length) c.combos = (f1.combos ?? []).filter((cb) => cb.W || cb.E || cb.Wx || cb.Wy || cb.Ex || cb.Ey).map((cb) => ({ name: cb.name, ...cb.columns.find((x) => x.floor === c.floor && x.ci === c.i), firstOrder: true }));
+        }
+      }
+      // live-load patterns (frame method): consistent (N, Mx, My) per pattern, first order
+      if (colFrame) { try { const ps = columnPatternSets(f3); for (const c of g.cols) c.sets = ps.get(`${c.floor}|${c.i}`) ?? null; } catch (err) { g.warnings.push(`pattern น้ำหนักจรของเสา: ${err.message}`); } }
+      for (const s of stability.storeys) if (s.sway) g.warnings.push(`${s.name}: ดัชนีเสถียรภาพ Q = ${s.Q.toFixed(3)} > 0.05 (${s.combo}) — ชั้นเซได้ (sway): เสาลดกำลังด้วย R ตามความยาวประสิทธิผล k·Lu (วิธี UNVERIFIED)`);
+    }
     stacks = designColumns(frame, g.cols);
   }
   const base = (c, list = f3?.base) => list?.find((b) => near(b.p, c.p));
@@ -412,6 +465,6 @@ export function analyzeFrame(frame) {
   const lateral = lat && f3?.combos ? lateralChecks(frame, lat, f3) : null;
   // a type whose bars cannot be read would be checked with no steel at all: say so instead of a silent NG
   for (const t of beamTypes) for (const k of ["top", "bot", "topX", "botX"]) if (t[k] && !parseBars(t[k])) g.warnings.push(`Type คาน ${t.name}: อ่านเหล็ก "${t[k]}" ไม่ได้ (ใช้รูปแบบ เช่น 2-DB12, 3-RB9) — คิดเป็นไม่มีเหล็ก`);
-  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, analysis: f3 ? "envelope" : "continuous", warnings: [...new Set(g.warnings)],
+  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, stability: stability ? { storeys: stability.storeys } : null, analysis: f3 ? "envelope" : "continuous", warnings: [...new Set(g.warnings)],
     ok: g.an.every((a) => a.ok) && stacks.every((s) => s.ok) && footings.every((f) => f.ok) && (!lateral || lateral.ok) };
 }
