@@ -2,7 +2,7 @@
 // Nothing is drawn automatically; each layer has an "auto" button that only runs when pressed.
 import { useDeclutter } from "./declutter.js";
 import { useEffect, useRef, useState } from "react";
-import { CircleDot, Columns3, Eraser, FileUp, GitCommitHorizontal, Hand, Magnet, MousePointer2, Redo2, Ruler, Square, Undo2, Wand2 } from "lucide-react";
+import { CircleDot, Columns3, Eraser, FileUp, GitCommitHorizontal, Hand, Magnet, MousePointer2, Redo2, Ruler, Square, Undo2, Wand2, Grid3x3 } from "lucide-react";
 import { fmt } from "./beamModel.js";
 import { autoInnerPlates } from "../engine/roofMembers.js";
 import { LINE_COLORS } from "./Roof3D.jsx";
@@ -77,6 +77,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
   const xName = (i) => String.fromCharCode(65 + i), yName = (i) => String(GY.length - i); // 1 at the top, like the drawings
   const nodeName = (p) => { const i = GX.findIndex((x) => Math.abs(x - p[0]) < 1e-6), j = GY.findIndex((y) => Math.abs(y - p[1]) < 1e-6); return i >= 0 && j >= 0 ? `โหนด ${xName(i)}-${yName(j)}` : `โหนด (${fmt(p[0], 2)}, ${fmt(p[1], 2)})`; };
   const setGrid = (patch) => set("grid", { ...G, ...patch });
+  const gridOn = G.on !== false; // grid shown and its nodes snappable (button "กริด", like the structure board)
   const px = () => vb.w / (svg.current?.clientWidth || 1000); // metres per screen pixel
   const toModel = (e) => {
     const p = svg.current.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
@@ -119,7 +120,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
     const keep = (q) => (axis < 0 ? q : axis === 1 ? [q[0], from[1]] : [from[0], q[1]]); // stay on the locked axis
     const pts = [...cols.map((c) => [c, "เสา"]), ...plates.flatMap((l) => [[l.a, "ปลายอะเส"], [l.b, "ปลายอะเส"]]), ...roof.pts.map((c) => [c, "มุมผนัง"]),
       ...inner.flatMap((l) => [[l.a, "ปลายอะเสรับดั้ง"], [l.b, "ปลายอะเสรับดั้ง"]]), ...posts.map((c) => [[c.x, c.y], "ดั้ง"]), ...crossings.map((c) => [c, "จุดตัด"]),
-      ...ridgeSegs.flatMap(([a, b]) => [[a, "ปลายอกไก่/ตะเข้"], [b, "ปลายอกไก่/ตะเข้"]]), ...SX.flatMap((x) => SY.map((y) => [[x, y], null]))];
+      ...ridgeSegs.flatMap(([a, b]) => [[a, "ปลายอกไก่/ตะเข้"], [b, "ปลายอกไก่/ตะเข้"]]), ...(gridOn ? SX.flatMap((x) => SY.map((y) => [[x, y], null])) : [])];
     let best = null;
     for (const [c, kind] of pts) { const q = keep(c), d = dist(q, p); if (d < r && dist(q, c) < r && (!best || d < best.d - 1e-9)) best = { d, p: axis < 0 ? c : q, kind: kind ?? nodeName(c) }; }
     if (best) return best;
@@ -132,7 +133,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
         const t = axis === 1 ? (from[1] - a[1]) / den : (from[0] - a[0]) / den;
         if (t >= -1e-6 && t <= 1 + 1e-6) take([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], `ชน${kind ?? "แนวอกไก่/ตะเข้"}`);
       }
-      for (const v of axis === 1 ? SX : SY) take(axis === 1 ? [v, from[1]] : [from[0], v], "ชนเส้นกริด");
+      if (gridOn) for (const v of axis === 1 ? SX : SY) take(axis === 1 ? [v, from[1]] : [from[0], v], "ชนเส้นกริด");
       if (hit) return hit;
     }
     return { p: null, kind: "ไม่มีโหนด — ขยับใกล้จุดตัดกริด" }; // nodes only, like STAAD's snap grid
@@ -331,6 +332,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
           title="ลบผนัง เสา อะเส ดั้ง และสะพานทั้งหมดของหลังคา (ย้อนกลับได้ Ctrl+Z)" className={`${btn} ${askClear ? "bg-red-600 text-[#fff] ring-red-600" : "text-red-600 ring-red-200 hover:bg-red-50"}`}>{askClear ? "กดอีกครั้งเพื่อลบทั้งหมด" : "ลบทั้งหมด"}</button>
         <span className="mx-1 h-6 w-px bg-gray-200" />
         <TextSizeControl />
+        <button onClick={() => setGrid({ on: !gridOn })} title="แสดง / ซ่อนกริด (ซ่อนแล้วไม่ยึดโหนดกริด)" className={`${btn} ${gridOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Grid3x3 className="h-3.5 w-3.5" />กริด</button>
         <button onClick={() => setOrtho(!ortho)} className={`${btn} ${ortho ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}>ล็อคแกน X/Y</button>
         <button onClick={() => setSnapOn(!snapOn)} className={`${btn} ${snapOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Magnet className="h-3.5 w-3.5" />ล็อคโหนด</button>
         <button onClick={() => setDims(!dims)} className={`${btn} ${dims ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}>ระยะเสา</button>
@@ -352,7 +354,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
             className={`h-full w-full select-none ${tool === "select" ? "cursor-grab" : "cursor-crosshair"}`}
             onPointerMove={onMove} onPointerDown={onDown} onPointerUp={() => { if (drag?.box) endBox(); setDrag(null); }} onPointerLeave={() => { setDrag(null); setCur(null); }}
             onDoubleClick={() => tool === "wall" && closeWall()} onContextMenu={(e) => e.preventDefault()} onWheel={onWheel}>
-            <g stroke={dark ? "#323a5c" : "#e4e7ec"}>{grid}</g>
+            {gridOn && <g stroke={dark ? "#323a5c" : "#e4e7ec"}>{grid}</g>}
             <g stroke={dark ? "#6e7591" : "#98a2b3"}>{axes}</g>
             {g && <polygon points={ring(g.eave)} fill={dark ? "#7b8cff0d" : "#465fff08"} stroke="#8b8d98" strokeWidth={1.2 * k} strokeDasharray={`${6 * k} ${4 * k}`} />}
             {g?.lines.filter((l) => l.type !== "eave").map((l, i) => <line key={`r${i}`} x1={l.p[0]} y1={-l.p[1]} x2={l.q[0]} y2={-l.q[1]} stroke={LINE_COLORS[l.type]} strokeWidth={1.5 * k} opacity={0.45} />)}

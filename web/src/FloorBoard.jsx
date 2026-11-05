@@ -256,6 +256,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
         <button onClick={() => { setMulti([]); setSel(null); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50">ยกเลิกการเลือก</button>
       </div>}
       <div className="flex flex-wrap items-center gap-1.5">
+        {!(step === "frame" || step === "grid") && <button onClick={() => { setGridOn(!gridOn); setFloor({ grid: { ...G, on: !gridOn } }); }} title="แสดง / ซ่อนกริด" className={`${btn} ${gridOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Grid3x3 className="h-3.5 w-3.5" />กริด</button>}
         {(step === "frame" || step === "grid") && <>
           <button onClick={() => { setGridOn(!gridOn); setFloor({ grid: { ...G, on: !gridOn } }); }} className={`${btn} ${gridOn ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}><Grid3x3 className="h-3.5 w-3.5" />กริด</button>
           <button onClick={() => setOrtho(!ortho)} className={`${btn} ${ortho ? "bg-brand-50 text-brand-500 ring-brand-500/40" : "text-gray-600 ring-gray-300"}`}>ล็อคแกน</button>
