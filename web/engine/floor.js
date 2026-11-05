@@ -310,7 +310,26 @@ export function barLayers(b, mat, st, main, special) {
 }
 // "lighter" type: smaller concrete section first, then less steel
 const steel = (s) => { const x = parseBars(s); return x ? x.n * BARS[x.bar].A : 0; };
-const typeWeight = (t) => t.b * t.h * 1e4 + (steel(t.top) + steel(t.bot) + steel(t.topX) + steel(t.botX)) / 100;
+// "lighter" = cheaper per metre (user 2026-11-05): concrete + formwork + ALL steel incl. stirrups (was b·h then main bars only, so two
+// types differing only in stirrups tied and the first listed — often the denser — was taken). Same unit prices as beamTypes.beamCost.
+export const BEAM_PRICE = { conc: 2500, steel: 28, form: 350 };
+const kgmF = (s) => { const x = parseBars(s); return x ? (x.n * BARS[x.bar].A * 7850) / 1e4 : 0; };
+export function typeCostM(t, P = BEAM_PRICE) {
+  const stA = (BARS[t.st]?.A ?? 0.28) * (t.stSets ?? 1), per = 2 * (t.b + t.h) - 0.16, stir = ((stA * 7850) / 1e4) * per * ((1 / (t.sSup || 0.2) + 1 / (t.sMid || 0.2)) / 2);
+  return t.b * t.h * P.conc + (t.b + 2 * t.h) * P.form + (kgmF(t.top) + kgmF(t.bot) + 0.5 * kgmF(t.topX) + 0.6 * kgmF(t.botX) + stir) * P.steel;
+}
+const typeWeight = (t) => typeCostM(t);
+// numerical robustness (user 2026-11-05): node and the browser differ in the last bits of pow / trig (different libm), which could flip a
+// choice sitting exactly on a limit. Type CHOICES are therefore made with the full-precision forces × (1 + 1e-9) — only types that pass with
+// that margin are chosen (never less safe); the reported pass / fail is always the plain full-precision check. Nothing is rounded.
+export const ROBUST = 1 + 1e-9;
+export function robustSpan(sp, f = ROBUST) {
+  if (!sp) return sp;
+  const o = { ...sp }; for (const k of ["Mpos", "Mneg", "V", "Vmax", "Vface", "Mt", "MtEq"]) if (typeof o[k] === "number") o[k] *= f;
+  if (o.Vx) o.Vx = o.Vx.map(([x, v]) => [x, v * f]);
+  if (o.defl) o.defl = { ...o.defl, dT: o.defl.dT * f, dL: o.defl.dL * f, ok: o.defl.dT * f <= o.defl.limT + 1e-9 && o.defl.dL * f <= o.defl.limL + 1e-9 };
+  return o;
+}
 
 // Design shear (mat.shearAt, default "d"; "max" = the largest shear of the span, as the reference sheets): ACI 318 / ว.ส.ท. — a
 // section closer than d to a support may be designed for the shear at d when the support puts the beam end in compression (a
@@ -680,7 +699,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     else warnings.push(`${e.from} ที่ (${e.p[0].toFixed(2)}, ${e.p[1].toFixed(2)}) ไม่มีเสาหรือคานรับที่ชั้นนี้ — แรงหายไป`);
   }
   // types: fixed per drawn beam, or auto (lightest passing); iterate because self weight and stiffness depend on the choice
-  const order = types.map((t, i) => ({ t, i })).sort((x, y) => typeWeight(x.t) - typeWeight(y.t));
+  const order = types.map((t, i) => ({ t, i })).sort((x, y) => typeWeight(x.t) - typeWeight(y.t) || x.i - y.i);
   const typeOf = new Map(); // drawn beam index → type index in use
   (floor.beams ?? []).forEach((b, i) => typeOf.set(i, b.type ?? minTypes?.[i] ?? order[0]?.i ?? 0));
   const allowed = (i, t) => minTypes?.[i] == null || typeWeight(t) >= typeWeight(types[minTypes[i]]) - 1e-9;
@@ -698,7 +717,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       const fixed = sp.members.filter((m) => floor.beams[m].type != null).map((m) => floor.beams[m].type);
       if (fixed.length) { const ft = heaviest(fixed); sp.check = withDefl(checkSpan(types[ft], sp, mat), sp, types[ft]); sp.typeIdx = ft; sp.own = true; continue; }
       let best = null;
-      for (const { t, i } of order) { if (!sp.members.every((m) => allowed(m, t))) continue; const c = withDefl(checkSpan(t, sp, mat), sp, t); if (c.ok) { best = { c, i }; break; } if (!best || c.util < best.c.util - 1e-9 || (Math.abs(c.util - best.c.util) < 1e-9 && typeWeight(t) > typeWeight(types[best.i]))) best = { c, i }; }
+      const spR = robustSpan(sp);
+      for (const { t, i } of order) { if (!sp.members.every((m) => allowed(m, t))) continue; const c = withDefl(checkSpan(t, spR, mat), spR, t); if (c.ok) { best = { c, i }; break; } if (!best || c.util < best.c.util - 1e-9 || (Math.abs(c.util - best.c.util) < 1e-9 && typeWeight(t) > typeWeight(types[best.i]))) best = { c, i }; }
       sp.check = best.c; sp.typeIdx = best.i; // none passes: the lowest utilisation, ties (sections that fail outright) → the strongest
     }
     // a drawn beam uses one type over all its spans: the heaviest its spans need

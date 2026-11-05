@@ -6,7 +6,7 @@
 // Limits (user): b ≥ 0.20 m, h ≤ 0.80 m, sizes in whole 10 cm, at most 2 bar layers. Cost per metre: concrete 2,500 ฿/m³, steel 28 ฿/kg,
 // formwork 350 ฿/m² (b + 2h) — only the ranking matters.
 import { BARS } from "./tables.js";
-import { barLayers, parseBars } from "./floor.js";
+import { barLayers, parseBars, robustSpan } from "./floor.js";
 import { checkEnv } from "./frame.js";
 
 // the designer's habit (user 2026-11-04): start at 20×40 (easy to build), add DB12 bars up to 5 bottom / 3 top, then DB16 up to
@@ -52,7 +52,7 @@ export function designBH(sps, b, h, bar, mat, g, start = null) {
     // supports may bring the top up to the bottom limit — then the next bar size, then the next section
     if (nB + xB > (g.maxBot ?? 99) || nT > (g.maxTop ?? 99) || nT + xT > (g.maxBot ?? 99)) return null;
     if (!fitsLayers(t, mat, g)) return null;
-    const cs = sps.map((sp) => checkEnv(t, sp, mat));
+    const cs = sps.map((sp) => checkEnv(t, robustSpan(sp), mat)); // choice with the 1e-9 margin (node / browser alike)
     if (cs.every((c) => c.ok)) return { ...t };
     let grew = false;
     for (const c of cs.filter((x) => !x.ok)) {
@@ -81,7 +81,7 @@ export function designBH(sps, b, h, bar, mat, g, start = null) {
 // the cheapest version of type t that still passes `sps`: stirrups from RB6 up with the widest spacing that passes (support and
 // mid-span apart), then extra / through bars removed one at a time while everything passes
 function trimType(t, sps, mat, g) {
-  const ok = (x) => sps.every((sp) => checkEnv(x, sp, mat).ok);
+  const ok = (x) => sps.every((sp) => checkEnv(x, robustSpan(sp), mat).ok);
   const steps = []; for (let v = g.sMax; v >= g.sMin - 1e-9; v = +(v - g.ds).toFixed(3)) steps.push(v);
   let best = { ...t };
   for (const [st, n] of g.stirrups) {

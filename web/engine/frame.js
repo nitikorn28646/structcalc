@@ -2,7 +2,7 @@
 // a column with nothing under it becomes a point load on the beams of the floor below. Columns are checked with engine/column.js.
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
 import { borePileRebar } from "./borePile.js";
-import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, cutoffs, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
+import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, cutoffs, robustSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
 import { BARS } from "./tables.js";
 import { frame3dModel } from "./frame3d.js";
 import { tiedColumn } from "./column.js";
@@ -304,7 +304,7 @@ export function analyzeFrame(frame) {
         if (b.type != null) return;
         const sps = an.spans.filter((sp) => (sp.members ?? [sp.member]).includes(m));
         if (!sps.length) return;
-        const cur = sps[0].typeIdx, ok = (t) => sps.every((sp) => checkEnv(t, { ...sp, ...sp.envF, vDone: true }, mat).ok);
+        const cur = sps[0].typeIdx, ok = (t) => sps.every((sp) => checkEnv(t, robustSpan({ ...sp, ...sp.envF, vDone: true }), mat).ok); // choice with the 1e-9 margin
         if (ok(beamTypes[cur])) { if (minTypes?.[k]?.[m] != null) next[k][m] = minTypes[k][m]; return; }
         const pick = order.find((o) => tWeight(o.t) > tWeight(beamTypes[cur]) && ok(o.t));
         if (!pick) return; // nothing heavier passes: keep the type, the span shows NG with its reason
@@ -324,12 +324,15 @@ export function analyzeFrame(frame) {
       sp.src = { Mpos: src("Mpos"), Mneg: src("Mneg"), V: src("V") };
       Object.assign(sp, F, { vDone: true, vAtD: F.V < sp.Vmax - 1e-6 });
       sp.check = checkEnv(sp.type, sp, mat);
+      // near a limit (user 2026-11-05): passes with the full-precision forces but not with them × (1 + 1e-6) → flagged, the result is not changed
+      if (sp.check.ok && !checkEnv(sp.type, robustSpan(sp, 1 + 1e-6), mat).ok) { sp.nearLimit = true; sp.check.nearLimit = true; }
       // bar cut-offs and development (audit F4): lengths of the extra bars from the envelope, NG on the minimum continuous steel
       const cut = cutoffs(sp, an.lines.find((l) => l.id === sp.line), sp.type, mat, F, sp.check);
       if (cut) { sp.cut = cut; sp.check.cut = cut; if (!cut.ok) sp.check.ok = false; if (cut.topFull && !sp.topFull) sp.topFull = { bars: [sp.type.top, sp.type.topX].filter(Boolean).join(" + "), cut: true }; }
       sp.ok = sp.check.ok;
     }
     an.ok = an.spans.every((x) => x.ok) && !an.lines.some((l) => l.error);
+    const near = an.spans.filter((x) => x.nearLimit); if (near.length) g.warnings.push(`${frame.floors[g.an.indexOf(an)]?.name ?? ""}: ช่วงคานผ่านแบบเฉียดขีดจำกัด (ห่างไม่ถึง 1 ส่วนในล้าน) ${near.length} ช่วง — ${near.slice(0, 6).map((x) => `${x.id} ${x.typeName ?? ""}`).join(", ")}${near.length > 6 ? " …" : ""}: ผลอาจพลิกได้จากการปัดเศษของเครื่องคำนวณ ควรใช้ type ที่ใหญ่ขึ้นหนึ่งขั้น`);
   }
   // columns, frame.colMethod:
   //   "axial" (default, as the reference sheets / usual practice): accumulated axial load + minimum eccentricity only;
