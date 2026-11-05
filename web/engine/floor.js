@@ -343,6 +343,9 @@ export function vAtD(sp, h, mat) {
 // WSD checks of one span with one beam type (mid-span sagging + support hogging), like the beam module
 export function checkSpan(t, sp, mat) {
   if (sp.Vx && !sp.vDone) sp = { ...sp, Vface: sp.V, V: vAtD(sp, t.h, mat) }; // the frame envelope passes vDone (already at d)
+  // a candidate depth that makes the span deep (L < 4h) must use the largest shear even when V came "at d" for another depth (audit F2;
+  // the type search passes vDone forces computed for the current type)
+  else if (sp.vDone && sp.len < 4 * t.h && sp.Vmax > sp.V) sp = { ...sp, V: sp.Vmax };
   const top = parseBars(t.top), bot = parseBars(t.bot), topX = parseBars(t.topX), botX = parseBars(t.botX);
   // compatibility torsion (user 2026-11-04, ACI 318 22.7.3): the part of the torsion that comes only from members framing in (3D frame,
   // secondary beams / slabs) is not needed for equilibrium — it may be reduced to the cracking torque. Equilibrium torsion (cantilever

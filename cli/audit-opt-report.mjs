@@ -24,7 +24,12 @@ const beamBlock = (x) => {
     return `<tr class="${isBest ? "best" : ""}"><td>${bh(c)}</td><td class="n">${c.ok ? f(c.conc, 3) : "–"}</td><td class="n">${c.ok ? f(c.kg, 1) : "–"}</td><td class="n">${c.ok ? f(c.cost) : "–"}</td>
       <td>${c.ok ? '<span class="ok">ผ่าน</span>' : `<span class="bad">ไม่ผ่าน</span> — ${esc(c.why.join(", "))}${c.stage === "bars" ? " (ไม่มีชุดเหล็กในขอบเขต)" : " (หลังวิเคราะห์ใหม่)"}`}</td><td class="k">${c.ok ? esc(bars(c.t)) : ""}</td></tr>`; }).join("");
   const sv = x.best ? x.current.cost - x.best.cost : 0;
+  // the rule (user 2026-11-05): 20×40 if it passes, else the cheapest passing section with a depth in whole 10 cm, else any passing
+  const c2040 = x.cands.find((c) => Math.abs(c.b - 0.2) < 1e-9 && Math.abs(c.h - 0.4) < 1e-9), okc = x.cands.filter((c) => c.ok).sort((p, q) => p.cost - q.cost);
+  const rec = c2040?.ok ? c2040 : okc.find((c) => Math.abs(Math.round(c.h * 10) - c.h * 10) < 1e-9) ?? okc[0];
+  const why = c2040?.ok ? "20×40 ผ่านทุกข้อ — ใช้หน้าตัดมาตรฐาน" : `20×40 ไม่ผ่าน (${(c2040?.why ?? ["-"]).join(", ")}) → หน้าตัดที่ถูกที่สุดที่ผ่าน ความลึกขั้น 10 ซม.`;
   return `<details><summary>${esc(x.floor)} ช่วง ${esc(x.span)} · ${esc(x.kind)} · L ${f(x.len, 2)} ม. · ${esc(x.tags.join(", "))} — ปัจจุบัน ${esc(x.current.type)} ${bh(x.current)} ฿${f(x.current.cost)} → ถูกที่สุด ${x.best ? `${bh(x.best)} ฿${f(x.best.cost)} (${sv > 0 ? "ลด" : "เพิ่ม"} ${f(Math.abs(sv))})` : "–"}</summary>
+  <p><b>20×40:</b> ${c2040?.ok ? '<span class="ok">ผ่าน</span>' : `<span class="bad">ไม่ผ่าน</span> — ${esc((c2040?.why ?? []).join(", "))}`} · <b>แนะนำ:</b> ${rec ? `${bh(rec)} ${esc(bars(rec.t))} ฿${f(rec.cost)}` : "–"} — ${esc(why)}</p>
   <p class="k">ปัจจุบัน: ${esc(bars(x.current.t))} · คอนกรีต ${f(x.current.conc, 3)} ม.³ · แบบหล่อ ${f(x.current.form, 2)} ม.² · เหล็ก ${f(x.current.kg, 1)} กก.${x.current.ok ? "" : ` · <span class="bad">ไม่ผ่าน: ${esc(x.current.reasons.slice(0, 2).join(" | "))}</span>`}</p>
   <div class="tw"><table><thead><tr><th>b × h</th><th>คอนกรีต ม.³</th><th>เหล็ก กก.</th><th>ราคา ฿ *</th><th>ผล / เหตุที่ไม่ผ่าน</th><th>เหล็ก</th></tr></thead><tbody>${rows}</tbody></table></div></details>`; };
 const html = `<title>Beam Cost Audit</title><meta name="claude:viewport-fit-sides" content="cover">

@@ -109,19 +109,23 @@ function trimType(t, sps, mat, g) {
 // cost mode (audit 2026-11-05, user: "Minimize Total Beam Cost"): every b × h of widths × depths (5 cm steps) is tried with its cheapest
 // bar arrangement and the cheapest passing one is kept; sections are tried in order of their concrete + formwork cost and the search
 // stops when that alone exceeds the best total found. "habit" = the designer's order, first passing (BEAM_GEN.sections, user 2026-11-04).
-export const BEAM_COST = { ...BEAM_GEN, mode: "cost", widths: [0.2, 0.25, 0.3], depths: [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
+export const BEAM_COST = { ...BEAM_GEN, mode: "cost", prefer: [[0.2, 0.4]], widths: [0.2, 0.25, 0.3], depths: [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
   bigWidths: [0.4], bigDepths: [0.85, 0.9, 0.95, 1.0] };
 const costSections = (g) => g.widths.flatMap((b) => g.depths.map((h) => [b, h])).sort((x, y) => (x[0] * x[1] * g.price.conc + (x[0] + 2 * x[1]) * g.price.form) - (y[0] * y[1] * g.price.conc + (y[0] + 2 * y[1]) * g.price.form));
 export const bigGen = (g) => (g.mode === "cost" ? { ...g, widths: [...g.widths, ...(g.bigWidths ?? [])], depths: [...g.depths, ...(g.bigDepths ?? [])] } : { ...g, sections: [...g.sections, ...(g.bigSections ?? [])] });
 // the first section × bar size in the designer's order that passes every span in sps (BEAM_GEN.sections, then bars DB12 → DB16)
 export function designGroup(sps, mat, g = BEAM_GEN) {
   if (g.mode === "cost") {
-    let best = null;
-    for (const [b, h] of costSections(g)) {
-      if (best && b * h * g.price.conc + (b + 2 * h) * g.price.form >= best.cost) break; // concrete + formwork alone already dearer
-      for (const bar of g.bars) { const t = designBH(sps, b, h, bar, mat, g); if (t) { const c = beamCost(t, g); if (!best || c < best.cost - 1e-6) best = { t, cost: c }; } }
-    }
-    return best;
+    const cheapest = (gg) => { let best = null;
+      for (const [b, h] of costSections(gg)) {
+        if (best && b * h * gg.price.conc + (b + 2 * h) * gg.price.form >= best.cost) break; // concrete + formwork alone already dearer
+        for (const bar of gg.bars) { const t = designBH(sps, b, h, bar, mat, gg); if (t) { const c = beamCost(t, gg); if (!best || c < best.cost - 1e-6) best = { t, cost: c }; } }
+      }
+      return best; };
+    // user 2026-11-05: 20×40 first (cheapest bars that pass); if it does not carry the spans, the cheapest section with depths in whole
+    // 10 cm (30, 40, … 80); 5 cm depths only when none of those passes
+    for (const [b, h] of g.prefer ?? []) { const p = cheapest({ ...g, widths: [b], depths: [h] }); if (p) return p; }
+    return cheapest({ ...g, depths: g.depths.filter((h) => Math.abs(Math.round(h * 10) - h * 10) < 1e-9) }) ?? cheapest(g);
   }
   for (const [b, h] of g.sections) for (const bar of g.bars) {
     const t = designBH(sps, b, h, bar, mat, g);
@@ -167,8 +171,12 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
   for (let i = 0; i < n; i++) {
     const grp = list.slice(cuts[i], cuts[i + 1]);
     if (!grp.length) continue;
-    const d = designGroup(grp.map((o) => o.sp), mat, g) ?? grp[grp.length - 1].d;
-    types.push({ ...d.t, cost: d.cost, count: grp.length });
+    // no common type for the whole group → split it in two (cost order) until every part has one (was: the dearest span's own design for
+    // all of them, which failed for many spans and made the repair add types — 12 types for k = 1, audit 2026-11-05)
+    const split = (gr) => { const d = designGroup(gr.map((o) => o.sp), mat, g); if (d) return [{ d, n: gr.length }]; if (gr.length === 1) return [{ d: gr[0].d, n: 1 }];
+      const m = Math.ceil(gr.length / 2); return [...split(gr.slice(0, m)), ...split(gr.slice(m))]; };
+    const parts = g.mode === "cost" ? split(grp) : [{ d: designGroup(grp.map((o) => o.sp), mat, g) ?? grp[grp.length - 1].d, n: grp.length }]; // habit: as before
+    for (const { d, n: cnt } of parts) types.push({ ...d.t, cost: d.cost, count: cnt });
   }
   types.push(...bigTypes);
   // identical types merged, cheapest first, named B1, B2, …
@@ -206,7 +214,11 @@ export function generateBeamTypes(frame, k, g0 = null) {
         const t = types[ti], bar = parseBars(t.top)?.bar ?? "DB 12", grown = designBH(sps.map((sp) => ({ ...sp, vDone: true })), t.b, t.h, bar, f.mat, g, t);
         if (grown) types[ti] = { ...t, ...grown, name: t.name };
         else { const gR = { ...bigGen(g), bars: [...g.bars, "DB 20"] }; // last resort only: DB20 (user habit DB12 → DB16 → DB20) and the big sections
-          for (const d of [designGroup(sps.map((sp) => ({ ...sp, vDone: true })), f.mat, gR)].concat(sps.map((sp) => designGroup([{ ...sp, vDone: true }], f.mat, gR))).filter(Boolean).slice(0, 1 + sps.length))
+          if (types.length >= k + 2) { // enough types already (user: few sections in a building): this type grows for all the spans using it
+            const mine = r.floors.flatMap((a) => a.spans).filter((sp) => sp.typeIdx === ti).map((sp) => ({ ...sp, vDone: true })), dm = designGroup(mine, f.mat, gR);
+            if (dm) types[ti] = { ...dm.t, name: t.name, auto: true }; continue; }
+          const dg = designGroup(sps.map((sp) => ({ ...sp, vDone: true })), f.mat, gR); // one type for all of them if one passes, else one each
+          for (const d of (dg ? [dg] : sps.map((sp) => designGroup([{ ...sp, vDone: true }], f.mat, gR))).filter(Boolean))
             if (!types.some((x) => JSON.stringify({ ...x, name: "", auto: true }) === JSON.stringify({ ...d.t, name: "", auto: true }))) types.push({ ...d.t, name: `B${types.length + 1}`, auto: true }); } // nothing in this b × h: an own type for these spans (auto beams take it)
       }
     }

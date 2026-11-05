@@ -482,3 +482,8 @@ stop), groups by DP (min Σ heaviest own cost/m × length); frame.beamAutoMode "
 Type คาน card. Cost vs habit (57 spans): k1 218k/242k, k2 154k/168k, k5 146k/154k, k8 144k/149k; k3 158k (3 types) vs 155k (habit got 5 via
 repair). beamtypes-check updated (cost grid, habit still from 20×40, cost ≤ habit at k 5). audit-beam auto uses BEAM_COST: 0 real
 pass-but-NG (1 borderline 0.04 %).
+2026-11-05 (user: "เน้น 20x40 ไม่ไหวค่อยไปหน้าตัดอื่น", depths 30/40/…/80 or others if needed): BEAM_COST.prefer [[0.2, 0.4]] — designGroup
+tries 20×40 first (cheapest bars that pass), else the cheapest passing section with depths in whole 10 cm, else 5 cm depths. Groups with no
+common type are split in halves (was: dearest span's own design for the group → repair made 12 types for k = 1). checkSpan: vDone forces
+with a candidate depth that makes the span deep (L < 4h) use sp.Vmax. Repair: at most k + 2 types, then the type itself grows. Yasothon k 3:
+types 20×40, 20×50, 20×60 ×2, 25×70, 57/57; 36/57 spans on 20×40. UI select "20×40 ก่อน แล้วถูกที่สุด" | "ตามลำดับเดิม".

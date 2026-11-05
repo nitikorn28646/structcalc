@@ -1,3 +1,4 @@
+import { analyzeFrame } from "../web/engine/frame.js";
 // Automatic beam types (engine/beamTypes.js): every span passes, names B1… cheapest first, within the limits, more types ≤ cost.
 // Usage: node cli/beamtypes-check.mjs → summary lines, exit 1 when a check fails.
 import { readFileSync } from "node:fs";
@@ -16,9 +17,10 @@ const normal = g3.beamTypes.filter((t) => !t.big);
 check("cost mode: sections from its grid (b 20/25/30, h 30–80 step 5)", normal.every((t) => BEAM_COST.widths.some((b) => Math.abs(b - t.b) < 1e-9) && BEAM_COST.depths.some((h) => Math.abs(h - t.h) < 1e-9)), normal.map((t) => `${t.b}x${t.h}`).join(" "));
 const gh = generateBeamTypes(pj.frame, 3, BEAM_GEN);
 check("habit mode (start 20×40, 10 cm steps): all pass, sections from its list", gh.ok === gh.n && gh.beamTypes.filter((t) => !t.big).every((t) => BEAM_GEN.sections.some(([b, h]) => Math.abs(b - t.b) < 1e-9 && Math.abs(h - t.h) < 1e-9)), `${gh.ok}/${gh.n} · ${gh.beamTypes.map((t) => `${t.b}x${t.h}`).join(" ")}`);
-// compare with no more types than habit mode (habit adds repair types: k = 3 there ended with 5 types)
-const c5 = generateBeamTypes(pj.frame, 5), h5 = generateBeamTypes(pj.frame, 5, BEAM_GEN);
-check("cost mode cheaper than habit mode with no more types (k = 5)", c5.cost <= h5.cost + 1e-6 && c5.beamTypes.length <= h5.beamTypes.length, `${Math.round(c5.cost)} (${c5.beamTypes.length}) ≤ ${Math.round(h5.cost)} (${h5.beamTypes.length}) ฿`);
+// 20×40 is the preferred section (user 2026-11-05): at least as many spans on 20×40 as in habit mode
+const cnt2040 = (g) => analyzeFrame({ ...pj.frame, beamTypes: g.beamTypes, floors: g.floors }).floors.flatMap((a) => a.spans).filter((sp) => Math.abs(sp.type.b - 0.2) < 1e-9 && Math.abs(sp.type.h - 0.4) < 1e-9).length;
+{ const nc = cnt2040(g3), nh = cnt2040(gh); check("20×40 preferred: spans on 20×40 (k = 3) ≥ habit mode − 1", nc >= nh - 1, `${nc} ≥ ${nh} of ${g3.n}`); }
+check("k = 1: no runaway type count (≤ 8 — no single section carries every span here)", g1.beamTypes.length <= 8, `${g1.beamTypes.length}`);
 check("bars ≤ 5 bottom, 3 top through (≤ 5 at supports), DB12 / DB16 (DB20 only as the last resort)", normal.every((t) => n(t.bot) + n(t.botX) <= 5 && n(t.top) <= 3 && n(t.top) + n(t.topX) <= 5 && [t.top, t.bot, t.topX, t.botX].filter(Boolean).every((v) => ["DB 12", "DB 16", "DB 20"].includes(sz(v)))));
 check("stirrups RB6 / RB9, @0.10–0.20", g3.beamTypes.every((t) => ["RB 6", "RB 9"].includes(t.st) && !(t.stSets > 1) && t.sSup >= 0.1 - 1e-9 && t.sMid <= 0.2 + 1e-9));
 const used = (t, m, x) => barLayers(t.b, pj.frame.mat, t.st, parseBars(m), parseBars(x)).filter((l) => l.main || l.special).length;
