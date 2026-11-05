@@ -500,3 +500,9 @@ identical) — also inside frozen beam/slab/column; the iterative type passes ca
 env that made them). Use the in-app result; full fix = replace ** / pow in frozen files (needs the Excel re-run). Fixed on the way: the
 compare table had been pasted into AutoColTypes too ("scan is not defined" → Type เสา tab crashed) — removed. E2E expected base 199.0 t.
 2026-11-05: web copy republished (v51); PyNite re-run frame3d 9/9, contBeam 2/2 (yasothon-pdelta 8.3 % = −1.1 vs −1.2 kg, inside abs tol); FrameReport criteria lists the added ACI 318-11 checks (min stirrups, torsion, Branson, cut-offs, deep-span V, near-limit); E2E 47/47.
+COLUMN AUDIT 2026-11-05 (cli/audit-column.mjs [--project x.json] + audit-column-report.mjs; report https://claude.ai/artifact/C3xHZKayXkXK3rJkT1wVsy;
+no code changed): 32 cases + every column of Yasothon / user's house; independent WSD (ACI 318-63, real bar positions) + ultimate strength
+(strain compatibility + Bresler, φ 0.65 vs 1.55 P). No program-pass with φPn < 1.55P. Findings: K1 mode III with Mx only → R NaN → util 9
+(false NG); K2 rectangular: ex compared with eb of By (column.js); K3 min eccentricity only about x; K4 slenderness r = 0.25·Bx (not the least
+side); K5 column bar clear spacing not checked (8-DB20 in 20×20 passes); K6 tension columns pass (P = max(P, 1)); decisions K7 braced
+(unbraced: Yasothon 3 NG), K8 colMethod axial ignores 3D moments (Yasothon 3/43 NG with them). Fixes not made — waiting for the user.
