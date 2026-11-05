@@ -454,6 +454,11 @@ export function designRoof(g, fr, roof, d) {
   for (const po of posts) {
     if (po.on?.column || po.on?.wallLine) { if (po.P > 0) bearLoose.push({ p: po.pp, P: po.P, kind: po.kind, under: po.on.column ? "column" : "wall" }); continue; }
     if (po.on) continue;
+    // a post standing on an RC roof beam of the structure (roof.guide.beams, user 2026-11-05): its load goes into that beam (roofLink puts
+    // it on the beam as a point load) — a real support, not a loose post
+    const onRC = (roof.guide?.beams ?? []).some((b) => { const dx = b.b[0] - b.a[0], dy = b.b[1] - b.a[1], L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((po.pp[0] - b.a[0]) * dx + (po.pp[1] - b.a[1]) * dy) / L2));
+      return Math.hypot(po.pp[0] - (b.a[0] + t * dx), po.pp[1] - (b.a[1] + t * dy)) <= Math.max((b.w ?? 0.2) / 2, 0.05) + 0.1; });
+    if (onRC) { if (po.P > 0) bearLoose.push({ p: po.pp, P: po.P, kind: po.kind, under: "rcBeam" }); continue; }
     loose.push(po.pp);
     if (po.P > 0) bearLoose.push({ p: po.pp, P: po.P, kind: po.kind, under: null });
     lost.push(po);

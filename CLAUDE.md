@@ -552,3 +552,8 @@ designSpread (ok/util) and the single footing tool; report rows added. 163 sprea
 ROOF UI (2026-11-05): grid show/hide button on every board; imported RC roof beams (guide.beams, with type width) drawn as a blue band + legend
 (were thin grey lines under the grid); automatic สะพาน OFF by default (design.autoSupports === true to turn on; Yasothon set true so its roof is
 unchanged) — user: auto purple supports/ตุ๊กตา looked like real members. E2E new house base 101.3 → 102.1 t (longer rafter spans), re-saved.
+ROOF POSTS ON RC BEAMS + LOAD PATH (2026-11-05): roofMembers — a ดั้ง/ตุ๊กตา on an RC roof beam of the structure (roof.guide.beams, within
+w/2 + 0.10 m) is supported (bearLoose under "rcBeam", no "ไม่มีอะเสรับ"); roofLink sends it to that beam. cli/roof-loadpath.cjs (browser, dev server):
+10 cases (Yasothon ±supports / L240, user files, rc/span/beam plate modes, posts on RC beams): roof load off = points sent (≤ 2 kg) in all;
+3D base rises = points (+ heavier beams when types change); accumulated column loads +10 % (max of continuous / simple reactions, by design);
+"moved" points (rc/beam modes on a floor with no RC beams) are snapped to the nearest column with a warning. Independent roof total ±5 %.
