@@ -318,7 +318,9 @@ export function typeCostM(t, P = BEAM_PRICE) {
   const stA = (BARS[t.st]?.A ?? 0.28) * (t.stSets ?? 1), per = 2 * (t.b + t.h) - 0.16, stir = ((stA * 7850) / 1e4) * per * ((1 / (t.sSup || 0.2) + 1 / (t.sMid || 0.2)) / 2);
   return t.b * t.h * P.conc + (t.b + 2 * t.h) * P.form + (kgmF(t.top) + kgmF(t.bot) + 0.5 * kgmF(t.topX) + 0.6 * kgmF(t.botX) + stir) * P.steel;
 }
-const typeWeight = (t) => typeCostM(t);
+// mat.beamPick "steel" (default, user 2026-11-06: "more steel before a bigger beam"): the smaller concrete section first (b·h), then the
+// cheaper — a 20×40 with more bars is taken before a 20×50 with fewer; "cost" = cheapest per metre (2026-11-05)
+const typeWeightOf = (mat) => (mat?.beamPick === "cost" ? (t) => typeCostM(t) : (t) => Math.round(t.b * t.h * 1e4) * 1e6 + typeCostM(t));
 // numerical robustness (user 2026-11-05): node and the browser differ in the last bits of pow / trig (different libm), which could flip a
 // choice sitting exactly on a limit. Type CHOICES are therefore made with the full-precision forces × (1 + 1e-9) — only types that pass with
 // that margin are chosen (never less safe); the reported pass / fail is always the plain full-precision check. Nothing is rounded.
@@ -704,6 +706,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     else warnings.push(`${e.from} ที่ (${e.p[0].toFixed(2)}, ${e.p[1].toFixed(2)}) ไม่มีเสาหรือคานรับที่ชั้นนี้ — แรงหายไป`);
   }
   // types: fixed per drawn beam, or auto (lightest passing); iterate because self weight and stiffness depend on the choice
+  const typeWeight = typeWeightOf(mat);
   const order = types.map((t, i) => ({ t, i })).sort((x, y) => typeWeight(x.t) - typeWeight(y.t) || x.i - y.i);
   const typeOf = new Map(); // drawn beam index → type index in use
   (floor.beams ?? []).forEach((b, i) => typeOf.set(i, b.type ?? minTypes?.[i] ?? order[0]?.i ?? 0));

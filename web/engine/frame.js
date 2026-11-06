@@ -165,7 +165,7 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
 
 // gravity analysis of every floor (continuous beams, top down) with column loads accumulated floor by floor
 function gravity(frame, minTypes) {
-  const { floors, beamTypes, colTypes, mat } = frame, n = floors.length, an = new Array(n), cols = [], warnings = [];
+  const { floors, beamTypes, colTypes } = frame, mat = { ...frame.mat, beamPick: frame.beamAutoMode === "cost" ? "cost" : "steel" }, n = floors.length, an = new Array(n), cols = [], warnings = [];
   let above = []; // columns of the floor above: { p, Pbot, stack }
   let downLines = []; // stair bottoms handed to the floor below
   for (let k = n - 1; k >= 0; k--) {

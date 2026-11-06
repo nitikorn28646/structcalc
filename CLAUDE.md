@@ -569,3 +569,11 @@ as Av ≥ 0.0015·b·s with the installed s (r.AminSheet keeps the sheet value) 
 which (F3), the spacing limits and shear/torsion strength stay unchanged. Auto types try RB6 @0.20→0.10 before RB9 (as before). beamTypes:
 final repair after prune (grow types of spans still failing, ≤ 2 rounds). Yasothon auto k 3/5: 57/57, RB6 on 54/57 spans; user files all RB6.
 Habit (legacy) mode may leave 2 short torsion cantilevers NG (flagged) — test allows n − 2. audit-beam same findings (0 CRITICAL). E2E base 199.3 t.
+STEEL FIRST (2026-11-06, user: "between more steel and a bigger beam I choose more steel — sections came out too big"): frame.beamAutoMode
+"steel" = new default (UI "เพิ่มเหล็กก่อนขยายหน้าตัด"; "cost" / "habit" kept). beamTypes BEAM_STEEL: sections smallest b·h first (20×40 first,
+whole 10 cm depths, 5 cm only if none), bars DB12 → DB16 → DB20 limited only by 2 layers (no 5 / 3 caps), one bar per face per step, compression
+bars added on doubly / concrete-stress failures, deflection answered with bars (Branson); first section that passes wins. Final step: spans left on
+a bigger section than their own smallest get a type at that section (kept only if nothing fails). floor.js auto pick: mat.beamPick "steel" (set by
+frame.js from beamAutoMode) = smallest section first, then cost. Real limit seen: fc ≤ 65 ksc → 20×40 needs As′ > what 20 cm holds (e.g. Yasothon
+1-1 M− 2.87 t-m: As′ 16.8 > 12 cm²) → 20×50. Results k 3: Yasothon 15.38 m³ (cost 16.04), max 20×60; _roof3 60/84 on 20×40, no 20×80; user files
+≤ 20×50. More types (Yasothon 9, _roof3 14). beamtypes-check updated; regress / audit-beam identical (they use the project / cost types).

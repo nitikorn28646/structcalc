@@ -52,10 +52,11 @@ export function designBH(sps, b, h, bar, mat, g, start = null) {
     // supports may bring the top up to the bottom limit — then the next bar size, then the next section
     if (nB + xB > (g.maxBot ?? 99) || nT > (g.maxTop ?? 99) || nT + xT > (g.maxBot ?? 99)) return null;
     if (!fitsLayers(t, mat, g)) return null;
-    const cs = sps.map((sp) => checkEnv(t, robustSpan(sp), mat)); // choice with the 1e-9 margin (node / browser alike)
+    const cs = sps.map((sp) => checkEnv(t, robustSpan(sp), mat));
     if (cs.every((c) => c.ok)) return { ...t };
-    let grew = false;
+    let grew = false; const n0 = [nT, nB, xT, xB];
     for (const c of cs.filter((x) => !x.ok)) {
+      if (c.defl?.ok === false && g.mode === "steel" && !c.error) { xB++; if (c.sup) xT++; grew = true; continue; } // steel first: more bars stiffen the cracked section (Branson)
       if (c.error || c.defl?.ok === false || c.mid?.minDepthOk === false || c.sup?.minDepthOk === false) return null; // needs another b × h
       const m = c.mid, s = c.sup;
       if (m && (m.botOk === false || m.doublyCheck !== "OK" || m.AsMinOk === false)) { xB++; grew = true; } // As,min too: more bars, not a bigger size
@@ -64,8 +65,9 @@ export function designBH(sps, b, h, bar, mat, g, start = null) {
       if (s && s.topOk === false) { nB++; grew = true; }
       if ([m, s].some((r) => r && (r.compBarsOk === false || r.barsFit === false))) return null; // needs another b × h (audit F1 / F5)
       for (const r of [m, s]) if (r?.torsionAciOk === false && r.torsionAci.extraFace > 0 && (typeof r.reqBot !== "number" || r.provBot < r.reqBot + r.torsionAci.extraFace || r.provTop < r.reqTop + r.torsionAci.extraFace)) { if (r === m) { xB++; nT++; } else { xT++; nB++; } grew = true; } // torsion longitudinal bars
-      if (m?.stressOk === false) { xB++; grew = true; }
-      if (s?.stressOk === false) { xT++; grew = true; }
+      if (m?.stressOk === false) { xB++; if (g.mode === "steel") nT++; grew = true; } // steel first: compression bars lower the concrete stress
+      if (s?.stressOk === false) { xT++; if (g.mode === "steel") nB++; grew = true; }
+      if (g.mode === "steel" && [m, s].some((r) => r && r.doublyCheck && r.doublyCheck !== "OK")) { if (m && m.doublyCheck && m.doublyCheck !== "OK") nT++; if (s && s.doublyCheck && s.doublyCheck !== "OK") nB++; }
       for (const [r, k] of [[s, "sSup"], [m, "sMid"]]) if (r && (r.stirrup === "CHECK_SPACING" || r.AminOk === false || r.vOk === false || r.minShearOk === false || (r.torsionAciOk === false && t[k] > Math.min(r.torsionAci.sReq, r.torsionAci.sTor) + 1e-9))) {
         if (r.vOk === false || r.VpOk === false) return null; // shear / torsion stress beyond the section: deeper or wider
         if (t[k] - g.ds >= g.sMin - 1e-9) t[k] = +(t[k] - g.ds).toFixed(3); else if (si + 1 < g.stirrups.length) { si++; t.sSup = t.sMid = g.sMax; } else return null;
@@ -74,7 +76,8 @@ export function designBH(sps, b, h, bar, mat, g, start = null) {
       if (c.mid && c.mid.VpOk === false || c.sup?.VpOk === false) return null;
     }
     if (!grew) return null;
-    if (Math.max(nT, nB) > 4) { nT = Math.min(nT, 4); nB = Math.min(nB, 4); } // through bars: keep them few, extras do the rest
+    if (g.mode === "steel") [nT, nB, xT, xB] = [nT, nB, xT, xB].map((v, i) => Math.min(v, n0[i] + 1)); // one bar per face and step: the layers fill up gradually
+    if (g.mode !== "steel" && Math.max(nT, nB) > 4) { nT = Math.min(nT, 4); nB = Math.min(nB, 4); } // through bars: keep them few, extras do the rest
   }
   return null;
 }
@@ -112,9 +115,24 @@ function trimType(t, sps, mat, g) {
 export const BEAM_COST = { ...BEAM_GEN, mode: "cost", prefer: [[0.2, 0.4]], widths: [0.2, 0.25, 0.3], depths: [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
   bigWidths: [0.4], bigDepths: [0.85, 0.9, 0.95, 1.0] };
 const costSections = (g) => g.widths.flatMap((b) => g.depths.map((h) => [b, h])).sort((x, y) => (x[0] * x[1] * g.price.conc + (x[0] + 2 * x[1]) * g.price.form) - (y[0] * y[1] * g.price.conc + (y[0] + 2 * y[1]) * g.price.form));
-export const bigGen = (g) => (g.mode === "cost" ? { ...g, widths: [...g.widths, ...(g.bigWidths ?? [])], depths: [...g.depths, ...(g.bigDepths ?? [])] } : { ...g, sections: [...g.sections, ...(g.bigSections ?? [])] });
+// steel first (default, user 2026-11-06: "between more steel and a bigger beam I choose more steel"): sections from the smallest
+// (20×40 first, then by b·h, depths in whole 10 cm, 5 cm only when none passes), bars DB12 → DB16 → DB20 up to 2 layers (no 5-bar cap),
+// deflection answered with bars too; the first section that passes is kept (its cheapest bars), never a bigger one for less steel
+export const BEAM_STEEL = { ...BEAM_COST, mode: "steel", bars: ["DB 12", "DB 16", "DB 20"], maxBot: null, maxTop: null }; // bar counts limited by the 2 layers only
+const optMode = (g) => g.mode === "cost" || g.mode === "steel";
+export const bigGen = (g) => (optMode(g) ? { ...g, widths: [...g.widths, ...(g.bigWidths ?? [])], depths: [...g.depths, ...(g.bigDepths ?? [])] } : { ...g, sections: [...g.sections, ...(g.bigSections ?? [])] });
 // the first section × bar size in the designer's order that passes every span in sps (BEAM_GEN.sections, then bars DB12 → DB16)
 export function designGroup(sps, mat, g = BEAM_GEN) {
+  if (g.mode === "steel") {
+    const area = (x) => x[0] * x[1], first = (secs) => { for (const [b, h] of secs) { let best = null;
+        for (const bar of g.bars) { const t = designBH(sps, b, h, bar, mat, g); if (t) { const c = beamCost(t, g); if (!best || c < best.cost - 1e-6) best = { t, cost: c }; } }
+        if (best) return best; } return null; };
+    const all = g.widths.flatMap((b) => g.depths.map((h) => [b, h])).sort((x, y) => area(x) - area(y) || y[1] - x[1]);
+    const pref = g.prefer ?? [], p = first(pref); if (p) return p;
+    const a0 = pref.length ? Math.max(...pref.map(area)) : 0, rest = all.filter((x) => area(x) >= a0 - 1e-9 && !pref.some((q) => q[0] === x[0] && q[1] === x[1]));
+    const whole = (h) => Math.abs(Math.round(h * 10) - h * 10) < 1e-9;
+    return first(rest.filter((x) => whole(x[1]))) ?? first(rest.filter((x) => !whole(x[1]))) ?? first(all.filter((x) => area(x) < a0));
+  }
   if (g.mode === "cost") {
     const cheapest = (gg) => { let best = null;
       for (const [b, h] of costSections(gg)) {
@@ -161,7 +179,7 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
   // Σ (cost per metre of the group's heaviest own design × the group's length) — dynamic programming (audit 2026-11-05: equal counts put
   // spans needing 20×50 into the 20×70 of the worst span of their third)
   let cuts = Array.from({ length: n + 1 }, (_, i) => Math.round((i * list.length) / n));
-  if (g.mode === "cost" && n > 1) {
+  if (optMode(g) && n > 1) {
     const N = list.length, len = list.map((o) => o.sp.len), pre = [0]; len.forEach((v) => pre.push(pre[pre.length - 1] + v));
     const c = (i, j) => list[j - 1].d.cost * (pre[j] - pre[i]); // items i..j−1, the last is the dearest
     const F = Array.from({ length: n + 1 }, () => new Array(N + 1).fill(Infinity)), P = Array.from({ length: n + 1 }, () => new Array(N + 1).fill(0)); F[0][0] = 0;
@@ -175,7 +193,7 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
     // all of them, which failed for many spans and made the repair add types — 12 types for k = 1, audit 2026-11-05)
     const split = (gr) => { const d = designGroup(gr.map((o) => o.sp), mat, g); if (d) return [{ d, n: gr.length }]; if (gr.length === 1) return [{ d: gr[0].d, n: 1 }];
       const m = Math.ceil(gr.length / 2); return [...split(gr.slice(0, m)), ...split(gr.slice(m))]; };
-    const parts = g.mode === "cost" ? split(grp) : [{ d: designGroup(grp.map((o) => o.sp), mat, g) ?? grp[grp.length - 1].d, n: grp.length }]; // habit: as before
+    const parts = optMode(g) ? split(grp) : [{ d: designGroup(grp.map((o) => o.sp), mat, g) ?? grp[grp.length - 1].d, n: grp.length }]; // habit: as before
     for (const { d, n: cnt } of parts) types.push({ ...d.t, cost: d.cost, count: cnt });
   }
   types.push(...bigTypes);
@@ -189,7 +207,7 @@ export function autoBeamTypes(res, mat, k, g = BEAM_GEN, env = null) {
 // lowest cost, is kept. All drawn beams go back to "auto" (the analysis then takes the cheapest passing type per beam).
 import { analyzeFrame } from "./frame.js";
 export function generateBeamTypes(frame, k, g0 = null) {
-  const g = g0 ?? (frame.beamAutoMode === "habit" ? BEAM_GEN : BEAM_COST); // default: minimum cost (user 2026-11-05)
+  const g = g0 ?? (frame.beamAutoMode === "habit" ? BEAM_GEN : frame.beamAutoMode === "cost" ? BEAM_COST : BEAM_STEEL); // default: minimum cost (user 2026-11-05)
   let f = { ...frame, floors: frame.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map((b) => ({ ...b, type: null })) })) };
   let r = analyzeFrame(f), best = null;
   const env = new Map();
@@ -213,7 +231,7 @@ export function generateBeamTypes(frame, k, g0 = null) {
       for (const [ti, sps] of [...new Set(fail.map((sp) => sp.typeIdx))].map((ti) => [ti, fail.filter((sp) => sp.typeIdx === ti)])) {
         const t = types[ti], bar = parseBars(t.top)?.bar ?? "DB 12", grown = designBH(sps.map((sp) => ({ ...sp, vDone: true })), t.b, t.h, bar, f.mat, g, t);
         if (grown) types[ti] = { ...t, ...grown, name: t.name };
-        else { const gR = { ...bigGen(g), bars: [...g.bars, "DB 20"] }; // last resort only: DB20 (user habit DB12 → DB16 → DB20) and the big sections
+        else { const gR = { ...bigGen(g), bars: [...new Set([...g.bars, "DB 20"])] }; // last resort only: DB20 (user habit DB12 → DB16 → DB20) and the big sections
           if (types.length >= k + 2) { // enough types already (user: few sections in a building): this type grows for all the spans using it
             const mine = r.floors.flatMap((a) => a.spans).filter((sp) => sp.typeIdx === ti).map((sp) => ({ ...sp, vDone: true })), dm = designGroup(mine, f.mat, gR);
             if (dm) types[ti] = { ...dm.t, name: t.name, auto: true }; continue; }
@@ -269,6 +287,26 @@ export function generateBeamTypes(frame, k, g0 = null) {
     if (!grew) break;
     pr = pruneUnusedTypes({ ...f, beamTypes: tt, floors: pr.floors });
   }
+  // steel first (user 2026-11-06): a span left on a bigger section than its own smallest passing one (the group's type was sized for a
+  // heavier span) gets a type at that smaller section — one per b × h for all such spans when one passes them all; kept only if every
+  // span still passes after a fresh analysis
+  if (g.mode === "steel") for (let pass = 0; pass < 2; pass++) {
+    const rr = pr.res ?? analyzeFrame({ ...f, beamTypes: pr.beamTypes, floors: pr.floors }), sps = rr.floors.flatMap((a) => a.spans);
+    const by = new Map();
+    for (const sp of sps) { const x = { ...sp, vDone: true }, own = designGroup([x], f.mat, g); if (!own || own.t.b * own.t.h >= sp.type.b * sp.type.h - 1e-9) continue;
+      const key = `${own.t.b}|${own.t.h}`; if (!by.has(key)) by.set(key, { b: own.t.b, h: own.t.h, sps: [], own: [] }); by.get(key).sps.push(x); by.get(key).own.push(own.t); }
+    if (!by.size) break;
+    const add = [];
+    for (const { b, h, sps: xs, own } of by.values()) { let t = null;
+      for (const bar of g.bars) { const c = designBH(xs, b, h, bar, f.mat, g); if (c && (!t || beamCost(c, g) < beamCost(t, g))) t = c; }
+      add.push(...(t ? [t] : own)); }
+    const uniq = [...new Map([...pr.beamTypes, ...add.map((t) => ({ ...t, auto: true }))].map((t) => [JSON.stringify({ ...t, name: "" }), t])).values()];
+    const tt = uniq.sort((a, b) => a.b * a.h - b.b * b.h || a.h - b.h || beamCost(a, g) - beamCost(b, g)).map((t, i) => ({ ...t, name: `B${i + 1}` }));
+    const cand = pruneUnusedTypes({ ...f, beamTypes: tt, floors: pr.floors }), rc = cand.res ?? analyzeFrame({ ...f, beamTypes: cand.beamTypes, floors: cand.floors });
+    if (rc.floors.flatMap((a) => a.spans).filter((sp) => sp.ok).length < sps.filter((sp) => sp.ok).length) break;
+    pr = cand;
+  }
+  { const rr = pr.res ?? analyzeFrame({ ...f, beamTypes: pr.beamTypes, floors: pr.floors }); const s = score(rr); Object.assign(best.s, s); }
   return { beamTypes: pr.beamTypes, floors: pr.floors, ...best.s, unmatched: best.unmatched, big: best.big ?? [], asked: k };
 }
 
