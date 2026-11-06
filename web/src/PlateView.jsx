@@ -161,10 +161,10 @@ export function PlatePlan({ g, plates, posts = [], loose = [], columns, hover, s
         const near = all.filter((q) => isBad(q) && Math.hypot(q.x - p.x, q.y - p.y) < 0.8), first = bad && !all.slice(0, i).some((q) => isBad(q) && Math.hypot(q.x - p.x, q.y - p.y) < 0.8);
         return (
           <g key={`d${i}`}>
-            {bad && <circle cx={p.x} cy={Y(p.y)} r={sc * 1.3} fill="#f0443833" stroke={c} strokeWidth={sc * 0.08} />}
-            <circle cx={p.x} cy={Y(p.y)} r={sc * 1.1} fill={bad ? c : dark ? "#0f1222" : "#fff"} stroke={c} strokeWidth={sc * 0.25} />
-            <path d={`M${p.x - sc * 0.65} ${Y(p.y)}H${p.x + sc * 0.65}M${p.x} ${Y(p.y) - sc * 0.65}V${Y(p.y) + sc * 0.65}`} stroke={bad ? "#fff" : c} strokeWidth={sc * 0.2} />
-            <text x={p.x + sc * 0.9} y={Y(p.y) + sc * 1.2} fontSize={sc * 0.6} fill={c}>{first ? `ดั้ง ! ไม่มีอะเสรับ${near.length > 1 ? ` (${near.length} ต้น)` : ""}` : ""}</text>
+            {bad && <circle cx={p.x} cy={Y(p.y)} r={sc * 0.8} fill="#f0443833" stroke={c} strokeWidth={sc * 0.08} />}
+            <circle cx={p.x} cy={Y(p.y)} r={sc * 0.5} fill={bad ? c : dark ? "#0f1222" : "#fff"} stroke={c} strokeWidth={sc * 0.14} />
+            <path d={`M${p.x - sc * 0.3} ${Y(p.y)}H${p.x + sc * 0.3}M${p.x} ${Y(p.y) - sc * 0.3}V${Y(p.y) + sc * 0.3}`} stroke={bad ? "#fff" : c} strokeWidth={sc * 0.12} />
+            <text x={p.x + sc * 0.7} y={Y(p.y) + sc * 0.9} fontSize={sc * 0.6} fill={c}>{first ? `ดั้ง ! ไม่มีอะเสรับ${near.length > 1 ? ` (${near.length} ต้น)` : ""}` : ""}</text>
           </g>
         );
       })}
