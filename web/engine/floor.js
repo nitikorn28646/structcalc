@@ -393,6 +393,11 @@ export function checkSpan(t, sp, mat) {
   const torsionOn = MtUse > (Tlim ?? 0) / 4; // threshold: ¼ of the cracking torque (11.5.1), Tlim as above
   for (const [r, s, k] of [[out.mid, t.sMid, "mid"], [out.sup, t.sSup, "sup"]]) {
     if (!r) continue;
+    // minimum stirrups at the INSTALLED spacing (user decision 2026-11-06, option ข): the frozen sheet takes Av ≥ 0.0015·b·sMax with sMax the
+    // largest spacing allowed (d/2 …), which no RB6 stirrup can meet in a beam deeper than ~45 cm whatever its spacing. The rule is applied
+    // with the spacing actually used, Av ≥ 0.0015·b·s — not below ACI 318-11 eq. (11-13) 3.5·bw·s/fyt (= 0.00146·b·s for SR24); that rule
+    // (F3 below), the spacing limits (sheet d/2 · d/4, ACI d/2 ≤ 60 cm, torsion ph/8 ≤ 30 cm) and the shear / torsion strength are unchanged.
+    if (typeof r.sMax === "number" && !r.stExempt) { r.AminSheet = r.Amin; r.Amin = 0.0015 * bcm * s * 100; r.AminOk = r.Aact >= r.Amin - 1e-9; r.AminAt = s; }
     // F1: compression bars below the neutral axis (k < d′/d) give fs′ ≤ 0 → As′ < 0 and the check passed; such a section must be deeper
     if (r.mode === "doubly" && !(r.fsPrime > 0)) r.compBarsOk = false;
     // stresses of the bars actually provided (cracked transformed section, As′ with 2n − 1): fc ≤ allowable, fs ≤ allowable
@@ -447,7 +452,7 @@ export function spanReasons(c) {
     if (r.VpOk === false) out.push(`${w}: แรงเฉือนเกินขีดจำกัดหน้าตัด (V − Vc > 1.32√f'c·b·d)`);
     if (r.vtOk === false || r.vOk === false) out.push(`${w}: หน่วยแรงบิด/เฉือนรวมเกินกำหนด`);
     if (r.stirrup === "CHECK_SPACING") out.push(`${w}: ระยะเหล็กปลอกเกิน s ≤ ${typeof r.sMax === "number" ? r.sMax.toFixed(2) : "–"} ม.`);
-    if (r.AminOk === false) out.push(`${w}: เหล็กปลอกน้อยกว่าขั้นต่ำ`);
+    if (r.AminOk === false) out.push(`${w}: เหล็กปลอกน้อยกว่าขั้นต่ำ — Av ${(+r.Aact).toFixed(2)} < 0.0015·b·s = ${(+r.Amin).toFixed(2)} ซม.²${r.AminAt ? ` (s ${r.AminAt.toFixed(2)} ม.)` : ""}`);
     if (r.compBarsOk === false) out.push(`${w}: เหล็กรับแรงอัดอยู่ใต้แกนสะเทิน (k ${r.k.toFixed(3)} < d′/d ${(r.dPrime / r.d).toFixed(3)}) — หน้าตัดตื้นเกินไป ต้องเพิ่มความลึก`);
     if (r.stressOk === false) out.push(`${w}: หน่วยแรงจริงของเหล็กที่ใส่ fc ${r.act.fc.toFixed(1)} / ${r.fc.toFixed(1)} · fs ${r.act.fs.toFixed(0)} / ${r.fs.toFixed(0)} กก./ซม.² เกินที่ยอมให้`);
     if (r.barsFit === false) out.push(`${w}: จัดเหล็กไม่ได้ — จำนวนเหล็กต่อชั้นเกินที่ใส่ได้ตามความกว้าง (หรือเกิน 3 ชั้น)`);

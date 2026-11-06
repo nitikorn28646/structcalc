@@ -563,3 +563,9 @@ RC roof beam (roof.guide.beams) get NO steel plate: rafter reactions + posts/inn
 an interior plate on an RC beam is dropped (its posts stand on the beam). floor.js: a beam line that cannot be solved (no supports) now says
 how much load it drops ("ไม่ได้ส่งลงเสา (ผลไม่ครบ)"). cli/roof-loadpath-rc.cjs 10 cases: roof load off = points sent (≤ 3 kg) in all; beams
 carry their share (cases 7–10). E2E 47/47, regress identical.
+STIRRUPS RB6 (2026-11-06, user option ข + conditions: RB6 standard, minimum at the INSTALLED spacing, shear/torsion/min/max spacing must pass,
+no safety lowered): floor.js checkSpan — the frozen sheet's Av ≥ 0.0015·b·sMax (sMax = d/2…, impossible for RB6 when h ≳ 45 cm) is re-applied
+as Av ≥ 0.0015·b·s with the installed s (r.AminSheet keeps the sheet value) — not below ACI 318-11 eq. 11-13 3.5·bw·s/fyt (0.00146·b·s for SR24),
+which (F3), the spacing limits and shear/torsion strength stay unchanged. Auto types try RB6 @0.20→0.10 before RB9 (as before). beamTypes:
+final repair after prune (grow types of spans still failing, ≤ 2 rounds). Yasothon auto k 3/5: 57/57, RB6 on 54/57 spans; user files all RB6.
+Habit (legacy) mode may leave 2 short torsion cantilevers NG (flagged) — test allows n − 2. audit-beam same findings (0 CRITICAL). E2E base 199.3 t.

@@ -253,7 +253,22 @@ export function generateBeamTypes(frame, k, g0 = null) {
   const area = (x) => { const b = parseBars(x); return b ? b.n * BARS[b.bar].A : 0; }, steel = (t) => area(t.top) + area(t.bot) + area(t.topX) + area(t.botX);
   const types = best.types.filter((_, i) => used.has(i)).sort((a, b) => a.b * a.h - b.b * b.h || a.h - b.h || steel(a) - steel(b) || beamCost(a, g) - beamCost(b, g))
     .map((t, i) => ({ ...t, name: `B${i + 1}` }));
-  const pr = pruneUnusedTypes({ ...f, beamTypes: types });
+  let pr = pruneUnusedTypes({ ...f, beamTypes: types });
+  // final repair (2026-11-06): the last re-analysis (types renamed / pruned, self weight settled) can tip a span over — grow the type of every
+  // span still failing in place (stirrups closer / RB6 → RB9 → 2 sets, more bars), then prune again; at most 2 rounds
+  for (let pass = 0; pass < 2; pass++) {
+    const rr = pr.res ?? analyzeFrame({ ...f, beamTypes: pr.beamTypes, floors: pr.floors }), fail = rr.floors.flatMap((a) => a.spans).filter((sp) => !sp.ok);
+    if (!fail.length) break;
+    const tt = pr.beamTypes.map((t) => ({ ...t })); let grew = false;
+    for (const ti of new Set(fail.map((sp) => sp.typeIdx))) {
+      const t = tt[ti]; if (!t) continue;
+      const mine = rr.floors.flatMap((a) => a.spans).filter((sp) => sp.typeIdx === ti).map((sp) => ({ ...sp, vDone: true }));
+      const grown = designBH(mine, t.b, t.h, parseBars(t.top)?.bar ?? "DB 12", f.mat, g, t);
+      if (grown) { tt[ti] = { ...t, ...grown, name: t.name }; grew = true; }
+    }
+    if (!grew) break;
+    pr = pruneUnusedTypes({ ...f, beamTypes: tt, floors: pr.floors });
+  }
   return { beamTypes: pr.beamTypes, floors: pr.floors, ...best.s, unmatched: best.unmatched, big: best.big ?? [], asked: k };
 }
 
