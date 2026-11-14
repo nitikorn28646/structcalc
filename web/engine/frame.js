@@ -130,7 +130,7 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
     const { n, pile, s: bs, w: capWidth, bar } = tt, b = PILES[pile]?.b ?? Number(String(pile).split("-")[1]) / 100, s = Math.max(0.6, (tt.k ?? fo.spacing) * b);
     const inp = { fcPrime: mat.fcFoot ?? mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: fo.fy, cover: mat.coverFoot ?? fo.cover, t: tt.t ?? fo.t, Df: Math.max(tt.Df ?? fo.Df, tt.t ?? fo.t), P, Mx, My, gamma: 1800, pier: "rect",
       bx: pier.Bx / 100, by: pier.By / 100, longBar: bar, shortBar: tt.barS ?? fo.bar, sLong: bs > 0.03 ? bs : 0.15, sShort: tt.sS > 0.03 ? tt.sS : bs > 0.03 ? bs : 0.15, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4, n, pile,
-      pileL: tt.L ?? fo.pileL, fcPile: fo.fcPile, Ptest: safe(pile), sx: s, sy: s, capWidth };
+      pileL: tt.L ?? fo.pileL, fcPile: fo.fcPile, Ptest: safe(pile), sx: s, sy: s, capWidth, capLength: n <= 2 ? tt.len ?? 0 : 0 };
     try {
       // bars given as a count (schedule "5-DB 12"): spacing from the cap width — the engine counts floor((B − 2c)/s + 1) on 1–2 pile caps, floor(B/s + 1) otherwise
       if (tt.nb > 1 || tt.nbS > 1) {
@@ -161,6 +161,49 @@ export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0
     } catch { /* no suggestion */ }
   }
   return best;
+}
+
+// one footing sized on its own (user 2026-11-06: "ปุ่มปรับขนาดฐานรากและระยะเหล็กอัตโนมัติ ของแต่ละฐาน"): the cheapest footing of the same
+// kind and pile that passes this column's governing forces — pile caps: pile count from the current one up, cap thickness, width and length
+// (1–2 piles), bar size and spacing each way; spread footings: the engine's own size search. Bearing under the pier cannot be fixed by the
+// footing (bigger pier / f′c) → reported in `note`, the rest still sized. Returns { type, f, note } or null.
+export function autoFootingFor(frame, res, stack, start = null) {
+  const f = res.footings?.find((x) => x.stack === stack), c = res.columns?.find((x) => x.floor === 0 && x.stack === stack);
+  if (!f || !c) return null;
+  const mat = frame.mat, fo = { ...(frame.footing ?? DEFAULT_FOOTING), soil: frame.soil, utilMax: frame.footUtil, ...(frame.pileLoads ? { pileLoads: frame.pileLoads } : {}) };
+  const cur = start ?? frame.footTypes?.[frame.footPick?.[stack]] ?? null;
+  const run = (tt) => { try { return designFooting(Math.max(f.P, 1), c.lv, mat, { ...fo, fixed: tt }, f.Mx ?? 0, f.My ?? 0); } catch { return null; } };
+  const kg = (bar, n, L) => ((BARS[bar]?.A ?? 0) * n * L * 7850) / 1e4;
+  const cost = (d) => d.r.Bx * d.r.By * (d.inp?.t ?? 0.4) * 2500 + (kg(d.inp.longBar, d.r.nLong ?? 0, d.r.Bx) + kg(d.inp.shortBar, d.r.nShort ?? 0, d.r.By)) * 28 + (d.n ?? 0) * 3000;
+  if (f.kind === "spread") {
+    const tt = { kind: "spread", t: cur?.t ?? f.inp?.t ?? 0.3, Df: cur?.Df ?? f.inp?.Df ?? 1.2, bar: cur?.bar ?? "DB 12", barS: cur?.barS ?? cur?.bar ?? "DB 12", s: 0.15, sS: 0.15, Bx: 0, By: 0 };
+    const d = run(tt);
+    if (!d?.r) return { type: null, f: d, note: d?.error ?? "หาขนาดไม่ได้" };
+    return { type: { ...tt, Bx: d.r.Bx, By: d.r.By, t: d.inp?.t ?? tt.t, nb: d.r.nLong, nbS: d.r.nShort }, f: d, note: d.ok ? "" : "ยังไม่ผ่าน" };
+  }
+  const pile = cur?.pile ?? f.pile ?? "I-18", Df = cur?.Df ?? f.inp?.Df ?? 1.2, k = cur?.k ?? 3, n0 = Math.max(1, cur?.n ?? f.n ?? 1);
+  const bars = ["DB 12", "DB 16", "DB 20"].flatMap((bar) => [0.2, 0.175, 0.15, 0.125, 0.1].map((s) => ({ bar, s, w: (BARS[bar]?.A ?? 1) / s }))).sort((a, b) => a.w - b.w);
+  const combos = bars.flatMap((L) => bars.map((S) => ({ L, S, w: L.w + S.w }))).sort((a, b) => a.w - b.w);
+  const probes = [["DB 12", "DB 12"], ["DB 16", "DB 12"], ["DB 16", "DB 16"], ["DB 20", "DB 16"], ["DB 20", "DB 20"]].map(([a, b]) => ({ L: { bar: a, s: 0.1 }, S: { bar: b, s: 0.1 } }));
+  // pass test; bearing under the pier ignored here (reported)
+  const pass = (d) => d?.r && !d.error && (d.ok || (d.r.bearingOk === false && capOk({ ...d.r, bearingOk: true }, d.n) && d.r.limOk !== false && (!d.r.bore || d.r.bore.ok)));
+  const mk = (n, t, w, len, cb) => ({ n, pile, t, Df: Math.max(Df, t), k, w, len, bar: cb.L.bar, s: cb.L.s, barS: cb.S.bar, sS: cb.S.s, nb: 0, nbS: 0 });
+  const ts = []; for (let t = 0.3; t <= 1.2 + 1e-9; t = Math.round((t + 0.05) * 100) / 100) ts.push(t);
+  let best = null;
+  for (let n = n0; n <= 9 && !best; n++) {
+    const a0 = run(mk(n, 0.5, 0, 0, combos[0])); if (!a0?.r) continue;
+    const Bx0 = a0.r.Bx, By0 = a0.r.By, ws = n <= 2 ? [0, ...Array.from({ length: 15 }, (_, i) => Math.round((0.6 + 0.1 * i) * 10) / 10).filter((w) => w > By0 + 1e-9 || n === 1)] : [0];
+    const lens = n === 2 ? [0, ...[0.1, 0.2, 0.3, 0.4, 0.5, 0.6].map((x) => Math.round((Bx0 + x) * 10) / 10)] : [0];
+    const geoms = ts.flatMap((t) => ws.flatMap((w) => lens.map((len) => ({ t, w, len, vol: (n === 1 && w ? w : len || Bx0) * (w || By0) * t })))).sort((a, b) => a.vol - b.vol);
+    for (const g of geoms) {
+      if (best && g.vol * 2500 >= best.cost) break;
+      if (!probes.some((cb) => pass(run(mk(n, g.t, g.w, g.len, cb))))) continue;
+      for (const cb of combos) { const tt = mk(n, g.t, g.w, g.len, cb), d = run(tt); if (pass(d)) { const cst = cost(d); if (!best || cst < best.cost) best = { tt, d, cost: cst }; break; } }
+    }
+  }
+  if (!best) return { type: null, f: null, note: "ไม่พบขนาดที่ผ่าน (เข็ม ≤ 9 ต้น, หนา ≤ 1.20 ม.) — เปลี่ยนขนาดเข็ม" };
+  const note = best.d.r.bearingOk === false ? `แรงแบกทานใต้เสาเกิน (${best.d.r.bearing.toFixed(1)} > ${best.d.r.fnb1.toFixed(1)} กก./ซม.²) — ขยายตอม่อ หรือเพิ่ม f′c` : "";
+  return { type: best.tt, f: best.d, note };
 }
 
 // gravity analysis of every floor (continuous beams, top down) with column loads accumulated floor by floor

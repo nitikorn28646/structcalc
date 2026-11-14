@@ -10,7 +10,7 @@ import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { footingModel, pileCapModel } from "./drawings.js";
 import { PILES } from "../engine/footing.js";
-import { DEFAULT_FOOTING, PILE_SAFE, designFooting } from "../engine/frame.js";
+import { DEFAULT_FOOTING, PILE_SAFE, designFooting, autoFootingFor } from "../engine/frame.js";
 import FootingPlan, { FootingLegend, footingMarks } from "./FootingPlan.jsx";
 import { FootingDetail } from "./Details.jsx";
 import { FootingCage3D } from "./Cage3D.jsx";
@@ -76,6 +76,18 @@ export function FootingTypes({ frame, set, res }) {
   // construction-drawing detail (plan + section) and a 3D cage on demand (one at a time)
   const draw = (f) => f?.inp && f.r ? (cage3 === f.stack ? <FootingCage3D f={f} className="h-[260px] overflow-hidden rounded-lg" /> : <FootingDetail f={f} mark={marks?.mark?.(f) ?? ""} className="mx-auto h-[78mm] w-full overflow-visible" />) : <p className="text-gray-400">ไม่มีรูป ({f?.error ?? "ยังไม่ได้ออกแบบ"})</p>;
   const marks = footingMarks(res.footings);
+  // per footing auto size (user 2026-11-06): the cheapest passing footing for this column → its own type (the picked type is changed in place
+  // when no other column uses it, else a new type F… is added and picked for this column only)
+  const [autoMsg, setAutoMsg] = useState({});
+  const autoOne = (f) => {
+    const o = autoFootingFor(frame, res, f.stack);
+    if (!o?.type) { setAutoMsg((m) => ({ ...m, [f.stack]: { ok: false, text: o?.note || "หาขนาดที่ผ่านไม่ได้" } })); return; }
+    const pi = pick[f.stack], own = pi != null && foots.filter((g) => pick[g.stack] === pi).length === 1;
+    const d = o.f, txt = `ปรับแล้ว: ${d.n ? `${d.n} × ${d.pile} · ` : ""}${fmt(d.r.Bx, 2)} × ${fmt(d.r.By, 2)} × ${fmt(d.inp?.t ?? 0, 2)} ม. · ${o.type.bar}${o.type.s ? ` @${o.type.s}` : ""} / ${o.type.barS}${o.type.sS ? ` @${o.type.sS}` : ""}${o.note ? ` · ${o.note}` : ""}`;
+    if (own) set("footTypes", types.map((t, j) => (j === pi ? { ...o.type, name: t.name } : t)));
+    else { set("footTypes", [...types, { ...o.type, name: nextName() }]); set("footPick", { ...pick, [f.stack]: types.length }); }
+    setAutoMsg((m) => ({ ...m, [f.stack]: { ok: !o.note, text: txt } }));
+  };
   const [cage3, setCage3] = useState(null);
   return (
     <div className="max-w-[1500px] space-y-5 text-[12px]">
@@ -98,7 +110,7 @@ export function FootingTypes({ frame, set, res }) {
           <span className="text-[11px] text-gray-400">ค่าเดียวกับขั้น 6 · ฐานตรวจแรงดันดิน / แรงต่อเข็มด้วย P + Mx + My ทั้งสองแกน และทุกชุดผสมแรงด้านข้างเมื่อเปิดใช้{frame.analysis === "continuous" ? " · ต้องใช้แรงออกแบบแบบค่ามากสุด (โครง 3 มิติ) ในขั้น 7 จึงมีโมเมนต์" : ""}</span>
         </div>
         <p className="mb-1 text-sm font-semibold text-gray-800">1 · Type ฐานรากเสาเข็ม</p>
-        <table className="w-full"><thead><tr>{["ชื่อ", "เข็ม (ต้น)", "ขนาดเข็ม", "หนาฐาน t (ม.)", "ลึก Df (ม.)", "ระยะเข็ม (× ขนาดเข็ม)", "กว้างฐาน (ม.) 1–2 ต้น", "เหล็กแนวยาว", "จำนวน (เส้น)", "@ (ม.)", "เหล็กแนวสั้น", "จำนวน (เส้น)", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
+        <table className="w-full"><thead><tr>{["ชื่อ", "เข็ม (ต้น)", "ขนาดเข็ม", "หนาฐาน t (ม.)", "ลึก Df (ม.)", "ระยะเข็ม (× ขนาดเข็ม)", "กว้างฐาน (ม.) 1–2 ต้น", "ยาวฐาน (ม.) 1–2 ต้น", "เหล็กแนวยาว", "จำนวน (เส้น)", "@ (ม.)", "เหล็กแนวสั้น", "จำนวน (เส้น)", "@ (ม.)", "ใช้", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
           <tbody>{pileRows.map(([t, i]) => <tr key={i} className="border-t border-gray-100">
             <td className={td}><input value={t.name} onChange={(e) => put(i, "name", e.target.value)} className={`${box} w-14`} /></td>
             <td className={td}><select value={t.n} onChange={(e) => put(i, "n", Number(e.target.value))} className={box}>{[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => <option key={n} value={n}>{n}</option>)}</select></td>
@@ -107,6 +119,7 @@ export function FootingTypes({ frame, set, res }) {
             <td className={td}><Num v={t.Df ?? 1.2} on={(v) => put(i, "Df", v)} step="0.1" /></td>
             <td className={td}><Num v={t.k ?? 3} on={(v) => put(i, "k", v)} step="0.5" w="w-14" /></td>
             <td className={td}>{t.n <= 2 ? <Num v={t.w ?? 0} on={(v) => put(i, "w", v)} step="0.1" w="w-14" /> : <span className="text-gray-400">ตามระยะเข็ม</span>}</td>
+            <td className={td} title="0 = จากระยะเข็ม + ระยะขอบ · ใส่ค่าน้อยกว่าที่ระยะขอบต้องการ โปรแกรมใช้ค่าขั้นต่ำ">{t.n === 2 ? <Num v={t.len ?? 0} on={(v) => put(i, "len", v)} step="0.1" w="w-14" /> : t.n === 1 ? <span className="text-gray-400">= กว้าง</span> : <span className="text-gray-400">ตามระยะเข็ม</span>}</td>
             {barCells(t, i)}
           </tr>)}</tbody></table>
         <button onClick={add} className="mt-1 flex items-center gap-1 text-[12px] font-medium text-brand-500"><Plus className="h-3.5 w-3.5" />เพิ่ม type ฐานราก</button>
@@ -136,7 +149,7 @@ export function FootingTypes({ frame, set, res }) {
       </section>
       <section>
         <p className="mb-1 text-sm font-semibold text-gray-800">2 · ฐานรากแต่ละเสา <span className="font-normal text-gray-400">(คลิกแถวเพื่อดูรูป)</span></p>
-        <table className="w-full"><thead><tr>{["เสา (X, Y)", "Type", "ใช้ type", "P (ตัน)", "M x / y (กก.-ม.)", "ชุดแรง", "เข็ม", "ฐาน Bx × By × t (ม.)", "แรงต่อเข็ม / ปลอดภัย (ตัน) · ดิน q / qa", "เหล็ก", "ผล", "เหตุผลที่ไม่ผ่าน"].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
+        <table className="w-full"><thead><tr>{["เสา (X, Y)", "Type", "ใช้ type", "P (ตัน)", "M x / y (กก.-ม.)", "ชุดแรง", "เข็ม", "ฐาน Bx × By × t (ม.)", "แรงต่อเข็ม / ปลอดภัย (ตัน) · ดิน q / qa", "เหล็ก", "ผล", "เหตุผลที่ไม่ผ่าน", ""].map((h, i) => <th key={i} className={th}>{h}</th>)}</tr></thead>
           <tbody>{foots.map((f) => <tr key={f.stack} onClick={() => setSelStack(f.stack)} className={`cursor-pointer border-t border-gray-100 ${selStack === f.stack ? "bg-brand-50" : "hover:bg-gray-50"}`}>
             <td className={td}>{f.stack}</td>
             <td className={td} onClick={(e) => e.stopPropagation()}><select value={pick[f.stack] ?? ""} onChange={(e) => set("footPick", { ...pick, [f.stack]: e.target.value === "" ? undefined : Number(e.target.value) })} className={box}>
@@ -147,7 +160,8 @@ export function FootingTypes({ frame, set, res }) {
             <td className={td}>{!f.r ? "-" : f.kind === "spread" ? `q ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`}</td>
             <td className={td}>{f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error}{f.r?.bore && <span className="block text-[11px] text-[#0e9384]">เข็มเจาะ: {f.r.bore.text}</span>}</td>
             <td className={`${td} ${f.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{f.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
-            <td className={`${td} text-red-600`}>{f.ok ? "" : <>{f.noType && <b>ไม่มี type ไหนผ่าน — แสดง {f.type ?? "ตัว"}ที่ใกล้ผ่านที่สุด · </b>}{why(f)}{f.suggest && <span className="block text-[#b54708]">แนะนำเพิ่ม type: {f.suggest}</span>}</>}</td>
+            <td className={`${td} text-red-600`}>{f.ok ? "" : <>{f.noType && <b>ไม่มี type ไหนผ่าน — แสดง {f.type ?? "ตัว"}ที่ใกล้ผ่านที่สุด · </b>}{why(f)}{f.suggest && <span className="block text-[#b54708]">แนะนำเพิ่ม type: {f.suggest}</span>}</>}{autoMsg[f.stack] && <span className={`block ${autoMsg[f.stack].ok ? "text-green-600" : "text-[#b54708]"}`}>{autoMsg[f.stack].text}</span>}</td>
+            <td className={td} onClick={(e) => e.stopPropagation()}><button onClick={() => autoOne(f)} title="หาขนาดฐาน (จำนวนเข็ม หนา กว้าง ยาว) และเหล็ก/ระยะ ที่ประหยัดที่สุดที่ผ่าน สำหรับเสานี้ — สร้าง / แก้ type ของฐานนี้" className="whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ปรับอัตโนมัติ</button></td>
           </tr>)}</tbody></table>
       </section>
       <section>

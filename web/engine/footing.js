@@ -211,6 +211,8 @@ export function pileCap(inp) {
   // single-row caps take the width across the row as given (1-pile caps both sides)
   if (n <= 2 && inp.capWidth > 0) r.By = inp.capWidth;
   if (n === 1 && inp.capWidth > 0) r.Bx = inp.capWidth;
+  // optional cap length along the pile row (1–2 piles, user 2026-11-06): never shorter than the edge-distance rule above (default path unchanged)
+  if (n <= 2 && inp.capLength > 0) r.Bx = Math.max(r.Bx, inp.capLength);
 
   // pile loads
   const sx2 = xs.reduce((a, x) => a + x * x, 0), sy2 = ys.reduce((a, y) => a + y * y, 0);

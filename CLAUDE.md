@@ -577,3 +577,10 @@ a bigger section than their own smallest get a type at that section (kept only i
 frame.js from beamAutoMode) = smallest section first, then cost. Real limit seen: fc ≤ 65 ksc → 20×40 needs As′ > what 20 cm holds (e.g. Yasothon
 1-1 M− 2.87 t-m: As′ 16.8 > 12 cm²) → 20×50. Results k 3: Yasothon 15.38 m³ (cost 16.04), max 20×60; _roof3 60/84 on 20×40, no 20×80; user files
 ≤ 20×50. More types (Yasothon 9, _roof3 14). beamtypes-check updated; regress / audit-beam identical (they use the project / cost types).
+FOOTING AUTO PER COLUMN (2026-11-06/14, user: "ปุ่มปรับขนาดฐานรากและระยะเหล็กอัตโนมัติ ของแต่ละฐาน" + length input): pile type field `len` (2-pile cap
+length; footing.js pileCap optional inp.capLength, never shorter than the edge-distance rule, default path unchanged). frame.js autoFootingFor(frame,
+res, stack): pile caps = same pile, n from the current count up, t 0.30–1.20, w / len (1–2 piles), bars DB12/16/20 @0.20–0.10 each way, cheapest
+passing (concrete + steel + 3000 ฿/pile), probes skip geometries no bars can save; bearing under the pier ignored in the search and reported
+(bigger pier / f′c); spread = engine size search. UI step 8 footing table: button "ปรับอัตโนมัติ" per row → the picked type changed in place when only
+this column uses it, else a new F… picked for this column; message under the row. Tests (script): Yasothon 15 / user 19 / _big 30 footings all pass
+after; _roof3 6.70,4.00 = 2 × S-22 1.40 × 0.90 × 0.35 passes except bearing 68.4 > 60 ksc (needs a bigger pier). ≤ 0.5 s per footing.
