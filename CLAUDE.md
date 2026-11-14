@@ -584,3 +584,4 @@ passing (concrete + steel + 3000 ฿/pile), probes skip geometries no bars can s
 (bigger pier / f′c); spread = engine size search. UI step 8 footing table: button "ปรับอัตโนมัติ" per row → the picked type changed in place when only
 this column uses it, else a new F… picked for this column; message under the row. Tests (script): Yasothon 15 / user 19 / _big 30 footings all pass
 after; _roof3 6.70,4.00 = 2 × S-22 1.40 × 0.90 × 0.35 passes except bearing 68.4 > 60 ksc (needs a bigger pier). ≤ 0.5 s per footing.
+WALL HEIGHT (2026-11-14, user "ผนังต้องกำหนดความสูงได้"): wall inspector always shows the height field (shows the auto value; typing turns hAuto off); "ลงคาน" text fixed ([object Object] → แนว n).

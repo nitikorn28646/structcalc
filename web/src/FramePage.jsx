@@ -516,8 +516,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               return (<div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Field label="ชนิดผนัง"><Select value={wall.kind} onChange={(v) => setWall({ kind: v })} options={wallOpts} /></Field></div>
               <label className="col-span-2 flex items-center gap-2 text-[13px] text-gray-700"><input type="checkbox" checked={!!wall.hAuto} onChange={(e) => setWall({ hAuto: e.target.checked })} />
-                สูงอัตโนมัติ = ความสูงชั้นบน − ความลึกคานบน {wall.hAuto ? `(${fmt(rw.hFull, 2)} ม.)` : ""}</label>
-              {!wall.hAuto ? <Field label={wall.gable ? "สูงยอดจั่ว" : "สูง"} unit="m"><NumberInput value={wall.h} step="0.1" onChange={(v) => setWall({ h: v })} /></Field> : <div />}
+                สูงอัตโนมัติ = ความสูงชั้นบน − ความลึกคานบน {wall.hAuto ? `(${fmt(rw.hFull, 2)} ม.)` : ""} · พิมพ์ความสูงเองได้ในช่องด้านล่าง</label>
+              <Field label={wall.gable ? "สูงยอดจั่ว (พิมพ์เอง)" : "สูงผนัง (พิมพ์เอง)"} unit="m"><NumberInput value={wall.hAuto ? +(rw.hFull ?? wall.h ?? 0).toFixed(2) : wall.h} step="0.1" onChange={(v) => setWall({ h: v, hAuto: false })} /></Field>
               <Field label="ผนัง"><Select value={wall.layers ?? 1} onChange={(v) => setWall({ layers: Number(v) })} options={[[1, "ชั้นเดียว"], [2, "เบิ้ล (2 ชั้น)"]]} /></Field>
               <label className="col-span-2 flex items-center gap-2 text-[13px] text-gray-700"><input type="checkbox" checked={!!wall.gable} onChange={(e) => setWall({ gable: e.target.checked })} />ผนังจั่ว (สามเหลี่ยม · เฉลี่ยครึ่งความสูง)</label>
               <div className="col-span-2 rounded-lg border border-gray-200 p-2">
@@ -530,7 +530,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 {!ops.length && <div className="mt-2 flex items-center gap-2 text-[12px] text-gray-500">หรือช่องเปิดเป็น %<input type="number" step="5" value={wall.open ?? 0} onChange={(e) => setWall({ open: Number(e.target.value) })} className="h-7 w-16 rounded border border-gray-300 bg-transparent px-1 text-right" /></div>}
               </div>
               <p className="col-span-2 rounded-lg bg-[#b54708]/10 px-2 py-1.5 text-[12px] tabular-nums text-[#b54708]">ยาว {fmt(L, 2)} × สูง {fmt(rw.h, 2)} ม.{wall.gable ? " (เฉลี่ย)" : ""} = {fmt(L * rw.h, 2)} ม.² − ช่องเปิด {fmt(oArea || (L * rw.h * (rw.open ?? 0)) / 100, 2)} ม.²
-                <br /><b className="text-[13px]">{fmt(wallLoad(rw, wallTypes), 0)} กก./ม.</b> · {r?.on.length ? `ลงคาน ${r.on.join(", ")}` : r?.panel ? `กระจายลงแผ่นพื้น ${r.panel}` : "ยังไม่มีคาน/พื้นรับ"}</p>
+                <br /><b className="text-[13px]">{fmt(wallLoad(rw, wallTypes), 0)} กก./ม.</b> · {r?.on.length ? `ลงคาน ${r.on.map((o) => (typeof o === "object" ? `แนว ${o.line + 1}` : o)).join(", ")}` : r?.panel ? `กระจายลงแผ่นพื้น ${r.panel}` : "ยังไม่มีคาน/พื้นรับ"}</p>
               <button onClick={() => { setFloor({ walls: wallsOf(fl).filter((_, i) => i !== sel.i) }); setSel(null); }} className="col-span-2 text-left text-[12px] text-red-600">ลบผนัง</button>
             </div>); })()}
             {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={fl.h} r0={an.stairs?.[sel.i]} mat={frame.mat} onLandingBeam={() => {
