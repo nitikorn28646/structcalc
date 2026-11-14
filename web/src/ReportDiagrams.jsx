@@ -25,13 +25,15 @@ function Band({ y0, h, xs, ys, sx, color, down, fill = true, dash, peak = true, 
 
 // loads, shear and moment along a line. x/sup = nodes and supports, loads as contBeam; V, M = functions of t (full load);
 // env = [{ x0, L, Mmax[41], Mmin[41] }] live-load envelope; alt = [{ x0, x1, M(t local) }] 3D-frame moments
-export function BeamDiagram({ x, sup, loads, V, M, env, alt, carried = [], wide = false }) {
-  const L = x[x.length - 1] - x[0], sx = (t) => X0 + ((t - x[0]) * (X1 - X0)) / (L || 1);
+// flip = draw the line from its end B to its start A (user 2026-11-14: a line drawn right → left looked mirrored against the plan); the shear sign
+// follows the drawing direction (V read left → right), moments are unchanged; ends = [left label, right label]
+export function BeamDiagram({ x, sup, loads, V, M, env, alt, carried = [], wide = false, flip = false, ends = null }) {
+  const L = x[x.length - 1] - x[0], sx = (t) => (flip ? X1 - ((t - x[0]) * (X1 - X0)) / (L || 1) : X0 + ((t - x[0]) * (X1 - X0)) / (L || 1));
   const pts = loads.filter((l) => l.P !== undefined);
   const ts = [...new Set([...Array.from({ length: 241 }, (_, i) => x[0] + (L * i) / 240), ...pts.flatMap((p) => [p.at - 1e-6, p.at + 1e-6]), ...x.flatMap((v) => [v - 1e-6, v + 1e-6])])]
     .filter((t) => t >= x[0] && t <= x[x.length - 1]).sort((a, b) => a - b);
   const wv = ts.map((t) => wAt(loads, t)), wm = Math.max(1, ...wv), Pm = Math.max(1, ...pts.map((p) => p.P));
-  const Vs = ts.map(V), Ms = ts.map(M);
+  const Vs = ts.map((t) => (flip ? -V(t) : V(t))), Ms = ts.map(M);
   const eT = env?.flatMap((e) => e.Mmax.map((_, i) => e.x0 + (e.L * i) / 40)) ?? [], eMax = env?.flatMap((e) => e.Mmax) ?? [], eMin = env?.flatMap((e) => e.Mmin) ?? [];
   const aT = alt?.flatMap((m) => Array.from({ length: 21 }, (_, i) => m.x0 + ((m.x1 - m.x0) * i) / 20)) ?? [], aM = alt?.flatMap((m) => Array.from({ length: 21 }, (_, i) => m.M(((m.x1 - m.x0) * i) / 20))) ?? [];
   const yb = 62, yV = 128, yM = 232, H = 300;
@@ -46,6 +48,7 @@ export function BeamDiagram({ x, sup, loads, V, M, env, alt, carried = [], wide 
       {pts.map((p, i) => { const h = 14 + (p.P * 22) / Pm; return <g key={i}><line x1={sx(p.at)} x2={sx(p.at)} y1={yb - h - 6} y2={yb - 3} stroke={F3} strokeWidth={1.4} /><path d={`M${sx(p.at) - 3},${yb - 8}L${sx(p.at)},${yb - 2}L${sx(p.at) + 3},${yb - 8}Z`} fill={F3} /><T x={sx(p.at)} y={yb - h - 9} c={F3} s={8.5}>{fmt(p.P, 0)}</T></g>; })}
       <line x1={X0} x2={X1} y1={yb} y2={yb} stroke={INK} strokeWidth={3} />
       {x.map((v, k) => sup[k] && <path key={k} d={`M${sx(v)},${yb + 1}l-6,10h12Z`} fill={carried.some((c) => Math.abs(c - v) < 1e-3) ? "#fff" : INK} stroke={INK} strokeWidth={1} />)}
+      {ends && <><T x={X0} y={yb + 22} a="start" c={MUTE} s={8}>{ends[0]}</T><T x={X1} y={yb + 22} a="end" c={MUTE} s={8}>{ends[1]}</T></>}
       {x.map((v, k) => k > 0 && <T key={`d${k}`} x={(sx(v) + sx(x[k - 1])) / 2} y={yb + 22} c={MUTE} s={8.5}>{fmt(v - x[k - 1], 2)}</T>)}
       {/* shear */}
       <T x={6} y={yV - 6} a="start" c={SHEAR} w={600}>แรงเฉือน</T><T x={6} y={yV + 6} a="start" c={MUTE} s={8.5}>V (กก.)</T>
@@ -72,7 +75,10 @@ export function BeamDiagram({ x, sup, loads, V, M, env, alt, carried = [], wide 
 export function LineDiagram({ ln, f3, wide = false }) {
   if (!ln.res || !ln.x) return null;
   const alt = f3?.filter((m) => m.kind === "beam" && m.line === ln.id).map((m) => ({ x0: m.x0, x1: m.x1, M: m.M }));
-  return <BeamDiagram x={ln.x} sup={ln.sup} loads={ln.loads} V={ln.res.V} M={ln.res.M} env={ln.env?.env.map((e) => e.curve).filter(Boolean)} alt={alt?.length ? alt : null} carried={ln.carriers.map((c) => c.t)} wide={wide} />;
+  // read like the plan: mostly-horizontal lines left → right (x up), mostly-vertical lines bottom → top (y up)
+  const dx = (ln.B?.[0] ?? 0) - (ln.A?.[0] ?? 0), dy = (ln.B?.[1] ?? 0) - (ln.A?.[1] ?? 0), flip = Math.abs(dx) >= Math.abs(dy) ? dx < 0 : dy < 0;
+  const lab = (p) => (p ? `(${p[0].toFixed(2)}, ${p[1].toFixed(2)})` : ""), ends = ln.A && ln.B ? (flip ? [lab(ln.B), lab(ln.A)] : [lab(ln.A), lab(ln.B)]) : null;
+  return <BeamDiagram x={ln.x} sup={ln.sup} loads={ln.loads} V={ln.res.V} M={ln.res.M} env={ln.env?.env.map((e) => e.curve).filter(Boolean)} alt={alt?.length ? alt : null} carried={ln.carriers.map((c) => c.t)} wide={wide} flip={flip} ends={ends} />;
 }
 
 // any simple member solved here with the continuous-beam engine (roof members, stairs): x / sup / loads as contBeam
