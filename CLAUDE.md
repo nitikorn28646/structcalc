@@ -41,7 +41,7 @@ Project files: header buttons บันทึกโครงการ / เป�
 Never use window.alert/confirm (freezes the Chrome test tab) — use inline notices.
 
 Web copy (private claude.ai Artifact): https://claude.ai/artifact/Dkq17UyCSdhSax9xtbiDWU — update: `cd web; npx vite build --base=./ --outDir ../dist-web --emptyOutDir`,
-escape any U+FFFD in dist-web/assets/*.js as \uFFFD (publisher rejects it), then republish dist-web/index.html with all assets in `files`.
+escape any U+FFFD in dist-web/assets/*.js as \uFFFD (publisher rejects it), then republish dist-web/index.html with all assets in `files` — EVERY assets/*.js AND *.css whose name changed (2026-11-16: a new CSS name not uploaded = page without styles; check `grep -o "assets/[^\"]*" dist-web/index.html`), old names → null.
 
 ## Code map (web/)
 - `engine/` pure calc: beam, slab, column, footing (WSD); `roofDesign.js` (ASD purlin/rafter/hip/simpleBeam/pointBeam — diff-tested, keep formulas),
