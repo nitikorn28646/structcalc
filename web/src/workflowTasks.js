@@ -27,13 +27,15 @@ function rawTasks(step, { frame, roof, project, res, dz = null, slabsOk = null }
     ];
     case "frame": {
       const noCol = floorsMissing((f) => has(f.columns)), noBeam = floorsMissing((f) => has(f.beams));
-      const panelsOk = an.every((a, k) => !(fl[k]?.t > 0) && !Object.keys(fl[k]?.panels ?? {}).length || (a.panels ?? []).every((p) => p.open || p.stairWell || p.t > 0)); // a level drawn without a slab (roof beams, t 0) needs none
+      // a level drawn without a slab (roof beams, t 0, no panel set) needs none; otherwise every panel needs a thickness (or open / stair well)
+      const slabMissing = fl.map((f, k) => (!(f.t > 0) && !Object.keys(f.panels ?? {}).length) || (an[k]?.panels ?? []).every((p) => p.open || p.stairWell || p.t > 0) ? null
+        : `${f.name} (${(an[k]?.panels ?? []).filter((p) => !(p.open || p.stairWell || p.t > 0)).length} แผ่นหนา 0)`).filter(Boolean), panelsOk = !slabMissing.length;
       return [
         T("2.1", "วางเสาทุกชั้น", !noCol.length, list(noCol), { tool: "column" }),
         T("2.2", "วางคานทุกชั้น (คานหลัก + คานซอย)", !noBeam.length, list(noBeam), { tool: "beam" }),
-        T("2.3", "พื้นทุกช่อง: ชนิด S / PS / GS และความหนา", has(an) && an.some((a) => has(a.panels)) && panelsOk, "คลิกแผ่นพื้นบนแปลน หรือตาราง แผ่นพื้นทั้งชั้น"),
+        T("2.3", "พื้นทุกช่อง: ชนิด S / PS / GS และความหนา", has(an) && an.some((a) => has(a.panels)) && panelsOk, slabMissing.length ? list(slabMissing) + " — ใส่ความหนาที่แผ่นพื้น หรือ พื้นหนา (ค่าเริ่มต้น) ของชั้น" : "คลิกแผ่นพื้นบนแปลน หรือตาราง แผ่นพื้นทั้งชั้น"),
         T("2.4", "พื้นยื่น", fl.some((f) => has(f.cants)) ? true : null, "เครื่องมือ พื้นยื่น", { tool: "cant" }),
-        T("2.5", "ไม่มีคำเตือนโครงสร้าง (มุมไม่มีเสา คานลอย …)", !has(res?.warnings), res?.warnings?.length ? `${res.warnings.length} คำเตือน — ดูแท็บคำเตือนด้านขวา` : ""),
+        T("2.5", "ไม่มีคำเตือนโครงสร้าง (มุมไม่มีเสา คานลอย …)", !has(res?.warnings), res?.warnings?.length ? `${res.warnings.length} คำเตือน: ${res.warnings[0].slice(0, 90)}${res.warnings.length > 1 ? " …" : ""} (กดเพื่อเปิดรายการ)` : "", { panel: "warn" }),
       ];
     }
     case "stair": return [T("3.1", "วาดช่องบันไดและเลือกแบบ", fl.some((f) => has(f.stairs)) ? true : null, "วาดบนชั้นที่บันไดเริ่มขึ้น", { tool: "stair" }),

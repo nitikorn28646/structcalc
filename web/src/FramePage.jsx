@@ -284,7 +284,8 @@ const STEPS = [["frame", "1 โครง", false, "ขั้น 1 โครง: 
 export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo, onRoofFromFrame, focus = false }) {
   const [multiSel, setMultiSel] = useState([]), [pickSet, setPickSet] = useState(null), [armed, setArmed] = useState(false), pickRef = useRef(null); // Load Cases page
   // checklist bar (Help.jsx StepChecklist) → open the sub-tab where a task is done
-  useEffect(() => { const f = (e) => { if (e.detail?.sub) { setSubState(e.detail.sub); setSel(null); } }; window.addEventListener("structcalc:go", f); return () => window.removeEventListener("structcalc:go", f); }, []);
+  const setDrawerRef = useRef(null); // the side panel (warnings …) is declared further down
+  useEffect(() => { const f = (e) => { if (e.detail?.sub) { setSubState(e.detail.sub); setSel(null); } if (e.detail?.panel) setDrawerRef.current?.(e.detail.panel); }; window.addEventListener("structcalc:go", f); return () => window.removeEventListener("structcalc:go", f); }, []);
   const [subState, setSubState] = useState(null), [view, setView] = useState("2d"), [sel, setSel] = useState(null), mode = step, setMode = () => {};
   const [show, setShow] = useState({ DL: true, SDL: true, WALL: true, LL: true, SP: true }), wallTypes = frame.wallTypes ?? DEFAULT_WALL_TYPES;
   const cur = Math.min(frame.cur ?? 0, frame.floors.length - 1), fl = frame.floors[cur], types = frame.beamTypes, cTypes = frame.colTypes;
@@ -720,6 +721,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           <p className="mt-1 text-[11px] text-gray-400">{step === "frame" ? "วาดเสา คาน แล้วคลิกแผ่นพื้นที่เกิดจากคานล้อมรอบเพื่อเลือกชนิด S / PS / GS ความหนา ช่องเปิด · เครื่องมือ \"พื้นยื่น\" คลิกบนคานด้านที่จะยื่น · ตารางแผ่นพื้นทั้งชั้นอยู่แถบขวา · " : ""}น้ำหนักปูผิว / จร ใส่ที่ขั้น "น้ำหนักบรรทุก" · ระดับ / ความสูงชั้นแก้ในขั้น 1</p>
         </Card>;
   const [drawer, setDrawer] = useState(null), resultStep = ["analysis", "design", "footing"].includes(step);
+  setDrawerRef.current = setDrawer;
   // side panels (tables / warnings) on the right, opened on demand from the tab rail
   const tabsNow = resultStep ? drawerTabs : [...(bulkTab ? [bulkTab] : []), ...drawerTabs.filter(([k]) => k === "warn")];
   const dTab = tabsNow.some(([k]) => k === drawer) ? drawer : null;

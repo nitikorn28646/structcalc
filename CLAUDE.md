@@ -614,3 +614,4 @@ floors คานคอดิน (slabKind GS or S/PS) · ชั้น 2…n · �
 the short edges) + roofLink on; "ข้าม" = empty board as before. floor.js: floor.slabKind = default panel kind (o.kind ?? floor.slabKind ?? "S"); PS from
 the floor default spans the shorter side. Starter 2 storeys 8 × 7.5 m: beams 36/36, columns 27/27, base 88 t. E2E: skip_wizard() after every New.
 Left: A6 guided tour.
+CHECKLIST DETAIL (2026-11-16, user "ทำไมคำเตือนยังขึ้น"): 2.3 names the floors with panels of thickness 0, 2.5 shows the first warning and opens the warnings panel (go.panel "warn" → FramePage setDrawerRef).
