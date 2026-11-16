@@ -34,6 +34,7 @@ const PAGE_CSS = `
 .rp tr, .rp figure { break-inside: avoid; }
 .rp-toc a::after { content: target-counter(attr(href url), page); float: right; }
 .rp-pref::after { content: target-counter(attr(href url), page); }
+.rp-pref.rp-missing::after { content: " ไม่ได้พิมพ์ในฉบับนี้"; }
 .rp-toc a { display: block; border-bottom: 0.5pt dotted #98a2b3; }
 `;
 

@@ -59,7 +59,7 @@ function footIntro(res, frame) {
   return out.join(" · ");
 }
 
-export function FrameReport({ frame, project, part = "all", nOf = null, res: resIn = null, overall = null }) {
+export function FrameReport({ frame, project, part = "all", nOf = null, res: resIn = null, overall = null, o = () => true }) {
   const res = resIn ?? analyzeFrame(frame), { floors, beamTypes: types, colTypes, mat } = frame;
   const show = (x, key) => part === "all" || part === x || (Array.isArray(part) && part.includes(key)); // part: "all" | "front" | "back" | [section keys]
   const spans = res.floors.flatMap((a, k) => a.spans.map((s) => ({ ...s, floor: k })));
@@ -183,15 +183,15 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           return (
             <Sec key={k} id={`c-floor-${k}`} n={N(`c-floor-${k}`)} pre={nOf && k === 0 && /\.1$/.test(String(N(`c-floor-${k}`))) ? { n: String(N(`c-floor-${k}`)).split(".")[0], th: "พื้นและน้ำหนักบรรทุกรายชั้น", en: "Slab design" } : null} th={`น้ำหนักบรรทุกและพื้น — ${f.name}`} en={`Floor ${k + 1}: loads, slabs`}
               intro="แผ่นพื้นหาจากช่องที่คานล้อมรอบ พื้นสองทาง (L/S ≤ 2) ถ่ายน้ำหนักลงคานเป็นรูปสามเหลี่ยม/คางหมูตามเส้น 45° ค่าสูงสุด wS/2 พื้นทางเดียวลงคานด้านยาว wS/2 รวมน้ำหนักผนังบนคานและน้ำหนักคานเอง คานซอยวิเคราะห์ก่อนแล้วส่งแรงปฏิกิริยาเป็นน้ำหนักจุดให้คานที่รับ">
-              <Sub>น้ำหนักแยกกลุ่มที่ลงคานชั้นนี้</Sub>
+              {o("floors.groups") && <><Sub>น้ำหนักแยกกลุ่มที่ลงคานชั้นนี้</Sub>
               <Table head={["กลุ่ม", ...Object.values(GROUPS).map((g) => g[0]), "รวม"]} rows={[["ตัน", ...Object.keys(GROUPS).map((g) => fmt((an.groups[g] ?? 0) / 1000, 2)), fmt(Object.values(an.groups).reduce((a, b) => a + b, 0) / 1000, 2)]]} />
               {an.panels.length > 0 && <Table head={["แผ่น", "ชนิด", "S × L (ม.)", "หนา (ม.)", "DL", "SDL", "ผนัง", "LL", "พิเศษ", "รวม (กก./ม.²)"]}
                 rows={an.panels.map((p, i) => [`P${i + 1}`, p.open ? "ช่องเปิด" : p.stairWell ? "ช่องบันได" : p.st === "GS" ? "GS บนดิน" : p.st === "PS" ? `PS วางแนว ${p.dir === "x" ? "X" : "Y"}` : p.kind === "twoway" ? "S สองทาง" : p.kind === "oneway" ? "S ทางเดียว" : "S อื่นๆ",
-                  p.S ? `${fmt(p.S, 2)} × ${fmt(p.L, 2)}` : "-", fmt(p.t, 2), ...["DL", "SDL", "WALL", "LL", "SP"].map((g) => fmt(p.g[g] ?? 0, 0)), fmt(p.w, 0)])} />}
-              {walls.length > 0 && (<><Sub>ผนัง</Sub>
+                  p.S ? `${fmt(p.S, 2)} × ${fmt(p.L, 2)}` : "-", fmt(p.t, 2), ...["DL", "SDL", "WALL", "LL", "SP"].map((g) => fmt(p.g[g] ?? 0, 0)), fmt(p.w, 0)])} />}</>}
+              {o("floors.walls") && walls.length > 0 && (<><Sub>ผนัง</Sub>
                 <Table head={["ผนัง", "ชนิด", "สูง (ม.)", "ช่องเปิด", "ชั้น", "ยาว (ม.)", "กก./ม.", "ลงที่"]}
                   rows={walls.map((w, i) => { const r = an.walls[i]; return [i + 1, (wt.find((x) => x.id === w.kind) ?? wt[0]).name, fmt(w.h, 2), `${w.open ?? 0}%`, (w.layers ?? 1) > 1 ? "เบิ้ล" : "เดี่ยว", fmt(r.len, 2), fmt(r.q, 0), r.on.length ? `คานแนว ${r.on.map((o) => o.line + 1).join(", ")}` : r.panel ? "แผ่นพื้น (กระจาย)" : r.ground ? "พื้นบนดิน" : "-"]; })} /></>)}
-              {(an.cants.length > 0 || an.stairs.length > 0 || (f.lineLoads ?? []).length > 0 || (f.pointLoads ?? []).length > 0) && (<><Sub>พื้นยื่น บันได และน้ำหนักอื่น</Sub>
+              {o("floors.other") && (an.cants.length > 0 || an.stairs.length > 0 || (f.lineLoads ?? []).length > 0 || (f.pointLoads ?? []).length > 0) && (<><Sub>พื้นยื่น บันได และน้ำหนักอื่น</Sub>
                 <Table head={["รายการ", "รายละเอียด", "น้ำหนัก", "ลงที่"]} rows={[
                   ...an.cants.map((c, i) => [`พื้นยื่น ${i + 1}`, `ยื่น ${fmt(c.L, 2)} ม. หนา ${fmt(c.t, 2)} ม.`, `${fmt(c.w, 0)} กก./ม.²`, "คานริม (+ แรงบิด wL²/2)"]),
                   ...an.stairs.map((st, i) => [`บันได ${i + 1}`, `${STAIR_KINDS[st.kind]} · ช่วง ${fmt(st.Lr, 2)} × กว้าง ${fmt(st.B, 2)} ม. · ${fmt((st.th * 180) / Math.PI, 1)}°`, `${fmt(st.w, 0)} กก./ม.² (${fmt((st.total.DL + st.total.SDL + st.total.LL) / 1000, 2)} ตัน)`,
@@ -199,7 +199,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                   ...(f.lineLoads ?? []).map((l, i) => [l.name || `น้ำหนักเส้น ${i + 1}`, `ยาว ${fmt(Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]), 2)} ม.`, `${fmt(l.q, 0)} กก./ม.`, ({ cant: "ปลายพื้นยื่น → คานริม", beam: "คาน", panel: "แผ่นพื้น" })[an.lineLoads[i]?.on] ?? "-"]),
                   ...(f.pointLoads ?? []).map((q, i) => [q.name || `น้ำหนักจุด ${i + 1}`, `(${fmt(q.p[0], 2)}, ${fmt(q.p[1], 2)})`, `${fmt(q.P, 0)} กก.`, ({ beam: "คาน", panel: "แผ่นพื้น" })[an.pointLoads[i]?.on] ?? "-"]),
                 ]} /></>)}
-              {slabs.length > 0 && (<><Sub>ออกแบบพื้นและบันได (โมดูลพื้น WSD)</Sub>
+              {o("floors.slabs") && slabs.length > 0 && (<><Sub>ออกแบบพื้นและบันได (โมดูลพื้น WSD)</Sub>
                 <Table head={["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "M สูงสุด (กก.-ม./ม.)", "เหล็กเสริม", "ผล"]}
                   rows={slabs.map((x) => [x.name, x.way ?? ({ C: "พื้นยื่น", ST: "บันได", PS: "PS", GS: "GS" })[x.kind] ?? x.kind, x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-",
                     x.cont !== undefined ? `${x.cont} ด้าน${x.case ? ` (กรณี ${x.case})` : ""}` : "-", x.r ? fmt(x.r.M ?? Math.max(...x.r.MS), 0) : "-", x.text ?? x.note, x.r ? pass(x.ok) : "-"])} />
@@ -223,19 +223,19 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
 
         {show("back", "columns") && <Sec id="c-columns" n={N("c-columns")} th="เสา" en="Column design"
           intro="แรงอัดเสาสะสมจากชั้นบนลงล่าง: แรงปฏิกิริยาคานทุกชั้นเหนือขึ้นไปรวมน้ำหนักเสาเอง เสาที่ไม่มีเสารองรับถ่ายแรงเป็นน้ำหนักจุดลงคานชั้นล่าง ตรวจตามโมดูลออกแบบเสา (WSD) ที่ระยะเยื้องศูนย์ขั้นต่ำ max(2.5 ซม., 0.1 × ด้านแคบ) โครงไม่เซ k = 1 และระยะปลอกไม่เกิน 16 เท่าเหล็กยืน / 48 เท่าเหล็กปลอก / ด้านแคบ">
-          <Figure caption="แรงอัดและโมเมนต์ของเสาทุกต้น แยกตามชั้น"><ColumnChart stacks={res.stacks} floors={floors} /></Figure>
+          {o("columns.forces") && <><Figure caption="แรงอัดและโมเมนต์ของเสาทุกต้น แยกตามชั้น"><ColumnChart stacks={res.stacks} floors={floors} /></Figure>
           <Table head={["เสา (X, Y)", "Type", ...floors.map((f) => `ใต้ ${f.name} P (ตัน)`)]}
-            rows={res.stacks.map((st) => [st.key, colTypes[st.typeIdx]?.name, ...floors.map((f, k) => { const c = st.list.find((x) => x.floor === k); return c ? `${fmt(c.Pbot / 1000, 2)} · ${c.lv.Bx}×${c.lv.By} · ${c.ok ? "ผ่าน" : "ไม่ผ่าน"}` : "—"; })])} />
+            rows={res.stacks.map((st) => [st.key, colTypes[st.typeIdx]?.name, ...floors.map((f, k) => { const c = st.list.find((x) => x.floor === k); return c ? `${fmt(c.Pbot / 1000, 2)} · ${c.lv.Bx}×${c.lv.By} · ${c.ok ? "ผ่าน" : "ไม่ผ่าน"}` : "—"; })])} /></>}
           {/* forces of every column (review 2026-11-04: P, Mx, My of the 3D model per column) */}
-          <Sub>แรงในเสาทุกต้น — P, Mx, My</Sub>
+          {o("columns.all") && <><Sub>แรงในเสาทุกต้น — P, Mx, My</Sub>
           <Table head={["เสา (X, Y)", "ชั้น", "Type", "P สะสม (ตัน)", "N โครง 3 มิติ (ตัน)", "Mx / My โครง 3 มิติ (กก.-ม.)", "e ขั้นต่ำ (ซม.)", "ใช้ออกแบบ", "อัตราใช้", "ผล"]}
             rows={res.columns.map((c) => { const f3 = c.f3 ?? {}, fr = frame.colMethod === "frame";
               return [c.stack, floors[c.floor]?.name, `${colTypes[c.typeIdx]?.name ?? "-"} ${c.lv.Bx}×${c.lv.By}`, fmt(c.Pbot / 1000, 2), f3.N != null ? fmt(f3.N / 1000, 2) : "-",
                 f3.Mx != null ? `${fmt(f3.Mx, 0)} / ${fmt(f3.My, 0)}` : "-", fmt(c.check?.e ?? 0, 1),
                 fr ? `P ${fmt((c.Pd ?? c.Pbot) / 1000, 2)} ตัน + Mx/My โครง 3 มิติ (≥ e ขั้นต่ำ)` : `P ${fmt(c.Pbot / 1000, 2)} ตัน + e ขั้นต่ำ แกนเดียว${c.check?.combo ? ` · ${c.check.combo}` : ""}`,
                 c.check?.util != null && c.check.util < 8.99 ? `${fmt(c.check.util * 100, 0)} %` : "-", pass(c.ok)]; })} />
-          <Note>วิธีออกแบบเสา: {frame.colMethod === "frame" ? "แรงอัด P = max(แรงสะสม, N จากโครง 3 มิติ) ร่วมกับโมเมนต์จากโครง 3 มิติทั้งสองแกน ไม่น้อยกว่าโมเมนต์จากระยะเยื้องศูนย์ขั้นต่ำ" : "แรงอัดสะสมร่วมกับระยะเยื้องศูนย์ขั้นต่ำ max(2.5 ซม., 0.1·ด้านแคบ) (แบบเดียวกับตารางอ้างอิง) — Mx/My จากโครง 3 มิติแสดงเพื่อตรวจสอบเท่านั้น เลือก “ใช้แรงจากโครง 3 มิติ” ที่ขั้น 6 เพื่อออกแบบด้วยโมเมนต์สองแกน"} · ความชะลูดตรวจด้วย klu/r (k = 1) ไม่เกิน 100</Note>
-          {colTypes.map((t, i) => t.levels.map((lv, j) => {
+          <Note>วิธีออกแบบเสา: {frame.colMethod === "frame" ? "แรงอัด P = max(แรงสะสม, N จากโครง 3 มิติ) ร่วมกับโมเมนต์จากโครง 3 มิติทั้งสองแกน ไม่น้อยกว่าโมเมนต์จากระยะเยื้องศูนย์ขั้นต่ำ" : "แรงอัดสะสมร่วมกับระยะเยื้องศูนย์ขั้นต่ำ max(2.5 ซม., 0.1·ด้านแคบ) (แบบเดียวกับตารางอ้างอิง) — Mx/My จากโครง 3 มิติแสดงเพื่อตรวจสอบเท่านั้น เลือก “ใช้แรงจากโครง 3 มิติ” ที่ขั้น 6 เพื่อออกแบบด้วยโมเมนต์สองแกน"} · ความชะลูดตรวจด้วย klu/r (k = 1) ไม่เกิน 100</Note></>}
+          {o("columns.sheets") && colTypes.map((t, i) => t.levels.map((lv, j) => {
             const list = res.columns.filter((c) => c.typeIdx === i && c.lv === lv);
             if (!list.length) return null;
             const c = list.reduce((a, x) => (x.Pbot > a.Pbot ? x : a)), r = c.check.r;
@@ -247,31 +247,31 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
 
         {show("back", "footings") && <Sec id="c-footings" n={N("c-footings")} th="ฐานราก" en="Foundation design"
           intro={footIntro(res, frame)}>
-          <Table head={["เสา (X, Y)", "ชุดแรง", "P ฐานเสา (ตัน)", "M ฐานเสา x / y (กก.-ม.)", "เข็ม", "ฐานราก Bx × By (ม.)", "แรงต่อเข็ม / ปลอดภัย (ตัน) · ดิน q / qa", "เหล็กเสริม", "ผล"]}
+          {o("footings.table") && <><Table head={["เสา (X, Y)", "ชุดแรง", "P ฐานเสา (ตัน)", "M ฐานเสา x / y (กก.-ม.)", "เข็ม", "ฐานราก Bx × By (ม.)", "แรงต่อเข็ม / ปลอดภัย (ตัน) · ดิน q / qa", "เหล็กเสริม", "ผล"]}
             rows={res.footings.map((f) => [`${f.stack} (${fName(f)})`, f.combo ?? "D+L", fmt(f.P / 1000, 2), `${fmt(f.Mx ?? 0, 0)} / ${fmt(f.My ?? 0, 0)}`, f.kind === "spread" ? `ฐานแผ่ t ${fmt(f.inp.t, 2)}` : `${f.n} × ${f.pile}`, f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)}` : "-",
-              !f.r ? "-" : f.kind === "spread" ? `ดิน ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`, f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error, pass(f.ok)])} />
-          {res.footings.some((f) => f.kind === "spread" && f.r?.gross != null) && (<><Sub>ฐานแผ่ — แรงดันดิน (แจกแจงน้ำหนัก)</Sub>
+              !f.r ? "-" : f.kind === "spread" ? `ดิน ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`, f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error, pass(f.ok)])} /></>}
+          {o("footings.pressure") && res.footings.some((f) => f.kind === "spread" && f.r?.gross != null) && (<><Sub>ฐานแผ่ — แรงดันดิน (แจกแจงน้ำหนัก)</Sub>
             <Table head={["ฐาน", "P (ตัน)", "น้ำหนักฐาน Wf (ตัน)", "ดินถม Ws (ตัน)", "A (ม.²)", "q = ΣW/A", "6My/(By·Bx²)", "6Mx/(Bx·By²)", "q มุม (สองแกน)", "qa", "ผล"]}
               rows={res.footings.filter((f) => f.kind === "spread" && f.r?.gross != null).map((f) => [`${f.stack} (${fName(f)})`, fmt(f.P / 1000, 2), fmt(f.r.Wf / 1000, 2), fmt(f.r.Ws / 1000, 2), fmt(f.r.A, 2),
                 fmt(f.r.gross / 1000, 2), fmt(f.r.mX / 1000, 2), fmt(f.r.mY / 1000, 2), fmt(f.r.qCorner / 1000, 2), fmt(f.inp.qa / 1000, 2), pass(f.r.qCornerOk && f.ok)])} />
             <Note>แรงดันดิน (ตัน/ม.²): q = (P + Wf + Ws) / A, Wf = t·A·2,400 กก./ม.³, Ws = (Df − t)·γ·A · q แต่ละแกน = q + 6M/(B·L²) และที่มุมฐาน q + 6Mx/(Bx·By²) + 6My/(By·Bx²) ≤ qa · q ต่ำสุดต้องไม่ติดลบ (ไม่มีแรงดึงใต้ฐาน)</Note></>)}
-          {res.footings.some((f) => f.r?.bore) && (<><Sub>เหล็กเสริมในเสาเข็มเจาะ</Sub>
+          {o("footings.bore") && res.footings.some((f) => f.r?.bore) && (<><Sub>เหล็กเสริมในเสาเข็มเจาะ</Sub>
             <p className="text-[12px]">ตรวจเข็มเจาะเป็นองค์อาคารรับแรงอัดสั้น (WSD): P<sub>a</sub> = 0.85·A<sub>g</sub>·(0.25·f′c + f<sub>s</sub>·ρ<sub>g</sub>), f<sub>s</sub> = 0.40·f<sub>y</sub> ≤ 2,100 กก./ซม.² · ρ<sub>g</sub> ≥ 0.5 % อย่างน้อย 6 เส้น · ระยะช่องว่างเหล็ก ≥ 10 ซม. (Ø ≤ 0.40 ม. ใช้ 5 ซม.) · ปลอก RB 9 ≤ 16d<sub>b</sub> / 48d<sub>t</sub> / 0.20 ม. · ฝังในฐานราก ≥ 40d<sub>b</sub> · กำลังรับน้ำหนักของเข็มจากดินใช้ค่าน้ำหนักปลอดภัยที่กำหนด (ไม่ได้คำนวณจากผลเจาะสำรวจดิน)</p>
             <Table head={["เสา (X, Y)", "เข็ม", "แรงต่อเข็ม P (ตัน)", "Pa ตัวเข็ม (ตัน)", "เหล็กเสริม", "ผล"]}
               rows={res.footings.filter((f) => f.r?.bore).map((f) => [f.stack, `${f.n} × ${f.pile}`, fmt(f.r.bore.P / 1000, 2), f.r.bore.ok ? fmt(f.r.bore.Pa / 1000, 1) : "-", f.r.bore.text, f.r.bore.ok ? "ผ่าน" : "ไม่ผ่าน"])} /></>)}
           <Note>สรุป: ฐานแผ่ {res.footings.filter((f) => f.kind === "spread").length} ฐาน · ฐานเข็ม 1 ต้น {res.footings.filter((f) => f.n === 1).length} ฐาน · 2 ต้น {res.footings.filter((f) => f.n === 2).length} ฐาน · 3 ต้นขึ้นไป {res.footings.filter((f) => f.n >= 3).length} ฐาน · แรงรวมที่ฐาน {fmt(res.footings.reduce((a, f) => a + f.P, 0) / 1000, 1)} ตัน</Note>
-          <Sub>การตรวจสอบฐานรากแต่ละแบบ (ฐานที่รับแรงมากที่สุดของแบบ)</Sub>
+          {o("footings.sheets") && <><Sub>การตรวจสอบฐานรากแต่ละแบบ (ฐานที่รับแรงมากที่สุดของแบบ)</Sub>
           {[...fNames.keys()].map((key) => { const l = res.footings.filter((x) => fKey(x) === key), f = l.reduce((a, x) => ((x.P ?? 0) > (a.P ?? 0) ? x : a));
-            return f.r && f.inp ? <FootingSheet key={key} f={f} mark={key} count={l.length} /> : null; })}
-          <Sub>รูปฐานราก — แต่ละแบบ (ฐานที่รับแรงมากที่สุดของแบบนั้น)</Sub>
+            return f.r && f.inp ? <FootingSheet key={key} f={f} mark={key} count={l.length} /> : null; })}</>}
+          {o("footings.drawings") && <><Sub>รูปฐานราก — แต่ละแบบ (ฐานที่รับแรงมากที่สุดของแบบนั้น)</Sub>
           <div className="grid grid-cols-2 gap-2">{[...fNames.entries()].map(([key, name]) => {
             const f = res.footings.filter((x) => fKey(x) === key).reduce((a, x) => ((x.P ?? 0) > (a.P ?? 0) ? x : a));
             return f.inp && f.r ? <Figure key={key} caption={`${name} · ${f.kind === "spread" ? `ฐานแผ่ ${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp.t, 2)} ม.` : `เข็ม ${f.n} × ${f.pile} ฐาน ${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp.t, 2)} ม.`} · ${res.footings.filter((x) => fKey(x) === key).length} ฐาน`}>
-              <div className="grid grid-cols-[3fr_2fr] items-center gap-1"><FootingDetail f={f} mark={name} className="mx-auto h-[72mm] w-full overflow-visible" /><Still3D id={`ft-${name}-${fmt(f.r.Bx, 2)}x${fmt(f.r.By, 2)}-${f.n}-${f.inp?.sLong}`} node={<FootingCageParts f={f} />} className="h-[60mm] w-full" /></div></Figure> : null; })}</div>
+              <div className="grid grid-cols-[3fr_2fr] items-center gap-1"><FootingDetail f={f} mark={name} className="mx-auto h-[72mm] w-full overflow-visible" /><Still3D id={`ft-${name}-${fmt(f.r.Bx, 2)}x${fmt(f.r.By, 2)}-${f.n}-${f.inp?.sLong}`} node={<FootingCageParts f={f} />} className="h-[60mm] w-full" /></div></Figure> : null; })}</div></>}
         </Sec>}
 
         {show("back", "schedules") && <Sec id="c-schedules" n={N("c-schedules")} th="ตารางหน้าตัดและเหล็กเสริม" en="Schedules" intro="ขนาดและเหล็กเสริมที่ใช้ ความยาวคานรวมวัดตามแนวศูนย์กลาง ยังไม่รวมระยะทาบและเศษเหล็ก">
-          <Table head={["Type", "b × h (ซม.)", "เหล็กบน (+ เสริมหัวเสา ตามตารางตัดเหล็ก · คานยื่น: ยาวตลอด)", "เหล็กล่าง (+ เสริมกลางคาน ตามตารางตัดเหล็ก)", "ปลอก หัวเสา / กลาง", "จำนวน", "ยาวรวม (ม.)"]}
+          {o("schedules.tables") && <><Table head={["Type", "b × h (ซม.)", "เหล็กบน (+ เสริมหัวเสา ตามตารางตัดเหล็ก · คานยื่น: ยาวตลอด)", "เหล็กล่าง (+ เสริมกลางคาน ตามตารางตัดเหล็ก)", "ปลอก หัวเสา / กลาง", "จำนวน", "ยาวรวม (ม.)"]}
             rows={types.map((t, i) => { const l = spans.filter((s) => s.typeIdx === i && s.kind !== "cantilever"); return [spans.some((s) => s.typeIdx === i) ? <CalcLink id={`B-${t.name}`}>{t.name}</CalcLink> : t.name, `${fmt(t.b * 100, 0)} × ${fmt(t.h * 100, 0)}`, bars(t), [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" "),
               `${stLabel(t)} @${fmt(t.sSup, 2)} / @${fmt(t.sMid, 2)}`, `${l.length} ช่วง`, fmt(l.reduce((s, x) => s + x.len, 0), 2)]; }).flatMap((row, i) => {
                 // cantilever variant: same section and support bars, the top bars run the whole cantilever (B1A …)
@@ -281,9 +281,9 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             rows={colTypes.flatMap((t, i) => t.levels.map((lv) => [res.columns.some((c) => c.typeIdx === i && c.lv === lv) ? <CalcLink id={`C-${t.name}-${lv.level}`}>{t.name}</CalcLink> : t.name, lv.level, `${lv.Bx} × ${lv.By}`, `${lv.n}-${lv.mainBar}`, `${lv.tieBar} @${fmt(lv.s, 2)}`, `${res.columns.filter((c) => c.typeIdx === i && c.lv === lv).length} ต้น`]))} />
           <Table head={["ฐานราก", "ชนิด", "ขนาด Bx × By × t (ม.)", "เหล็กแนวยาว", "เหล็กแนวสั้น", "จำนวน"]}
             rows={[...fNames.entries()].map(([key, name]) => { const l = res.footings.filter((x) => fKey(x) === key), f = l[0];
-              return [f.r && f.inp ? <CalcLink id={`F-${name}`}>{name}</CalcLink> : name, f.kind === "spread" ? "ฐานแผ่" : `เข็ม ${f.n} × ${f.pile}`, f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp?.t ?? 0, 2)}` : "-", f.r?.longText ?? `${f.inp?.longBar ?? "-"} @${fmt(f.inp?.sLong ?? 0, 2)}`, f.r?.shortText ?? `${f.inp?.shortBar ?? "-"} @${fmt(f.inp?.sShort ?? 0, 2)}`, `${l.length} ฐาน`]; })} />
+              return [f.r && f.inp ? <CalcLink id={`F-${name}`}>{name}</CalcLink> : name, f.kind === "spread" ? "ฐานแผ่" : `เข็ม ${f.n} × ${f.pile}`, f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp?.t ?? 0, 2)}` : "-", f.r?.longText ?? `${f.inp?.longBar ?? "-"} @${fmt(f.inp?.sLong ?? 0, 2)}`, f.r?.shortText ?? `${f.inp?.shortBar ?? "-"} @${fmt(f.inp?.sShort ?? 0, 2)}`, `${l.length} ฐาน`]; })} /></>}
           {/* cantilevers: their own bar run (not the L/4 cut-off of the schedule) — user 2026-11-03 */}
-          {(() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.detail).map((sp) => ({ sp, k }))); return cs.length ? (<>
+          {o("schedules.cant") && (() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.detail).map((sp) => ({ sp, k }))); return cs.length ? (<>
             <Sub>คานยื่น — เหล็กบนยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลัง (แทนเหล็กเสริม L/4 ในตาราง)</Sub>
             <Table head={["ชั้น / ช่วง", "Type", "ยื่น (ม.)", "เหล็กบน", "ld (ม.)", "ฝากเข้าช่วงหลัง", "หมายเหตุ"]}
               rows={cs.map(({ sp, k }) => [`${floors[k].name} ${sp.id}`, sp.typeName, fmt(sp.len, 2), `${sp.detail.bars} ยาวตลอด`, fmt(sp.detail.ld, 2),
@@ -294,7 +294,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
               <Figure key={sp.id} caption={`คานยื่น ${sp.id} (${sp.typeName})`}><CantileverDetail d={sp.detail} t={sp.type} L={sp.len} id={sp.id} /></Figure>))}</div>
           </>) : null; })()}
           {/* bar cut-offs from the moment envelope (floor.js cutoffs, audit F4 2026-11-04, ACI 318-11 12.10–12.12, ld 12.2.2) */}
-          {(() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.cut && (sp.cut.bot?.len || sp.cut.top?.some((x) => x.len))).map((sp) => ({ sp, k }))); return cs.length ? (<>
+          {o("schedules.cut") && (() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.cut && (sp.cut.bot?.len || sp.cut.top?.some((x) => x.len))).map((sp) => ({ sp, k }))); return cs.length ? (<>
             <Sub>ระยะตัดเหล็กเสริมพิเศษ (จากโมเมนต์ envelope — ACI 318-11 ข้อ 12.10–12.12, ld ข้อ 12.2.2)</Sub>
             <Note>จุดตัดทางทฤษฎี = ตำแหน่งที่โมเมนต์ลดลงจนเหล็กที่วิ่งตลอดรับได้เอง (โมเมนต์ที่ยอมให้ Ma ของหน้าตัดแตกร้าว) · ยืดเลยจุดนั้น max(d, 12db) และยาว ≥ ld จากจุดโมเมนต์สูงสุด / หน้าเสา · ตัดในเขตแรงดึงได้เมื่อ V ≤ ⅔(Vc + Vs) มิฉะนั้นยาวถึงหัวเสา · เหล็กบนเลยจุดดัดกลับ max(d, 12db, L/16) เมื่อเหล็กวิ่งตลอดน้อยกว่า 1/3 · ระยะวัดจากศูนย์กลางเสา</Note>
             <Table head={["ชั้น / ช่วง", "Type", "ยาว (ม.)", "เหล็กล่างเสริม: จาก – ถึง (ม.)", "จุดตัดทฤษฎี", "ld ล่าง / บน", "เหล็กบนเสริม ซ้าย / ขวา (ม.)"]}
@@ -303,14 +303,14 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                   b?.theo ? `${fmt(b.theo[0], 2)} – ${fmt(b.theo[1], 2)}` : "-", `${b?.ld ? fmt(b.ld, 2) : "-"} / ${tp.find((x) => x.ld)?.ld ? fmt(tp.find((x) => x.ld).ld, 2) : "-"}`, `${tl(tp[0])} / ${tl(tp[1])}${sp.cut.topFull ? " (ตลอดช่วง)" : ""}`]; })} />
           </>) : null; })()}
           {/* short spans hogging all along: extra top bars the whole span (floor.js sp.topFull, user 2026-11-04) */}
-          {(() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.topFull).map((sp) => ({ sp, k }))); return cs.length ? (<>
+          {o("schedules.topFull") && (() => { const cs = res.floors.flatMap((an, k) => an.spans.filter((sp) => sp.topFull).map((sp) => ({ sp, k }))); return cs.length ? (<>
             <Sub>ช่วงคานที่มีโมเมนต์ลบตลอดช่วง — เหล็กบน (รวมเหล็กเสริมพิเศษ) ยาวตลอดช่วง แทนการตัดที่ L/4</Sub>
             <Table head={["ชั้น / ช่วง", "Type", "ยาว (ม.)", "เหล็กบน", "M กลางช่วง (กก.-ม.)", "เหตุผล"]}
               rows={cs.map(({ sp, k }) => [`${floors[k].name} ${sp.id}`, sp.typeName, fmt(sp.len, 2), `${sp.topFull.bars} ยาวตลอดช่วง`, fmt(sp.topFull.Mmid, 0),
                 sp.topFull.lifted ? "ปลายช่วงถูกยก (ช่วงสั้นติดช่วงยาว) — ยึดเหล็กเข้าเสา" : "โมเมนต์ลบถึงกลางช่วง (ขอบเขตน้ำหนักจรแบบหมากรุก)"])} />
           </>) : null; })()}
           {/* reinforcement sections of every beam type (support / mid-span) and column level in use */}
-          <Sub>รูปตัดเหล็กเสริมคาน (ซ้าย: ช่วงหัวเสา · ขวา: ช่วงกลางคาน)</Sub>
+          {o("schedules.beamSec") && <><Sub>รูปตัดเหล็กเสริมคาน (ซ้าย: ช่วงหัวเสา · ขวา: ช่วงกลางคาน)</Sub>
           <div className="grid grid-cols-2 gap-2">
             {types.filter((_, i) => spans.some((sp) => sp.typeIdx === i)).map((t, k) => { const LL = beamLayersOf(t, mat);
               return (
@@ -319,8 +319,8 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                     <Still3D id={`bt-${JSON.stringify([t.b, t.h, t.top, t.topX, t.bot, t.botX, t.st, t.sSup, t.sMid, mat.cover])}`} node={<BeamCageParts b={t.b} h={t.h} L={2.4} cover={mat.cover ?? 3} stirrupBar={t.st} type="both_ends" mid={LL.mid} sup={LL.sup} sEnd={t.sSup} sMid={t.sMid} />} className="h-[40mm] w-full" /></div>
                 </Figure>);
             })}
-          </div>
-          <Sub>รูปตัดเหล็กเสริมเสา</Sub>
+          </div></>}
+          {o("schedules.colSec") && <><Sub>รูปตัดเหล็กเสริมเสา</Sub>
           <div className="grid grid-cols-4 gap-2">
             {colTypes.flatMap((t, i) => t.levels.filter((lv) => res.columns.some((c) => c.typeIdx === i && c.lv === lv)).map((lv) => { const [nx, ny] = faceBars(lv.n), j = t.levels.indexOf(lv);
               return (
@@ -328,24 +328,24 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                   <ColumnDetail lv={lv} cover={j === 0 && mat.coverPier > 0 ? mat.coverPier : mat.coverCol ?? mat.cover ?? 3} className="mx-auto h-[36mm] w-full" />
                 </Figure>
               ); }))}
-          </div>
+          </div></>}
         </Sec>}
 
         {show("back", "appendix") && <Sec id="c-appendix" n={N("c-appendix")} th="ภาคผนวก — แรงภายในคานทุกช่วง" en="Appendix: beam forces"
           intro="ตารางแรงออกแบบของคานทุกช่วงและรูปน้ำหนัก แรงเฉือน โมเมนต์ ของคานทุกแนว แยกตามชั้น">
           {floors.map((f, k) => { const an = res.floors[k]; return (
             <div key={k} className={k ? "rp-chapter" : ""}>
-              <Sub>{f.name}</Sub>
+              {o("appendix.tables") && <><Sub>{f.name}</Sub>
               <Table head={["ช่วง", "ยาว (ม.)", "ชนิด", "Type", "M+ (กก.-ม.)", "M− (กก.-ม.)", "V (กก.)", "T (กก.-ม.)", "ใช้", "ผล"]}
                 rows={an.spans.map((s) => { const m = (k) => (s.src?.[k] === "LAT" ? " ᴸ" : s.src?.[k] === "3D" ? " ³ᴰ" : ""); return [s.id, fmt(s.len, 2), KIND_TH[s.kind], s.typeName ?? types[s.typeIdx]?.name, fmt(s.Mpos, 0) + m("Mpos"), fmt(s.Mneg, 0) + m("Mneg"), fmt(s.V, 0) + m("V"), fmt(s.Mt ?? 0, 0), `${fmt(s.check.util * 100, 0)}%`, pass(s.ok)]; })} />
               {res.analysis === "envelope" && <Note>³ᴰ = ค่าจากโครง 3 มิติมากกว่าคานต่อเนื่อง (ใช้ค่านี้ออกแบบ){res.lateral ? " · ᴸ = ค่าจากชุดผสมแรงที่มีแรงลม / แผ่นดินไหว" : ""}</Note>}
               {an.lines.filter((ln) => ln.arc).map((ln) => { const g = arcGeom(ln.A, ln.B, ln.arc.s); return <Note key={`arc${ln.id}`}>คานโค้ง แนว {ln.id + 1}: รัศมี {fmt(g.R, 2)} ม. มุม {fmt((g.th * 180) / Math.PI, 0)}° ยาวตามส่วนโค้ง {fmt(g.L, 2)} ม. (คอร์ด {fmt(g.c, 2)} ม.) — โครง 3 มิติแบ่ง 12 ชิ้นตามส่วนโค้ง ได้โมเมนต์และแรงบิดจากความโค้ง (ใช้ออกแบบ) · คานต่อเนื่องคิดตามคอร์ด · พื้นระหว่างคอร์ดกับส่วนโค้ง {fmt(g.area, 2)} ม.² เพิ่มเป็นน้ำหนักบนคาน</Note>; })}
-              {an.warnings.map((w) => <Note key={w}>{w}</Note>)}
-              <Sub>รูปน้ำหนัก แรงเฉือน และโมเมนต์ของคานแต่ละแนว — {f.name}</Sub>
+              {an.warnings.map((w) => <Note key={w}>{w}</Note>)}</>}
+              {o("appendix.diagrams") && <><Sub>รูปน้ำหนัก แรงเฉือน และโมเมนต์ของคานแต่ละแนว — {f.name}</Sub>
               {an.lines.filter((ln) => ln.res).map((ln) => (
                 <Figure key={ln.id} caption={`แนว ${ln.id + 1}: (${fmt(ln.A[0], 2)}, ${fmt(ln.A[1], 2)}) → (${fmt(ln.B[0], 2)}, ${fmt(ln.B[1], 2)}) ยาว ${fmt(ln.L, 2)} ม. · ช่วง ${an.spans.filter((s) => s.line === ln.id).map((s) => `${s.id} ${types[s.typeIdx]?.name ?? ""}`).join(", ")}`}>
                   <LineDiagram ln={ln} f3={res.frame3d?.members.filter((m) => m.floor === k)} />
-                </Figure>))}
+                </Figure>))}</>}
             </div>); })}
         </Sec>}
       </Doc>

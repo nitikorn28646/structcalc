@@ -586,3 +586,15 @@ this column uses it, else a new F… picked for this column; message under the r
 after; _roof3 6.70,4.00 = 2 × S-22 1.40 × 0.90 × 0.35 passes except bearing 68.4 > 60 ksc (needs a bigger pier). ≤ 0.5 s per footing.
 WALL HEIGHT (2026-11-14, user "ผนังต้องกำหนดความสูงได้"): wall inspector always shows the height field (shows the auto value; typing turns hAuto off); "ลงคาน" text fixed ([object Object] → แนว n).
 LINE DIAGRAMS (2026-11-14, user "รูปกลับด้าน"): ReportDiagrams BeamDiagram flip/ends — LineDiagram draws mostly-horizontal lines left → right (x up) and vertical lines bottom → top (y up) whatever the drawing direction (V sign follows the drawn direction, M unchanged), end coordinates under the beam.
+REPORT EDITIONS (2026-11-16, user: choose what the book prints; "ห้ามสูตร/การคำนวณเพี้ยน"; failing checks: engineer told first, then free to choose):
+src/reportOptions.js REPORT_TREE (chapters + parts) / REPORT_PRESETS full · permit (no appendix / all-column force list; sheets = critical member
+per type) · short (project, criteria, plans, summary, schedules) / reportOpt(project.report) → o(key). project.report = {preset, sec, fails}.
+WorkReport numbers only printed chapters (TOC closes up), passes o to FrameReport (parts wrapped, no calc lines touched) / StatusChapter /
+ProjectInfo; edition name on cover + every page footer; page refs to parts not printed → "ไม่ได้พิมพ์ในฉบับนี้" (a.rp-missing).
+StatusSummary applyDecisions(st, fails): per FAIL item key `${cat}|${id}` mode show | accept (status ACC "วิศวกรยอมรับ" + reason, own table,
+overall "ผ่าน … ยกเว้น n รายการที่วิศวกรพิจารณายอมรับ") | hide (left out of the summary) — member tables / sheets still print the real result.
+Step 9 panel src/ReportOptions.jsx (presets, tick tree, failing list with decision + reason, red notes). projectStamp ignores project.report.
+Test cli/report-editions.cjs [projects…] (browser, dev server): every edition / random ticks / decisions print numbers ⊆ the full edition per
+chapter, member chapters identical after decisions, no NaN, contents 1…n — yasothon, _roof3, _user, _big ALL OK. E2E 47/47, regress identical.
+NEXT (agreed plan, user 2026-11-16): A1 + A2 step checklists with ✓/○ and "next" button, sidebar status; A3 + A5 empty-board hints + numbered
+tools; A4 new-project wizard (5 questions) + A6 guided tour.

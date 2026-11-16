@@ -10,7 +10,7 @@ export function dataStamp(obj) {
   return h.toString(16).toUpperCase().padStart(8, "0");
 }
 // the stamp of a project: the model only (UI state such as the floor on screen or snapping left out)
-export const projectStamp = (frame, roof, project) => { const { cur, ...fr } = frame ?? {}; const { snap, ...rf } = roof ?? {}; const { revisions, date, ...pj } = project ?? {}; return dataStamp({ frame: fr, roof: rf, project: pj }); };
+export const projectStamp = (frame, roof, project) => { const { cur, ...fr } = frame ?? {}; const { snap, ...rf } = roof ?? {}; const { revisions, date, report, ...pj } = project ?? {}; return dataStamp({ frame: fr, roof: rf, project: pj }); };
 // anchor of a calculation sheet: CALC ID → a safe element id (Thai letters kept)
 export const calcAnchor = (id) => `calc-${String(id).replace(/[^\w฀-๿-]+/g, "_")}`;
 

@@ -25,6 +25,7 @@ import { DEFAULT_FRAME, FramePage } from "./FramePage.jsx";
 import { applyStandard } from "./DesignCriteria.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { WorkReport } from "./WorkReport.jsx";
+import ReportOptions from "./ReportOptions.jsx";
 import { projectStamp, validateInput } from "./reportQA.js";
 import { analyzeFrame } from "../engine/frame.js";
 import { roofFromFrame, roofPoints } from "./roofLink.js";
@@ -593,6 +594,7 @@ export default function App() {
             <main className="min-h-0 flex-1 overflow-y-auto bg-gray-100 p-4"><div className="report-preview mx-auto max-w-[220mm] space-y-6 bg-white p-6 shadow-theme-xs">
               <p className="text-sm text-gray-500">ตัวอย่างรายการคำนวณทั้งหลัง · ปุ่ม "พิมพ์ / บันทึก PDF" ด้านบนเพื่อส่งออก</p>
               <ReportQA frame={frame} roof={roof} project={st.project} onProject={() => setProjOpen(true)} />
+              <ReportOptions frame={frame} roof={roof} res={fres} report={st.project.report} onChange={(v) => set("project.report", v)} />
               <WorkReport frame={frame} roof={roof} project={st.project} />
             </div></main>
           ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} focus={focus} onProjectInfo={() => setProjOpen(true)}  onRoofFromFrame={roofFromStructure} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
