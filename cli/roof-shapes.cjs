@@ -53,7 +53,7 @@ const models = [
   const out = await p.evaluate(async (models) => {
     const m = await import('/src/RoofPage.jsx'), sk = await m.loadSkeleton(), res = [];
     for (const [name, pts, edges] of models) {
-      const roof = { ...m.EMPTY_ROOF, pts, edges, slope: 30, overhang: 1, H: 3 };
+      const roof = { ...m.EMPTY_ROOF, pts, edges, slope: 30, overhang: 1, H: 3, design: { ...m.EMPTY_ROOF.design, autoSupports: true } }; // framing incl. automatic supports (off by default since 2026-11-05; a shed roof then has no posts under its high edge)
       try {
         const r = m.runRoof(roof, sk), g = r.g, cos = Math.cos(Math.PI / 6), bad = [];
         if (!g) { res.push([name, 'NO GEOMETRY ' + JSON.stringify(Object.keys(r))]); continue; }
