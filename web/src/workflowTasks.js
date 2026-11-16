@@ -26,7 +26,7 @@ function rawTasks(step, { frame, roof, project, res, dz = null, slabsOk = null }
       T("1.2", "ระยะกริดแกน X / Y (หรือนำเข้า DXF)", fl.some((f) => has(f.grid?.dx) && has(f.grid?.dy)), "ช่องระยะกริด"),
     ];
     case "frame": {
-      const noCol = floorsMissing((f) => has(f.columns)), noBeam = floorsMissing((f) => has(f.beams));
+      const noCol = floorsMissing((f) => has(f.columns)), noBeam = floorsMissing((f, k) => has(f.beams) || (k === fl.length - 1 && has(f.columns))); // the top level may be columns only: steel wall plates (roof) sit on them
       // a level drawn without a slab (roof beams, t 0, no panel set) needs none; otherwise every panel needs a thickness (or open / stair well)
       const slabMissing = fl.map((f, k) => (!(f.t > 0) && !Object.keys(f.panels ?? {}).length) || (an[k]?.panels ?? []).every((p) => p.open || p.stairWell || p.t > 0) ? null
         : `${f.name} (${(an[k]?.panels ?? []).filter((p) => !(p.open || p.stairWell || p.t > 0)).length} แผ่นหนา 0)`).filter(Boolean), panelsOk = !slabMissing.length;

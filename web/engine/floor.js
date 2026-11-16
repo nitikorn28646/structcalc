@@ -515,7 +515,10 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   // corner without a column where two lines rest on each other (user 2026-11-04: the 0.60 m piece past the last column was not a
   // cantilever): the line whose end is a stub past a column, with a back span (≥ 2 columns), is a cantilever and carries the other
   // one at its tip; both such → the shorter stub carries; neither → left as before (warned below)
-  const stub = (l, t) => (l.cols.length >= 2 ? Math.min(...l.cols.map((c) => Math.abs(c.t - t))) : Infinity);
+  // supports of a line = its columns + the points it rests on (e.g. an edge beam on cantilever tips, user 2026-11-16: "ให้คานยื่นเป็นตัวรับคาน"),
+  // the corner itself excluded; ≥ 2 supports and the end past the last one = a cantilever end
+  const stub = (l, t) => { const s = [...l.cols.map((c) => c.t), ...l.carriers.filter((x) => Math.abs(x.t - t) > TOL).map((x) => x.t)];
+    return s.length >= 2 ? Math.min(...s.map((v) => Math.abs(v - t))) : Infinity; };
   for (const ln of lines) for (const c of [...ln.carriers]) {
     const h = lines.find((o) => o.id === c.host); if (!h || c.rev) continue;
     const back = h.carriers.find((d) => d.host === ln.id && !d.rev && Math.abs(d.t - c.at) < TOL && Math.abs(d.at - c.t) < TOL);
