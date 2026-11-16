@@ -11,7 +11,10 @@ const MODES = [["show", "พิมพ์ว่า ไม่ผ่าน"], ["acc
 export default function ReportOptions({ frame, roof, res, report, onChange }) {
   const r = report ?? {}, o = reportOpt(r), [open, setOpen] = useState(true);
   const hasRoof = (roof?.pts?.length ?? 0) >= 3, sk = useSkeleton();
-  const st = useMemo(() => { try { const rr = hasRoof && sk ? runRoof(roof, sk) : null; return projectStatus(frame, res, rr?.dz ?? null, hasRoof ? roof : null); } catch { return null; } }, [frame, roof, res, sk, hasRoof]);
+  const [st, roofGroups] = useMemo(() => { try { const rr = hasRoof && sk ? runRoof(roof, sk) : null;
+    return [projectStatus(frame, res, rr?.dz ?? null, hasRoof ? roof : null), [...new Set((rr?.dz?.rows ?? []).map((x) => x.label))]]; } catch { return [null, []]; } }, [frame, roof, res, sk, hasRoof]);
+  const marks = r.marks ?? {}, markOn = (k) => marks[k] !== false, setMark = (k, v) => { const m = { ...marks, [k]: v }; if (v) delete m[k]; onChange({ ...r, marks: m }); };
+  const markKeys = [...["คาน", "เสา", "พื้น", "ฐานราก", "แรงด้านข้าง"].map((c) => [c, c]), ...roofGroups.map((g) => [`หลังคา|${g}`, `หลังคา: ${g}`])];
   const fails = st?.fails ?? [], dec = r.fails ?? {};
   const setSec = (k, v) => { const base = REPORT_PRESETS[r.preset ?? "full"]?.sec ?? {}; onChange({ ...r, preset: "custom", sec: { ...base, ...(r.sec ?? {}), [k]: v } }); };
   const setPreset = (p) => onChange({ ...r, preset: p, sec: {} });
@@ -34,6 +37,12 @@ export default function ReportOptions({ frame, roof, res, report, onChange }) {
             {subs.length > 0 && <div className="ml-5">{subs.map(([s, l]) => (
               <label key={s} className={`flex items-center gap-1.5 text-[12px] ${o(k) ? "text-gray-600" : "text-gray-300"}`}><input type="checkbox" disabled={!o(k)} checked={o(s)} onChange={(e) => setSec(s, e.target.checked)} />{l}</label>))}</div>}
           </div>))}
+      </div>}
+      {open && <div className="mt-3 rounded-lg border border-gray-200 p-2">
+        <p className="font-medium text-gray-800">แสดงคำว่า "ผ่าน / ไม่ผ่าน" ในคอลัมน์ผลของตาราง <span className="text-[11px] font-normal text-gray-500">— เอาติ๊กออก = คอลัมน์ผลของกลุ่มนั้นแสดง "-" (ตัวเลขในตารางเหมือนเดิม · บทสรุปผลใช้การตัดสินใจด้านล่าง)</span></p>
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">{markKeys.map(([k, l]) => <label key={k} className="flex items-center gap-1.5 text-[12px] text-gray-700"><input type="checkbox" checked={markOn(k)} onChange={(e) => setMark(k, e.target.checked)} />{l}</label>)}
+          <button onClick={() => onChange({ ...r, marks: Object.fromEntries(markKeys.map(([k]) => [k, false])) })} className="text-[12px] text-brand-600">ซ่อนทั้งหมด</button>
+          <button onClick={() => onChange({ ...r, marks: {} })} className="text-[12px] text-brand-600">แสดงทั้งหมด</button></div>
       </div>}
       {/* failing checks: the engineer is told first, then decides (and carries the responsibility) */}
       {fails.length > 0 && <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-2">

@@ -31,11 +31,13 @@ function Bending({ x, f }) {
   return <RoofSheet f={f} id={`R-${x.key ?? x.id ?? x.label}`} title={`การตรวจสอบ ${x.label ?? ""}${x.tag ? ` ${x.tag}` : ""}`} x={x} secText={secText(x)} />;
 }
 
-export function RoofReport({ roof, project , bare = false, nb = null }) {
+export function RoofReport({ roof, project , bare = false, nb = null, mark = () => true }) {
   const sk = useSkeleton(), { g, fr, dz } = runRoof(roof, sk);
   if (!sk) return bare ? <div data-report-loading="1" /> : <div className="report" data-report-loading="1" />;
   if (!dz) return bare ? null : <div className="report">ข้อมูลไม่ถูกต้อง</div>;
   const d = roof.design, row = (k) => dz.rows.find((x) => x.key === k), pu = row("purlin"), ra = row("rafter");
+  // result words per member group (project.report.marks, user 2026-11-16: e.g. no ผ่าน/ไม่ผ่าน for the wall plates) — values unchanged
+  const res = (label, ok) => (mark("หลังคา", label) ? (ok ? "ผ่าน" : "ไม่ผ่าน") : "-");
   const roofing = ROOFINGS[d.roofing];
   // inside the whole-project book: one chapter (nb), sections nb.1, nb.2 … on from its first page
   const Wrap = bare ? ({ children }) => <>{children}</> : ({ children }) => <div className="report">{children}</div>;
@@ -123,7 +125,7 @@ export function RoofReport({ roof, project , bare = false, nb = null }) {
                     <tr key={m.id} className="border-b border-gray-100">
                       <td className="py-0.5 pr-2">{m.label}</td><td className="pr-2 tabular-nums">{fmt(m.span, 2)}</td><td className="pr-2">{secText(m)}</td>
                       <td className="pr-2 tabular-nums">{fmt(m.r.Mx, 1)}</td><td className="pr-2 tabular-nums">{fmt(m.stress * 100, 0)}%</td>
-                      <td className="pr-2 tabular-nums">{fmt(m.defl * 100, 0)}%</td><td>{m.r.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
+                      <td className="pr-2 tabular-nums">{fmt(m.defl * 100, 0)}%</td><td>{res(x.label, m.r.ok)}</td>
                     </tr>))}</tbody>
                 </table>
               )}
@@ -146,7 +148,7 @@ export function RoofReport({ roof, project , bare = false, nb = null }) {
                     <td className="py-0.5 pr-2 font-semibold" style={{ color: m.color }}>{m.tag}{m.typeName ? ` (${m.typeName})` : ""}</td><td className="pr-2">{m.inner ? "ช่วงใน (รับดั้ง)" : m.label.replace("อะเส ", "")}</td>
                     <td className="pr-2 tabular-nums">{fmt(m.span, 2)}</td><td className="pr-2">{secText(m)}</td>
                     <td className="pr-2 tabular-nums">{m.r.cont ? `+${fmt(m.r.Mpos, 0)} / −${fmt(m.r.Mneg, 0)}` : fmt(m.r.Mx, 1)}</td><td className="pr-2 tabular-nums">{fmt(m.r.fb, 0)} / {fmt(m.r.Fb, 0)}</td>
-                    <td className="pr-2 tabular-nums">{fmt(m.r.d, 2)} / {fmt(m.r.dAllow, 2)}</td><td>{m.r.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
+                    <td className="pr-2 tabular-nums">{fmt(m.r.d, 2)} / {fmt(m.r.dAllow, 2)}</td><td>{res("อะเส", m.r.ok)}</td>
                   </tr>))}</tbody>
               </table>
               {(dz.plateLines ?? []).length > 0 && (<>
@@ -194,7 +196,7 @@ export function RoofReport({ roof, project , bare = false, nb = null }) {
                 <tr key={x.key} className="border-b border-gray-200">
                   <td className="py-1 pr-2">{x.label}</td><td className="pr-2">{secText(x)}</td>
                   <td className="pr-2 tabular-nums">{fmt(x.len * x.count, 2)}</td><td className="pr-2 tabular-nums">{fmt(x.r.section.w, 2)}</td>
-                  <td className="pr-2 tabular-nums">{fmt(x.weight, 1)}</td><td>{x.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
+                  <td className="pr-2 tabular-nums">{fmt(x.weight, 1)}</td><td>{res(x.label, x.ok)}</td>
                 </tr>
               ))}
               <tr className="font-semibold"><td className="py-1" colSpan={4}>รวม</td><td className="tabular-nums">{fmt(dz.weight, 1)}</td><td /></tr>

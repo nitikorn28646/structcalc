@@ -604,3 +604,7 @@ false / null = optional), go {step, sub, tool, roof, dialog}; steps 5–9 and 2.
 FloorBoard (tool) and RoofPage (roof tab) listen to; "ไปขั้นถัดไป →"). App taskCtx (slabsOk from designSlabs). FloorBoard: numbered tool badges
 (① เสา ② คาน ③ พื้นยื่น), empty-floor hint overlay (frame step). Chip wording must not repeat a real button's text (E2E clicks by text —
 "นำเข้าเสา + แปลนจากโครงสร้าง" chip broke the new-project test). Left: A4 new-project wizard, A6 guided tour.
+RESULT WORDS PER GROUP (2026-11-16, user "ไม่โชว์แค่ของอะเส"): project.report.marks { "คาน"|"เสา"|"พื้น"|"ฐานราก"|"แรงด้านข้าง"|"หลังคา|<group label>": false }
+→ that group's ผ่าน/ไม่ผ่าน cells print "-" (WorkReport mark(cat, label) → FrameReport P(cat)(ok), RoofReport res(label, ok) in member / plate /
+schedule tables); numbers unchanged. Panel block "แสดงคำว่า ผ่าน / ไม่ผ่าน" (roof groups from runRoof dz.rows labels). report-editions.cjs checks it
+(all numbers identical, อะเส rows "-"); its text grab now separates cells (detached clones have no innerText layout).

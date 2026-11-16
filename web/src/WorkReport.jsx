@@ -61,6 +61,8 @@ export function WorkReport({ frame, roof, project }) {
   // one status for the whole book (roof + structure), the same numbers in the summary chapter and the criteria summary line
   // what is printed (project.report: chapters / parts, the engineer's decision on each failing check) — printing only, no value changes
   const o = reportOpt(project.report), edition = reportPresetName(project.report);
+  // result words (ผ่าน / ไม่ผ่าน) per category / roof member group — project.report.marks { "คาน": false, "หลังคา|อะเส": false } (false = "-")
+  const marks = project.report?.marks ?? {}, mark = (cat, label = null) => marks[cat] !== false && (label == null || marks[`${cat}|${label}`] !== false);
   const sk = useSkeleton(), rr = hasRoof && sk ? runRoof(roof, sk) : null, st = applyDecisions(projectStatus(frame, res, rr?.dz ?? null, hasRoof ? roof : null), project.report?.fails);
   // report integrity: a code of the input data (any edit of structure / roof / project data changes it) + the time the book was made
   const stamp = projectStamp(frame, roof, project), made = new Date().toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" });
@@ -97,11 +99,11 @@ export function WorkReport({ frame, roof, project }) {
       <span className="rp-str-project hidden">{project.name}</span><span className="rp-str-method hidden">WSD / ASD</span><span className="rp-str-stamp hidden">{`รหัสข้อมูล ${stamp} · ฉบับ ${rev.rev} (${edition}) · ${made}`}</span>
       <Toc items={toc} />
       {o("project") && <ProjectInfo project={project} frame={frame} res={res} st={st} hasRoof={hasRoof} n={num["c-project"]} statusN={num["c-status"] ?? "-"} stamp={stamp} made={made} revs={revs} o={o} />}
-      {parts(["criteria", "lateral", "plans", "analysis"]).length > 0 && <FrameReport frame={frame} project={project} part={parts(["criteria", "lateral", "plans", "analysis"])} nOf={nOf} res={res} overall={st} o={o} />}
-      {hasRoof && o("roof") && <RoofReport roof={roof} project={project} bare nb={num["c-roof"]} />}
-      {parts(["floors", "beams", "columns", "footings"]).length > 0 && <FrameReport frame={frame} project={project} part={parts(["floors", "beams", "columns", "footings"])} nOf={nOf} res={res} overall={st} o={o} />}
+      {parts(["criteria", "lateral", "plans", "analysis"]).length > 0 && <FrameReport frame={frame} project={project} part={parts(["criteria", "lateral", "plans", "analysis"])} nOf={nOf} res={res} overall={st} o={o} mark={mark} />}
+      {hasRoof && o("roof") && <RoofReport roof={roof} project={project} bare nb={num["c-roof"]} mark={mark} />}
+      {parts(["floors", "beams", "columns", "footings"]).length > 0 && <FrameReport frame={frame} project={project} part={parts(["floors", "beams", "columns", "footings"])} nOf={nOf} res={res} overall={st} o={o} mark={mark} />}
       {o("status") && <StatusChapter st={st} n={num["c-status"]} o={o} />}
-      {parts(["schedules", "appendix"]).length > 0 && <FrameReport frame={frame} project={project} part={parts(["schedules", "appendix"])} nOf={nOf} res={res} overall={st} o={o} />}
+      {parts(["schedules", "appendix"]).length > 0 && <FrameReport frame={frame} project={project} part={parts(["schedules", "appendix"])} nOf={nOf} res={res} overall={st} o={o} mark={mark} />}
     </div>
   );
 }
