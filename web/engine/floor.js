@@ -547,7 +547,10 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   if (corners.length) warnings.push(`มุมคานไม่มีเสา ${corners.length} จุด (แนว ${corners.join(", ")}) — คานต่อเนื่องคิดว่าวางบนกันเอง ใช้ผลโครง 3 มิติ (มุมยึดแน่น) ประกอบ · ใส่เสาที่มุม หรือให้คานด้านหนึ่งยื่นรับ`);
   // slab panels by kind: S cast in place (two-way / one-way), PS precast planks (one-way along dir), GS on ground (nothing to the beams)
   const panels = findPanels(flat).map((P) => {
-    const key = panelKey(P), o = floor.panels?.[key] ?? {}, open = !!o.open, st = o.kind ?? "S", dir = st === "PS" ? o.dir ?? "x" : null;
+    const key = panelKey(P), o = floor.panels?.[key] ?? {}, open = !!o.open, st = o.kind ?? floor.slabKind ?? "S";
+    // floor default kind (new-project wizard, 2026-11-16): precast planks from the floor default span the shorter side of the panel
+    const bw = Math.max(...P.map((p) => p[0])) - Math.min(...P.map((p) => p[0])), bh = Math.max(...P.map((p) => p[1])) - Math.min(...P.map((p) => p[1]));
+    const dir = st === "PS" ? o.dir ?? (o.kind == null && floor.slabKind === "PS" ? (bw <= bh ? "x" : "y") : "x") : null;
     const t = o.t ?? floor.t, finish = o.finish ?? floor.finish, live = o.live ?? floor.live;
     const area = Math.abs(P.reduce((s, p, i) => s + cross(p, P[(i + 1) % P.length]), 0) / 2);
     const g = open ? { DL: 0, SDL: 0, LL: 0, WALL: 0 } : { DL: CONC * t, SDL: finish + (o.extra ?? 0), LL: live, WALL: 0 };

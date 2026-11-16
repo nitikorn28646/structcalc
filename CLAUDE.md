@@ -608,3 +608,9 @@ RESULT WORDS PER GROUP (2026-11-16, user "ไม่โชว์แค่ขอ�
 → that group's ผ่าน/ไม่ผ่าน cells print "-" (WorkReport mark(cat, label) → FrameReport P(cat)(ok), RoofReport res(label, ok) in member / plate /
 schedule tables); numbers unchanged. Panel block "แสดงคำว่า ผ่าน / ไม่ผ่าน" (roof groups from runRoof dz.rows labels). report-editions.cjs checks it
 (all numbers identical, อะเส rows "-"); its text grab now separates cells (detached clones have no innerText layout).
+NEW-PROJECT WIZARD A4 (2026-11-16): after "ใหม่" (App newProject → wizard) src/NewProjectWizard.jsx asks 5 things (name + storeys, storey / ground-beam
+heights, grid X/Y spans, upper / ground slab kind + t, roof hip / gable / none + slope + overhang) → src/starter.js buildStarter(base, EMPTY_ROOF, o):
+floors คานคอดิน (slabKind GS or S/PS) · ชั้น 2…n · คานหลังคา (t 0), columns on every grid node, beams on every grid line, roof from roofFromFrame (gables on
+the short edges) + roofLink on; "ข้าม" = empty board as before. floor.js: floor.slabKind = default panel kind (o.kind ?? floor.slabKind ?? "S"); PS from
+the floor default spans the shorter side. Starter 2 storeys 8 × 7.5 m: beams 36/36, columns 27/27, base 88 t. E2E: skip_wizard() after every New.
+Left: A6 guided tour.

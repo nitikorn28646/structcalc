@@ -48,6 +48,15 @@ def wait_status(page, timeout=15):
     return status(page)
 
 
+def skip_wizard(page):
+    """new-project wizard (2026-11-16): the tests build by hand → press skip when it shows"""
+    try:
+        page.wait_for_selector("button:has-text('ข้าม — เริ่มจากกระดานว่าง')", timeout=4000)
+        page.click("button:has-text('ข้าม — เริ่มจากกระดานว่าง')")
+    except Exception:
+        pass
+
+
 def step(page, label):
     page.click(f"aside button:has-text('{label}')")
     page.wait_for_timeout(700 if label != "รายการคำนวณ" else 6000)
@@ -119,6 +128,11 @@ def test_new_project(browser, expected, save):
     page.wait_for_timeout(500)
     if page.locator("button:has-text('ทิ้งและเริ่มใหม่')").count():
         page.click("button:has-text('ทิ้งและเริ่มใหม่')")
+    try:  # new-project wizard (2026-11-16): this test builds by hand → skip it
+        page.wait_for_selector("button:has-text('ข้าม — เริ่มจากกระดานว่าง')", timeout=5000)
+        page.click("button:has-text('ข้าม — เริ่มจากกระดานว่าง')")
+    except Exception:
+        pass
     step(page, "กริด / ระดับชั้น")
     for label, val in [("แกน X", "4 3.5 4"), ("แกน Y", "3 4")]:
         box = page.locator(f"label:has-text('{label}') input")
@@ -189,6 +203,7 @@ def test_new_project(browser, expected, save):
     check("new: save writes a project file", json.loads(f.read_text(encoding="utf-8")).get("app") == "StructCalc")
     page.click("button[title^='โครงการใหม่']")
     page.wait_for_timeout(800)
+    skip_wizard(page)
     step(page, "ออกแบบสมาชิก")
     check("new: New empties the model", (status(page) or {}).get("beams") in (None, "0/0"), str(status(page)))
     with page.expect_file_chooser() as fc:
@@ -200,6 +215,7 @@ def test_new_project(browser, expected, save):
     # restore after New
     page.click("button[title^='โครงการใหม่']")
     page.wait_for_timeout(800)
+    skip_wizard(page)
     page.click("button:has-text('กู้คืน')")
     page.wait_for_timeout(1500)
     s3 = wait_status(page)

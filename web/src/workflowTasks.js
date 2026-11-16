@@ -27,7 +27,7 @@ function rawTasks(step, { frame, roof, project, res, dz = null, slabsOk = null }
     ];
     case "frame": {
       const noCol = floorsMissing((f) => has(f.columns)), noBeam = floorsMissing((f) => has(f.beams));
-      const panelsOk = an.every((a) => (a.panels ?? []).every((p) => p.open || p.stairWell || p.t > 0));
+      const panelsOk = an.every((a, k) => !(fl[k]?.t > 0) && !Object.keys(fl[k]?.panels ?? {}).length || (a.panels ?? []).every((p) => p.open || p.stairWell || p.t > 0)); // a level drawn without a slab (roof beams, t 0) needs none
       return [
         T("2.1", "วางเสาทุกชั้น", !noCol.length, list(noCol), { tool: "column" }),
         T("2.2", "วางคานทุกชั้น (คานหลัก + คานซอย)", !noBeam.length, list(noBeam), { tool: "beam" }),

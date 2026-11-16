@@ -26,6 +26,8 @@ import { applyStandard } from "./DesignCriteria.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { WorkReport } from "./WorkReport.jsx";
 import ReportOptions from "./ReportOptions.jsx";
+import NewProjectWizard from "./NewProjectWizard.jsx";
+import { buildStarter } from "./starter.js";
 import { projectStamp, validateInput } from "./reportQA.js";
 import { analyzeFrame } from "../engine/frame.js";
 import { roofFromFrame, roofPoints } from "./roofLink.js";
@@ -432,7 +434,19 @@ export default function App() {
     setFrameState(empty); setRoofState(EMPTY_ROOF);
     try { localStorage.setItem("structcalc.frame", JSON.stringify(empty)); localStorage.setItem("structcalc.roof", JSON.stringify(EMPTY_ROOF)); } catch { /* ignore */ }
     fileRef.current = null; setFileName(null); setDirty(false); setAskNew(false); setStep("project");
+    setWizard({ base: empty }); // plan A4: five questions → a starting model (or skip = empty board)
     setNotice({ ok: true, text: "เริ่มโครงการใหม่แล้ว — ใส่ข้อมูลโครงการ แล้วไปขั้น 1 กริด / ระดับชั้น" });
+  };
+  const [wizard, setWizard] = useState(null);
+  const buildFromWizard = (o) => {
+    const r = buildStarter(wizard.base, EMPTY_ROOF, o);
+    if (r.error) return r.error;
+    setFrameState(r.frame); setRoofState(r.roof);
+    try { localStorage.setItem("structcalc.frame", JSON.stringify(r.frame)); localStorage.setItem("structcalc.roof", JSON.stringify(r.roof)); } catch { /* ignore */ }
+    if (o.name) set("project.name", o.name);
+    setWizard(null); setStep("frame");
+    setNotice({ ok: true, text: `สร้างโครงตั้งต้นแล้ว: ${r.frame.floors.length} ระดับ · เสาทุกจุดตัดกริด · คานทุกเส้นกริด${r.roof.pts?.length ? " · หลังคาเชื่อมกับคานหลังคา" : ""} — ลบ/เพิ่มเสาและคานให้ตรงแบบ แล้วทำตามรายการงานด้านบน` });
+    return null;
   };
   const openProject = async (file) => {
     try {
@@ -593,6 +607,7 @@ export default function App() {
             <textarea id="sc-savetext" readOnly value={projectJson()} className="h-28 w-full rounded border border-gray-200 p-1 font-mono text-[10px]" onFocus={(e) => e.target.select()} />
             <p className="text-[11px] text-gray-500">คัดลอกแล้ววางใน Notepad บันทึกชื่อ {saveBox.name} — เปิดกลับด้วยปุ่ม "เปิด" ได้ตามปกติ · งานล่าสุดยังเก็บในเบราว์เซอร์นี้ด้วย (ปุ่ม "กู้คืน") · ถ้ารันโปรแกรมบนเครื่องตัวเอง ปุ่มบันทึกจะเขียนไฟล์ได้ตรง</p>
           </DialogContent></Dialog>}
+          {wizard && <NewProjectWizard onBuild={buildFromWizard} onSkip={() => setWizard(null)} />}
           {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} onNew={frame === DEFAULT_FRAME ? () => { closeTour(); newProject(); } : null} />}
 
           <ErrorBoundary resetKey={mod}>
