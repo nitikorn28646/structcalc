@@ -283,6 +283,8 @@ const STEPS = [["frame", "1 โครง", false, "ขั้น 1 โครง: 
 
 export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo, onRoofFromFrame, focus = false }) {
   const [multiSel, setMultiSel] = useState([]), [pickSet, setPickSet] = useState(null), [armed, setArmed] = useState(false), pickRef = useRef(null); // Load Cases page
+  // checklist bar (Help.jsx StepChecklist) → open the sub-tab where a task is done
+  useEffect(() => { const f = (e) => { if (e.detail?.sub) { setSubState(e.detail.sub); setSel(null); } }; window.addEventListener("structcalc:go", f); return () => window.removeEventListener("structcalc:go", f); }, []);
   const [subState, setSubState] = useState(null), [view, setView] = useState("2d"), [sel, setSel] = useState(null), mode = step, setMode = () => {};
   const [show, setShow] = useState({ DL: true, SDL: true, WALL: true, LL: true, SP: true }), wallTypes = frame.wallTypes ?? DEFAULT_WALL_TYPES;
   const cur = Math.min(frame.cur ?? 0, frame.floors.length - 1), fl = frame.floors[cur], types = frame.beamTypes, cTypes = frame.colTypes;

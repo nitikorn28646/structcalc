@@ -33,7 +33,9 @@ import { RoofLinkCard } from "./RoofLinkCard.jsx";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { autoInnerPlates } from "../engine/roofMembers.js";
 import { HelpCircle, Redo2, Undo2 } from "lucide-react";
-import { StepGuide, Tour, markTourSeen, tourSeen } from "./Help.jsx";
+import { StepGuide, StepChecklist, Tour, markTourSeen, tourSeen } from "./Help.jsx";
+import { stepState } from "./workflowTasks.js";
+import { designSlabs } from "../engine/slabDesign.js";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { BRAND, imageToDataUrl, saveBrand, useBrand } from "./brand.js";
 import { SnapshotStation } from "./Snapshot3D.jsx";
@@ -309,6 +311,9 @@ export default function App() {
       return { floors: frame.floors.map(() => empty), columns: [], stacks: [], footings: [], warnings: [`วิเคราะห์ไม่ได้: ${e.message}`], ok: false };
     }
   }, [frame]);
+  // workflow task status (checklist bar + sidebar ✓): slabs / stairs pass from the slab module, roof posts from the roof run
+  const taskCtx = useMemo(() => { let slabsOk = null; try { const rows = fres.floors.flatMap((an, k) => designSlabs(an, frame.floors[k], frame.mat)).filter((x) => x.r); slabsOk = rows.length ? rows.every((x) => x.ok) : null; } catch { /* no slabs */ }
+    return { frame, roof, project: st.project, res: fres, slabsOk }; }, [frame, roof, st.project, fres]);
   useEffect(() => { // roof → structure link: refresh the roof reactions (not an undo step) when the roof or the link changes
     if (!frame.roofLink?.on || !roof?.pts) return;
     // nothing drawn to carry the roof yet (no columns / plates — e.g. the user cleared them): no load points, nothing to ask about
@@ -476,12 +481,12 @@ export default function App() {
           <nav className="space-y-0.5">
             {WORKFLOW.map(([key, label], i) => {
               const nBeam = fres.floors.reduce((a, f) => a + f.spans.filter((x) => !x.ok).length, 0), nCol = fres.columns.filter((c) => !c.ok).length, nFoot = fres.footings.filter((f) => !f.ok).length;
-              const warn = (key === "design" && nBeam + nCol > 0) || (key === "footing" && nFoot > 0) || (key === "frame" && fres.warnings.length > 0);
+              const ss = stepState(key, taskCtx), done = ss === "done", warn = ss === "warn" || (key === "design" && nBeam + nCol > 0) || (key === "footing" && nFoot > 0) || (key === "frame" && fres.warnings.length > 0);
               const on = mod === "work" && step === key;
               return (
                 <button key={key} onClick={() => { setStep(key); setMenuOpen(false); }} title={mini ? `${i}. ${label}` : undefined}
                   className={`flex w-full items-center ${mini ? "justify-center" : ""} gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium ${on ? "bg-brand-50 text-brand-500" : "text-gray-700 hover:bg-gray-100"}`}>
-                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${on ? "bg-brand-500 text-[#fff]" : warn ? "bg-[#fef3f2] text-[#d92d20]" : "bg-gray-100 text-gray-500"}`}>{warn ? "!" : i}</span>{!mini && label}
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${on ? "bg-brand-500 text-[#fff]" : warn ? "bg-[#fef3f2] text-[#d92d20]" : done ? "bg-[#ecfdf3] text-[#067647]" : "bg-gray-100 text-gray-500"}`}>{warn ? "!" : done && !on ? "✓" : i}</span>{!mini && label}
                 </button>
               );
             })}
@@ -552,6 +557,7 @@ export default function App() {
             </div>
           </header>
           {mod === "work" && !focus && <StepGuide key={step} step={step} index={WORKFLOW.findIndex((w) => w[0] === step)} />}
+          {mod === "work" && !focus && <StepChecklist step={step} steps={WORKFLOW} ctx={taskCtx} setStep={setStep} onDialog={(d) => d === "project" && setProjOpen(true)} />}
           <SnapshotStation />
           {brandOpen && <Dialog open onOpenChange={(o) => !o && setBrandOpen(false)}><DialogContent className="max-w-md">
             <DialogTitle>{BRAND.full}</DialogTitle>

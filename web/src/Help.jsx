@@ -1,5 +1,6 @@
 // In-app help: a short guide bar per workflow step (collapsible, remembered per browser) and a first-run tour of the
 // whole workflow with a link to the example house. Text only — no engine knowledge here.
+import { stepTasks } from "./workflowTasks.js";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
 import { BookOpen, ChevronDown, ChevronUp, HelpCircle, X } from "lucide-react";
@@ -92,3 +93,28 @@ export function Tour({ steps, onClose, onGo, onNew = null }) {
 
 export const tourSeen = () => { try { return localStorage.getItem("structcalc.tour") === "1"; } catch { return true; } };
 export const markTourSeen = () => { try { localStorage.setItem("structcalc.tour", "1"); } catch { /* ignore */ } };
+
+// task checklist of the current workflow step (user 2026-11-16): numbered tasks ticked from the project data, click = go to where the task
+// is done (step + sub-tab / tool / roof tab via the "structcalc:go" event), and the next step button
+export function goTo(go, setStep, cur) {
+  if (go.step && go.step !== cur) setStep(go.step);
+  setTimeout(() => window.dispatchEvent(new CustomEvent("structcalc:go", { detail: go })), go.step !== cur ? 120 : 0);
+}
+export function StepChecklist({ step, steps, ctx, setStep, onDialog }) {
+  const tasks = stepTasks(step, ctx), i = steps.findIndex((w) => w[0] === step), next = steps[i + 1];
+  if (!tasks.length) return null;
+  const req = tasks.filter((t) => t.done !== null), nDone = req.filter((t) => t.done).length;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 bg-white px-4 py-1.5 text-[12px] md:px-5">
+      <span className="mr-1 font-medium text-gray-600">งานในขั้นนี้ {req.length ? `${nDone}/${req.length}` : ""}</span>
+      {tasks.map((t) => (
+        <button key={t.id} title={t.hint || t.label} onClick={() => (t.go.dialog ? onDialog?.(t.go.dialog) : goTo(t.go, setStep, step))}
+          className={`flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ${t.done === true ? "bg-[#ecfdf3] text-[#067647] ring-[#abefc6]" : t.done === false ? "bg-[#fffaeb] text-[#b54708] ring-[#fedf89] hover:bg-[#fef0c7]" : "bg-gray-50 text-gray-500 ring-gray-200 hover:bg-gray-100"}`}>
+          <span className="font-semibold">{t.done === true ? "✓" : t.done === false ? "○" : "·"}</span>{t.id} {t.label}{t.done === null ? " (ถ้ามี)" : ""}
+          {t.done === false && t.hint && /ไม่ผ่าน|คำเตือน|ยังไม่ครบ|ยังไม่มี/.test(t.hint) && <span className="text-[11px] opacity-80">— {t.hint}</span>}
+        </button>))}
+      {next && <button onClick={() => setStep(next[0])} className={`ml-auto rounded-lg px-3 py-1 font-medium ${req.length && nDone === req.length ? "bg-brand-500 text-[#fff] hover:bg-brand-600" : "text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50"}`}>
+        ไปขั้นถัดไป → {i + 1}. {next[1]}</button>}
+    </div>
+  );
+}

@@ -48,6 +48,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null);
   useEffect(() => { setToolState(tools[1]?.[0] ?? "select"); setStart(null); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
   const setTool = (t) => { setToolState(t); setStart(null); setTyped(""); };
+  // checklist bar → pick the tool of a task (when this board offers it)
+  useEffect(() => { const f = (e) => { const t = e.detail?.tool; if (t && tools.some((x) => x[0] === t)) setTool(t); }; window.addEventListener("structcalc:go", f); return () => window.removeEventListener("structcalc:go", f); });
   const stairs = floor.stairs ?? [], lineLoads = floor.lineLoads ?? [], pointLoads = floor.pointLoads ?? [];
   const cols = floor.columns, beams = floor.beams, walls = wallsOf(floor), cants = floor.cants ?? [], G = floor.grid, { GX, GY, SX, SY, xName, yName } = gridAxes(G);
   const fitBox = () => {
@@ -286,9 +288,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       </div>
       <div className="flex min-h-0 flex-1 gap-2">
       {tools.length > 1 && <div className="flex w-[64px] shrink-0 flex-col gap-1">
-        {tools.map(([key, label, Icon, hint]) => (
-          <Tip key={key} text={hint ? `${label} — ${hint}` : label}><button onClick={() => setTool(key)}
-            className={`flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ring-1 ${tool === key ? "bg-brand-500 text-[#fff] ring-brand-500" : "bg-white text-gray-600 ring-gray-200 hover:bg-gray-50"}`}><Icon className="h-4 w-4" /><span className="leading-tight">{label}</span></button></Tip>
+        {tools.map(([key, label, Icon, hint], ti) => (
+          <Tip key={key} text={hint ? `${label} — ${hint}` : label}><button onClick={() => setTool(key)} data-n={key !== "select" && key !== "erase" ? ti : undefined}
+            className={`flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium ring-1 ${tool === key ? "bg-brand-500 text-[#fff] ring-brand-500" : "bg-white text-gray-600 ring-gray-200 hover:bg-gray-50"}`}><span className="relative"><Icon className="h-4 w-4" />{key !== "select" && key !== "erase" && <span className="absolute -right-2.5 -top-1.5 grid h-3.5 w-3.5 place-items-center rounded-full bg-gray-700 text-[8px] font-bold leading-none text-[#fff]">{ti}</span>}</span><span className="leading-tight">{label}</span></button></Tip>
         ))}
       </div>}
       <div className={`relative ${compact ? "min-h-[180px]" : "min-h-[420px]"} flex-1 overflow-hidden rounded-xl bg-gray-50`}>
@@ -466,6 +468,11 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
           )}
           <defs><marker id="arrL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={SP_C} /></marker><marker id="arrS" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={ST_C} /></marker><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#30a46c" /></marker></defs>
         </svg>
+        {step === "frame" && !cols.length && !beams.length && <div className="pointer-events-none absolute inset-x-0 top-12 mx-auto w-fit max-w-[90%] rounded-xl border border-brand-200 bg-white/95 px-4 py-3 text-[13px] text-gray-700 shadow-sm">
+          <b className="text-brand-600">ชั้นนี้ยังว่าง — เริ่มแบบนี้</b>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5"><li>วางเสา: เครื่องมือ <b>① เสา</b> แล้วคลิกจุดตัดกริด {gridOn ? <>หรือปุ่ม <b>เสาทุกโหนด</b> ด้านบน</> : null}</li>
+            <li>วางคาน: เครื่องมือ <b>② คาน</b> คลิกเสาต้น → เสาปลาย (ต่อเนื่องได้) {gridOn ? <>หรือปุ่ม <b>คานตามกริด</b></> : null}</li>
+            <li>คลิกช่องพื้นที่คานล้อมรอบ เพื่อกำหนดชนิดและความหนา · มีชั้นล่างแล้ว? ปุ่ม <b>คัดลอกชั้นล่าง</b></li></ol></div>}
         <div className="pointer-events-none absolute left-3 top-2 z-[1] rounded-lg bg-white/90 px-2 py-1 text-[12px] text-gray-600 shadow-theme-xs">{info[3]}</div>
         {cur?.p && <div className="pointer-events-none absolute right-3 top-2 rounded-lg bg-white/90 px-2 py-1 text-[12px] tabular-nums text-gray-600 shadow-theme-xs">X {fmt(cur.p[0], 2)} · Y {fmt(cur.p[1], 2)}</div>}
       </div>

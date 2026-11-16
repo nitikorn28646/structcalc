@@ -356,6 +356,7 @@ function SlopeFrom({ roof, g, set }) {
 
 export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, res = null, focus = false }) {
   const sk = useSkeleton(), { g, fr, dz, error, empty } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|loads|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
+  useEffect(() => { const f = (e) => { if (e.detail?.roof) setMode(e.detail.roof); }; window.addEventListener("structcalc:go", f); return () => window.removeEventListener("structcalc:go", f); }, []); // checklist bar → roof tab
   const [view, setView] = useState("2d"), [side, setSide] = useState("table"), [pickP, setPickP] = useState(null);
   const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz);
   const modeBar = (

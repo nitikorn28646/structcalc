@@ -598,3 +598,9 @@ Test cli/report-editions.cjs [projects…] (browser, dev server): every edition 
 chapter, member chapters identical after decisions, no NaN, contents 1…n — yasothon, _roof3, _user, _big ALL OK. E2E 47/47, regress identical.
 NEXT (agreed plan, user 2026-11-16): A1 + A2 step checklists with ✓/○ and "next" button, sidebar status; A3 + A5 empty-board hints + numbered
 tools; A4 new-project wizard (5 questions) + A6 guided tour.
+WORKFLOW TASKS A1–A3 + A5 (2026-11-16): src/workflowTasks.js stepTasks(step, ctx) = numbered tasks per step ticked from the data (done true /
+false / null = optional), go {step, sub, tool, roof, dialog}; steps 5–9 and 2.5 never count as done before beams exist; stepState → sidebar
+✓ / ! / number. Help.jsx StepChecklist (row under the guide bar: chips, click = goTo → "structcalc:go" window event that FramePage (sub-tab),
+FloorBoard (tool) and RoofPage (roof tab) listen to; "ไปขั้นถัดไป →"). App taskCtx (slabsOk from designSlabs). FloorBoard: numbered tool badges
+(① เสา ② คาน ③ พื้นยื่น), empty-floor hint overlay (frame step). Chip wording must not repeat a real button's text (E2E clicks by text —
+"นำเข้าเสา + แปลนจากโครงสร้าง" chip broke the new-project test). Left: A4 new-project wizard, A6 guided tour.
