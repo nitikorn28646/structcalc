@@ -98,7 +98,7 @@ export function Doc({ project, title, subtitle, memberLabel, member, summary, me
       <span className="rp-str-project hidden">{project.name}</span>
       <span className="rp-str-member hidden">{`${memberLabel} ${member}`}</span>
       <span className="rp-str-method hidden">{method}</span>
-      <SigRun project={project} />
+      {!bare && <SigRun project={project} />}
       <span className="rp-str-eng hidden">{`(${project.engineer || "........................................"}) วิศวกรผู้คำนวณ${project.license ? ` ทะเบียน ${project.license}` : ""}`}</span>
       {bare ? <>{children}</> : <>
       <div className="mb-3 border-b-[1.5pt] border-[#1f3a5f] pb-2 text-[#1f3a5f]">

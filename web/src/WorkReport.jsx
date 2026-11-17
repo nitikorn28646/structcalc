@@ -2,7 +2,7 @@
 // contents with page numbers, then structure front (summary, criteria, lateral, plans), the roof, structure back (loads and slabs per
 // floor, beams, columns, footings, schedules, appendix). Every page is signed (ReportKit page footer).
 import { useLayoutEffect, useRef } from "react";
-import { Cover, Toc } from "./ReportKit.jsx";
+import { Cover, Toc, SigRun } from "./ReportKit.jsx";
 import { FrameReport } from "./FrameReport.jsx";
 import { RoofReport } from "./RoofReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
@@ -94,6 +94,7 @@ export function WorkReport({ frame, roof, project }) {
     <div className="report" ref={root}>
       <Cover project={project} title="รายการคำนวณออกแบบโครงสร้าง" subtitle="อาคารคอนกรีตเสริมเหล็ก และโครงหลังคาเหล็ก"
         items={[["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`]]} standards={STANDARDS} docNo={project.docNo || `SC-${stamp}`} rev={`${rev.rev} · ${edition}`} />
+      <SigRun project={project} />
       <span className="rp-str-project hidden">{project.name}</span><span className="rp-str-method hidden">WSD / ASD</span><span className="rp-str-stamp hidden">{`รหัสข้อมูล ${stamp} · ฉบับ ${rev.rev} (${edition}) · ${made}`}</span>
       <Toc items={toc} />
       {o("project") && <ProjectInfo project={project} frame={frame} res={res} st={st} hasRoof={hasRoof} n={num["c-project"]} statusN={num["c-status"] ?? "-"} stamp={stamp} made={made} revs={revs} o={o} />}
