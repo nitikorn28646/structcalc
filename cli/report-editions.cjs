@@ -36,7 +36,7 @@ const bag = (a) => a.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map());
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     for (let k = 0; k < 3; k++) {
       await p.getByRole("button", { name: "ฉบับเต็ม", exact: true }).click(); await p.getByRole("button", { name: "แสดงทั้งหมด", exact: true }).click(); await p.waitForTimeout(1500);
-      const boxes = p.locator("input[type=checkbox]:not([disabled])"), n = await boxes.count(), picks = new Set();
+      const boxes = p.locator("input[type=checkbox]:not([disabled]):not([data-mark])"), n = await boxes.count(), picks = new Set();
       while (picks.size < Math.min(4, n)) picks.add(Math.floor(rnd() * n));
       for (const i of [...picks].sort((a, b) => b - a)) await boxes.nth(i).click();
       await p.waitForTimeout(2500); await check(`กำหนดเอง ${k + 1}`);
@@ -58,9 +58,12 @@ const bag = (a) => a.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map());
     if (await cb.count()) {
       await p.getByRole("button", { name: "ฉบับเต็ม", exact: true }).click(); await p.getByRole("button", { name: "แสดงทั้งหมด", exact: true }).click(); await p.waitForTimeout(1200);
       const before = await grab(); await cb.uncheck(); await p.waitForTimeout(2500); const v = await grab();
-      const eq = Object.keys(before.out).every((id) => { const a = bag(nums(before.out[id])), b2 = bag(nums(v.out[id] ?? "")); return a.size === b2.size && [...a].every(([x, n]) => b2.get(x) === n); });
+      // a failing อะเส leaves the summary by default (user 2026-11-17) → the summary counts may drop; every member chapter keeps its numbers
+      const plateFail = /อะเส[^\n]*ไม่ผ่าน/.test(before.out["c-status"] ?? "");
+      const eq = Object.keys(before.out).filter((id) => !plateFail || !["c-status", "c-project", "c-criteria"].includes(id)).every((id) => { const a = bag(nums(before.out[id])), b2 = bag(nums(v.out[id] ?? "")); return a.size === b2.size && [...a].every(([x, n]) => b2.get(x) === n); });
       log(eq, `${pj} · result words off for อะเส: all numbers identical`);
       const plateRows = v.all.split("\n").filter((l) => /^\s*อะเส\s*\t/.test(l));
+      if (plateFail) log(!/อะเส[^\n]*ไม่ผ่าน/.test(v.out["c-status"] ?? ""), `${pj} · result words off for อะเส: failing plates left out of the summary`);
       log(plateRows.length > 0 && plateRows.every((l) => !/ผ่าน/.test(l)), `${pj} · result words off for อะเส: schedule rows show "-" (${plateRows.length} rows)`);
       await cb.check(); await p.waitForTimeout(800);
     }

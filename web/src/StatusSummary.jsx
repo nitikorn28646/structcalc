@@ -18,7 +18,7 @@ export function projectStatus(frame, res, dz, roof = null) {
     const list = row.members ?? [{ ...row, tag: null }];
     for (const m of list) {
       const bat = m.r?.section?.type === "BAT";
-      items.push({ cat: "หลังคา", id: `${row.label}${m.tag ? ` ${m.tag}` : ""}`, where: "c-roof", calc: ["plate", "post"].includes(row.key) ? null : `R-${row.key ?? row.label}`, status: bat ? "NC" : !m.r ? "INC" : m.r.ok ? "PASS" : "FAIL",
+      items.push({ cat: "หลังคา", group: row.label, id: `${row.label}${m.tag ? ` ${m.tag}` : ""}`, where: "c-roof", calc: ["plate", "post"].includes(row.key) ? null : `R-${row.key ?? row.label}`, status: bat ? "NC" : !m.r ? "INC" : m.r.ok ? "PASS" : "FAIL",
         util: bat || !m.r ? null : roofUtil(m.r), why: bat ? "แปสำเร็จรูป — ใช้ตามตารางผู้ผลิต" : m.r && !m.r.ok ? `fb ${fmt(m.r.fb, 0)} / ${fmt(m.r.Fb, 0)} · Δ ${fmt(m.r.d ?? m.r.dy, 2)} / ${fmt(m.r.dAllow ?? m.r.dyAllow, 2)} ซม.` : "" });
     }
   }
@@ -55,6 +55,14 @@ function summarize(items, inputs, extra = {}) {
 // the engineer's decision per failing check (user 2026-11-16: the engineer is told first, then chooses — and carries the responsibility):
 // "show" (default) = printed as ไม่ผ่าน · "accept" = printed as วิศวกรยอมรับ with the engineer's reason · "hide" = left out of the summary
 // chapter. Only the summary is affected: no computed value changes, and member tables / sheets still print the real result.
+// result words switched off for a group (project.report.marks, user 2026-11-17: "ซ่อนผ่าน/ไม่ผ่านอะเสแล้ว ทำไมบทสรุปยังขึ้นไม่ผ่าน") → that group's
+// failing items default to "hide" in the summary too; an explicit decision by the engineer on the item still wins.
+export const markOff = (marks, x) => !!marks && (marks[x.cat] === false || (x.group != null && marks[`${x.cat}|${x.group}`] === false));
+export function effectiveFails(st, report) {
+  const fails = { ...(report?.fails ?? {}) }, marks = report?.marks;
+  for (const x of st?.items ?? []) if (x.status === "FAIL" && !fails[x.key] && markOff(marks, x)) fails[x.key] = { mode: "hide", auto: true };
+  return fails;
+}
 export function applyDecisions(st, fails = {}) {
   if (!fails || !Object.keys(fails).length) return st;
   const items = [], hidden = [];

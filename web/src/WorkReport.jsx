@@ -7,7 +7,7 @@ import { FrameReport } from "./FrameReport.jsx";
 import { RoofReport } from "./RoofReport.jsx";
 import { analyzeFrame } from "../engine/frame.js";
 import { runRoof, useSkeleton } from "./RoofPage.jsx";
-import { StatusChapter, projectStatus, applyDecisions } from "./StatusSummary.jsx";
+import { StatusChapter, projectStatus, applyDecisions, effectiveFails } from "./StatusSummary.jsx";
 import { reportOpt, reportPresetName } from "./reportOptions.js";
 import { projectStamp } from "./reportQA.js";
 
@@ -24,8 +24,7 @@ const UNITS = [["แรง / น้ำหนัก", "กก. (kgf) · ตัน
 // chapter 1: project data, scope of this book, standards, the unit system, the overall result (details in chapter 10)
 function ProjectInfo({ project, frame, res, st, hasRoof, n, statusN, stamp, made, revs, o = () => true }) {
   const spans = res.floors.reduce((t, a) => t + a.spans.length, 0);
-  const rows = [["โครงการ", project.name], ["เจ้าของโครงการ", project.owner], ["สถานที่ก่อสร้าง", project.location], ["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`], ["วันที่", project.date],
-    ["ระดับอาคาร", `${frame.floors.length} ระดับคาน (${frame.floors.map((f) => f.name).join(" · ")})`]].filter(([, v]) => v);
+  const rows = [["โครงการ", project.name], ["เจ้าของโครงการ", project.owner], ["สถานที่ก่อสร้าง", project.location], ["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`], ["วันที่", project.date]].filter(([, v]) => v);
   return (
     <section id="c-project" className="rp-chapter mb-4">
       <h2 className="mb-1.5 flex items-baseline gap-3 border-b-[1pt] border-[#1f3a5f] pb-1 text-[#1f3a5f]"><span className="text-[18pt] font-semibold">{n}</span><span className="rp-sec-name text-[16pt] font-semibold">ข้อมูลโครงการ</span><span className="ml-auto text-[8.5pt] uppercase tracking-wide text-[#98a2b3]">Project information</span></h2>
@@ -63,7 +62,7 @@ export function WorkReport({ frame, roof, project }) {
   const o = reportOpt(project.report), edition = reportPresetName(project.report);
   // result words (ผ่าน / ไม่ผ่าน) per category / roof member group — project.report.marks { "คาน": false, "หลังคา|อะเส": false } (false = "-")
   const marks = project.report?.marks ?? {}, mark = (cat, label = null) => marks[cat] !== false && (label == null || marks[`${cat}|${label}`] !== false);
-  const sk = useSkeleton(), rr = hasRoof && sk ? runRoof(roof, sk) : null, st = applyDecisions(projectStatus(frame, res, rr?.dz ?? null, hasRoof ? roof : null), project.report?.fails);
+  const sk = useSkeleton(), rr = hasRoof && sk ? runRoof(roof, sk) : null, st0 = projectStatus(frame, res, rr?.dz ?? null, hasRoof ? roof : null), st = applyDecisions(st0, effectiveFails(st0, project.report));
   // report integrity: a code of the input data (any edit of structure / roof / project data changes it) + the time the book was made
   const stamp = projectStamp(frame, roof, project), made = new Date().toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" });
   const revs = project.revisions?.length ? project.revisions : [{ rev: "0", date: project.date, desc: "ออกครั้งแรก" }], rev = revs[revs.length - 1];
@@ -87,7 +86,6 @@ export function WorkReport({ frame, roof, project }) {
   if (o("appendix")) add("c-appendix", "ภาคผนวก — แรงภายในคานทุกช่วง");
   const parts = (keys) => keys.filter((k) => o(k) && (k !== "lateral" || lateral));
   const nOf = (id) => num[id] ?? "-";
-  const floorsText = `${frame.floors.length} ระดับคาน (${frame.floors.map((f) => f.name).join(" · ")})`;
   // a page reference to a part that is not printed in this edition says so (no wrong / empty page number)
   const root = useRef(null);
   useLayoutEffect(() => { const el = root.current; if (!el) return;
@@ -95,7 +93,7 @@ export function WorkReport({ frame, roof, project }) {
   return (
     <div className="report" ref={root}>
       <Cover project={project} title="รายการคำนวณออกแบบโครงสร้าง" subtitle="อาคารคอนกรีตเสริมเหล็ก และโครงหลังคาเหล็ก"
-        items={[["ระดับอาคาร", floorsText], ["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`]]} standards={STANDARDS} docNo={project.docNo || `SC-${stamp}`} rev={`${rev.rev} · ${edition}`} />
+        items={[["วิศวกรผู้คำนวณ", `${project.engineer || "-"}${project.license ? ` (ทะเบียน ${project.license})` : ""}`]]} standards={STANDARDS} docNo={project.docNo || `SC-${stamp}`} rev={`${rev.rev} · ${edition}`} />
       <span className="rp-str-project hidden">{project.name}</span><span className="rp-str-method hidden">WSD / ASD</span><span className="rp-str-stamp hidden">{`รหัสข้อมูล ${stamp} · ฉบับ ${rev.rev} (${edition}) · ${made}`}</span>
       <Toc items={toc} />
       {o("project") && <ProjectInfo project={project} frame={frame} res={res} st={st} hasRoof={hasRoof} n={num["c-project"]} statusN={num["c-status"] ?? "-"} stamp={stamp} made={made} revs={revs} o={o} />}

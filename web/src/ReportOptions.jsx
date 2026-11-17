@@ -3,7 +3,7 @@
 // the numbers come from the same analysis as the screen and never change here.
 import { useMemo, useState } from "react";
 import { REPORT_PRESETS, REPORT_TREE, reportOpt, reportPresetName } from "./reportOptions.js";
-import { projectStatus } from "./StatusSummary.jsx";
+import { projectStatus, effectiveFails } from "./StatusSummary.jsx";
 import { runRoof, useSkeleton } from "./RoofPage.jsx";
 
 const MODES = [["show", "พิมพ์ว่า ไม่ผ่าน"], ["accept", "วิศวกรยอมรับ (ระบุเหตุผล)"], ["hide", "ไม่ระบุในบทสรุป"]];
@@ -15,10 +15,10 @@ export default function ReportOptions({ frame, roof, res, report, onChange }) {
     return [projectStatus(frame, res, rr?.dz ?? null, hasRoof ? roof : null), [...new Set((rr?.dz?.rows ?? []).map((x) => x.label))]]; } catch { return [null, []]; } }, [frame, roof, res, sk, hasRoof]);
   const marks = r.marks ?? {}, markOn = (k) => marks[k] !== false, setMark = (k, v) => { const m = { ...marks, [k]: v }; if (v) delete m[k]; onChange({ ...r, marks: m }); };
   const markKeys = [...["คาน", "เสา", "พื้น", "ฐานราก", "แรงด้านข้าง"].map((c) => [c, c]), ...roofGroups.map((g) => [`หลังคา|${g}`, `หลังคา: ${g}`])];
-  const fails = st?.fails ?? [], dec = r.fails ?? {};
+  const fails = st?.fails ?? [], dec = st ? effectiveFails(st, r) : r.fails ?? {};
   const setSec = (k, v) => { const base = REPORT_PRESETS[r.preset ?? "full"]?.sec ?? {}; onChange({ ...r, preset: "custom", sec: { ...base, ...(r.sec ?? {}), [k]: v } }); };
   const setPreset = (p) => onChange({ ...r, preset: p, sec: {} });
-  const setDec = (key, patch) => { const d = { ...(dec[key] ?? { mode: "show" }), ...patch }, all = { ...dec, [key]: d }; if (d.mode === "show" && !d.note) delete all[key]; onChange({ ...r, fails: all }); };
+  const setDec = (key, patch) => { const own = r.fails ?? {}, d = { ...(own[key] ?? dec[key] ?? { mode: "show" }), ...patch, auto: undefined }, all = { ...own, [key]: d }; onChange({ ...r, fails: all }); };
   const nHide = fails.filter((x) => dec[x.key]?.mode === "hide").length, nAcc = fails.filter((x) => dec[x.key]?.mode === "accept").length;
   const sheetOff = fails.length > 0 && (!o("status") || !o("status.fails"));
   const box = "h-7 rounded border border-gray-300 bg-white px-1 text-[12px]";
@@ -40,7 +40,7 @@ export default function ReportOptions({ frame, roof, res, report, onChange }) {
       </div>}
       {open && <div className="mt-3 rounded-lg border border-gray-200 p-2">
         <p className="font-medium text-gray-800">แสดงคำว่า "ผ่าน / ไม่ผ่าน" ในคอลัมน์ผลของตาราง <span className="text-[11px] font-normal text-gray-500">— เอาติ๊กออก = คอลัมน์ผลของกลุ่มนั้นแสดง "-" (ตัวเลขในตารางเหมือนเดิม · บทสรุปผลใช้การตัดสินใจด้านล่าง)</span></p>
-        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">{markKeys.map(([k, l]) => <label key={k} className="flex items-center gap-1.5 text-[12px] text-gray-700"><input type="checkbox" checked={markOn(k)} onChange={(e) => setMark(k, e.target.checked)} />{l}</label>)}
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">{markKeys.map(([k, l]) => <label key={k} className="flex items-center gap-1.5 text-[12px] text-gray-700"><input type="checkbox" data-mark="1" checked={markOn(k)} onChange={(e) => setMark(k, e.target.checked)} />{l}</label>)}
           <button onClick={() => onChange({ ...r, marks: Object.fromEntries(markKeys.map(([k]) => [k, false])) })} className="text-[12px] text-brand-600">ซ่อนทั้งหมด</button>
           <button onClick={() => onChange({ ...r, marks: {} })} className="text-[12px] text-brand-600">แสดงทั้งหมด</button></div>
       </div>}
@@ -53,7 +53,7 @@ export default function ReportOptions({ frame, roof, res, report, onChange }) {
             <tr key={x.key} className="border-t border-amber-200 align-top">
               <td className="py-1 pr-2">{x.cat}</td><td className="pr-2">{x.id}</td><td className="pr-2 text-gray-600">{x.why}</td>
               <td className="pr-2 tabular-nums">{x.util != null && x.util < 8.99 ? `${Math.round(x.util * 100)}%` : "-"}</td>
-              <td className="pr-2"><select value={d.mode} onChange={(e) => setDec(x.key, { mode: e.target.value })} className={box}>{MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}</select></td>
+              <td className="pr-2">{d.auto && <span className="block text-[11px] text-red-700">ซ่อนตามการเอาติ๊ก "ผ่าน/ไม่ผ่าน" ของกลุ่มนี้</span>}<select value={d.mode} onChange={(e) => setDec(x.key, { mode: e.target.value })} className={box}>{MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}</select></td>
               <td>{d.mode === "accept" ? <input value={d.note ?? ""} onChange={(e) => setDec(x.key, { note: e.target.value })} placeholder="เช่น ระยะแอ่นไม่กระทบความปลอดภัย / ค้ำยันเพิ่มหน้างาน" className={`${box} w-full min-w-[220px]`} /> : null}</td>
             </tr>); })}</tbody></table></div>
         {(nHide > 0 || nAcc > 0 || sheetOff) && <p className="mt-1 text-[12px] font-medium text-red-700">
