@@ -6,14 +6,15 @@ import { calcAnchor } from "./reportQA.js";
 // @page rules and running header/footer; Tailwind classes in the report body come from the app stylesheet.
 const PAGE_CSS = `
 @page {
-  size: A4; margin: 18mm 17mm 24mm 23mm; /* left 23 (binding) · right 17 · top 18 · bottom 24 (signature line) */
+  size: A4; margin: 18mm 17mm 32mm 23mm; /* left 23 (binding) · right 17 · top 18 · bottom 32 (signature block, user option B 2026-11-17) */
   @top-left { content: string(rp-project); font: 8pt Sarabun, sans-serif; color: #667085; border-bottom: 0.5pt solid #d0d5dd; }
   @top-center { content: string(rp-sec); font: 8pt Sarabun, sans-serif; color: #1f3a5f; border-bottom: 0.5pt solid #d0d5dd; }
   @top-right { content: "รายการคำนวณออกแบบโครงสร้าง (" string(rp-method) ")"; font: 8pt Sarabun, sans-serif; color: #667085; border-bottom: 0.5pt solid #d0d5dd; }
-  @bottom-left { content: "โครงสร้างไทย · " string(rp-member) "\\A" string(rp-stamp); white-space: pre-wrap; font: 7pt Sarabun, sans-serif; color: #98a2b3; vertical-align: top; padding-top: 3mm; width: 42mm; }
-  /* every sheet signed by the engineer (user 2026-11-04) — one line (user: the registration number wrapped to a second line) */
-  @bottom-center { content: element(rpSig); text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.6pt solid #98a2b3; }
-  @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 8pt Sarabun, sans-serif; color: #667085; vertical-align: top; padding-top: 3mm; width: 24mm; }
+  /* footer option B (user 2026-11-17): document data + page number on the left, a signature block on the right (70 mm space,
+     name in brackets and "วิศวกรผู้คำนวณ · ภ.ย. …" under the line — the word ทะเบียน left out, user) */
+  @bottom-left { content: "หน้า " counter(page) " / " counter(pages) "\\A" "โครงสร้างไทย" "\\A" string(rp-stamp); /* ONE running string, last: Paged.js leaves its value without the closing quote (two strings in one box = invalid → empty) */ white-space: pre-wrap; font: 7.5pt Sarabun, sans-serif; color: #667085; vertical-align: top; padding-top: 3mm; border-top: 0.6pt solid #98a2b3; }
+  @bottom-center { content: none; border-top: 0.6pt solid #98a2b3; width: 4mm; }
+  @bottom-right { content: element(rpSig); vertical-align: top; padding-top: 2.5mm; border-top: 0.6pt solid #98a2b3; width: 78mm; }
 }
 /* the cover: no running header / footer (it carries its own signature block) */
 @page cover { margin: 14mm; @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-center { content: none; border: none; } @bottom-right { content: none; } }
@@ -24,8 +25,9 @@ const PAGE_CSS = `
 .rp-str-method { string-set: rp-method content(text); }
 .rp-str-stamp { string-set: rp-stamp content(text); }
 .rp-str-eng { string-set: rp-eng content(text); }
-.rp-sig-run { position: running(rpSig); display: block !important; white-space: nowrap; font: 8pt Sarabun, sans-serif; color: #344054; }
-.rp-sig-run img { display: inline-block; height: 9mm; vertical-align: middle; margin: -3mm 1mm 0; }
+.rp-sig-run { position: running(rpSig); display: block !important; text-align: center; font: 9pt Sarabun, sans-serif; line-height: 1.35; color: #344054; }
+.rp-sig-run .rp-sig-sp { height: 12mm; margin: 0 4mm 1.5mm; border-bottom: 0.6pt solid #344054; display: flex; align-items: flex-end; justify-content: center; }
+.rp-sig-run img { display: block; max-height: 11.5mm; max-width: 64mm; }
 .rp-sec-name { string-set: rp-sec content(text); }
 /* layout: every chapter on a new page; a heading stays with what follows; table heads repeat; rows / figures not cut */
 .rp-chapter { break-before: page; }
@@ -99,7 +101,7 @@ export function Doc({ project, title, subtitle, memberLabel, member, summary, me
       <span className="rp-str-member hidden">{`${memberLabel} ${member}`}</span>
       <span className="rp-str-method hidden">{method}</span>
       {!bare && <SigRun project={project} />}
-      <span className="rp-str-eng hidden">{`(${project.engineer || "........................................"}) วิศวกรผู้คำนวณ${project.license ? ` ทะเบียน ${project.license}` : ""}`}</span>
+      <span className="rp-str-eng hidden">{`(${project.engineer || "........................................"}) วิศวกรผู้คำนวณ${project.license ? ` · ${project.license}` : ""}`}</span>
       {bare ? <>{children}</> : <>
       <div className="mb-3 border-b-[1.5pt] border-[#1f3a5f] pb-2 text-[#1f3a5f]">
         <div className="text-[14pt] font-semibold leading-tight">{title}</div>
@@ -176,7 +178,7 @@ export const Sub = ({ children, className = "" }) => <p className={`rp-sub mt-3 
 // signature image when there is one (logo → เจ้าของโปรแกรม), else the dotted line
 export function SigRun({ project }) {
   const sig = loadBrand().sig;
-  return <div className="rp-sig-run hidden">ลงชื่อ {sig ? <img src={sig} alt="" /> : ".................................."} ({project.engineer || "........................................"}) วิศวกรผู้คำนวณ{project.license ? ` ทะเบียน ${project.license}` : ""}</div>;
+  return <div className="rp-sig-run hidden"><div className="rp-sig-sp">{sig ? <img src={sig} alt="" /> : null}</div>({project.engineer || "........................................"})<br />วิศวกรผู้คำนวณ{project.license ? ` · ${project.license}` : ""}</div>;
 }
 // formal cover page (user 2026-11-04): title, project data, standards, engineer signature block
 // formal cover (user 2026-11-04, "Minimal Engineering — navy / white / light gray"): navy band with a faint structural-grid line
@@ -208,7 +210,7 @@ export function Cover({ project, title = "รายการคำนวณอ�
         <div className="text-center">
           <div className="mb-1">ลงชื่อ {loadBrand().sig ? <img src={loadBrand().sig} alt="" className="inline-block h-[14mm] align-bottom" /> : "..................................................................."}</div>
           <div>( {project.engineer || "..................................................."} )</div>
-          <div className="text-[10pt] text-[#475467]">วิศวกรผู้คำนวณ{project.license ? ` · ทะเบียน ${project.license}` : ""}</div>
+          <div className="text-[10pt] text-[#475467]">วิศวกรผู้คำนวณ{project.license ? ` · ${project.license}` : ""}</div>
         </div>
       </div>
     </div>
@@ -259,7 +261,7 @@ function Signature({ project, standard }) {
       <div className="pt-6">
         ลงชื่อ ......................................................<br />
         ({project.engineer || "                                        "})<br />
-        วิศวกรผู้คำนวณ {project.license && `เลขทะเบียน ${project.license}`}
+        วิศวกรผู้คำนวณ {project.license && `· ${project.license}`}
       </div>
     </div>
   );
