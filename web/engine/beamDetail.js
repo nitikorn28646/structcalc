@@ -4,7 +4,7 @@
 // The extra-bar length written is NEVER shorter than what the cut-off check (floor.js cutoffs, sp.cut) needs on any span of the
 // type: L/4 (top, from each support centre) and 3L/5 (bottom, centred) are the drawing standard; a span that needs more moves the
 // label to the next standard length (L/3 · 4L/5) or "ยาวตลอดช่วง". L = span length centre to centre of the supports.
-import { parseBars } from "./floor.js";
+import { barLayers, parseBars } from "./floor.js";
 import { BARS } from "./tables.js";
 
 const EPS = 1e-6;
@@ -67,3 +67,20 @@ export function extraFootnote(at, ext) {
 }
 // bar diameter (cm) of a bar string, for drawing
 export const barDia = (s) => BARS[parseBars(s)?.bar]?.d ?? 1.2;
+
+// make a type buildable (user 2026-11-18: "ชั้นที่ 2 ห้ามมีเส้นเดียว ต้องมีอย่างน้อย 2 เส้น"): a face whose bars leave ONE bar alone in a
+// layer gets one more extra bar of the same size (never fewer bars — the steel only grows, the checks run again); returns null when
+// nothing needs changing, { type } when fixed, { type: null, why } when no count up to 2 more bars works (wider beam / bigger bars)
+export function fixLoneBars(t, mat) {
+  const out = { ...t }; let changed = false;
+  for (const [m, x] of [["top", "topX"], ["bot", "botX"]]) {
+    const L = (xs) => barLayers(t.b, mat, t.st, parseBars(t[m]), parseBars(xs));
+    if (!L(t[x]).odd) continue;
+    const main = parseBars(t[m]), ex = parseBars(t[x]), bar = ex?.bar ?? main?.bar;
+    let ok = null;
+    for (let k = (ex?.n ?? 0) + 1; k <= (ex?.n ?? 0) + 2 && !ok; k++) { const s = `${k}-${bar}`, l = L(s); if (!l.odd && !l.over) ok = s; }
+    if (!ok) return { type: null, why: `เหล็ก${m === "top" ? "บน" : "ล่าง"} — เพิ่มเหล็กเสริมแล้วยังจัดชั้นไม่ได้ ต้องขยายความกว้างคานหรือใช้เหล็กเส้นใหญ่ขึ้น` };
+    out[x] = ok; changed = true;
+  }
+  return changed ? { type: out } : null;
+}
