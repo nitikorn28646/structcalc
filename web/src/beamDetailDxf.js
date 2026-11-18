@@ -49,7 +49,7 @@ class Dxf {
     // (charset 222 = THAI, pitch/family 0x12) — AutoCAD finds a TrueType font by that family; without it the text fell back to an SHX font (???)
     const appid = "0\nTABLE\n2\nAPPID\n70\n1\n0\nAPPID\n2\nACAD\n70\n0\n0\nENDTAB";
     const style = "0\nTABLE\n2\nSTYLE\n70\n1\n0\nSTYLE\n2\nT5\n70\n0\n40\n0.0\n41\n1.0\n50\n0.0\n71\n0\n42\n0.025\n3\nAngsanaUPC.ttf\n4\n\n1001\nACAD\n1000\nAngsanaUPC\n1071\n56850\n0\nENDTAB";
-    return `${head}\n0\nSECTION\n2\nTABLES\n${ltype}\n${layer}\n${style}\n${appid}\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${this.e.join("\n")}\n0\nENDSEC\n0\nEOF\n`;
+    return `${head}\n0\nSECTION\n2\nTABLES\n${appid}\n${ltype}\n${layer}\n${style}\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${this.e.join("\n")}\n0\nENDSEC\n0\nEOF\n`;
   }
 }
 
