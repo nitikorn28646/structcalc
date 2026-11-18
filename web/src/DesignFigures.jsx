@@ -22,7 +22,7 @@ export function BeamTypeFigures({ types, mat, spans = [], count = () => null, on
     <div className="mt-4"><div className="mb-1 flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-gray-800">รูปตัดเหล็กเสริม type คาน (หัวเสา · กลางคาน)</p>
       <button onClick={() => { const items = types.map((t, i) => ({ t, ext: extraSpec(i, spans), used: count(i) })).filter((x) => x.used !== 0);
         downloadText(beamSheetsDxf(items, mat, project).dxf, "แบบขยายคาน.dxf"); }} className={btn(false)}>ส่งออก DXF แบบขยายคาน</button>
-      <span className="text-[11px] text-gray-500">กระดาษ A3 มาตราส่วน 1:25 (หน่วยเมตร) · กรอบแบบ + ตารางชื่อจากข้อมูลโครงการ · type ที่ใช้งานทั้งหมด</span>
+      <span className="text-[11px] text-gray-500">กระดาษ A3 มาตราส่วน 1:25 (หน่วยเมตร) · กรอบแบบ + ตารางชื่อจากข้อมูลโครงการ · type ที่ใช้งานทั้งหมด + GB / GB-A มาตรฐาน (แผ่นแรก)</span>
       {nFix > 0 && onTypes && <button onClick={fixAll} className="rounded-md bg-[#b42318] px-2 py-0.5 text-[11px] font-medium text-[#fff]">แก้ {nFix} type ที่มีเหล็กเส้นเดียวลอย (เพิ่มเหล็กเสริมให้ชั้นละ ≥ 2 เส้น)</button>}</div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{types.map((t, i) => { const L = beamLayersOf(t, mat); return (
         <div key={i} className={card}>

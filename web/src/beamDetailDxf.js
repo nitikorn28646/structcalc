@@ -130,16 +130,26 @@ function elevation(d, X, x0, y0, mat) {
 }
 
 // items: [{ t, ext }] = the types in use (ext from extraSpec); project = name / location / owner / engineer / license / date
-export function beamSheetsDxf(items, mat, project = {}, title = "แบบขยายคาน") {
+// standard ground beams printed on sheet 1 (user 2026-11-18: "GB กับ GB-A ใส่มาด้วย ไว้แค่แผ่นแรก"), as on the user's sheet EN-08:
+// not from the analysis — a project type with the same name replaces them
+export const STD_GROUND_BEAMS = [
+  { name: "GB", b: 0.2, h: 0.2, top: "2-RB 9", topX: "", bot: "2-RB 9", botX: "", st: "RB 6", stSets: 1, sSup: 0.2, sMid: 0.2 },
+  { name: "GB-A", b: 0.2, h: 0.2, top: "5-RB 9", topX: "", bot: "2-RB 9", botX: "", st: "RB 6", stSets: 1, sSup: 0.2, sMid: 0.2 },
+];
+export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบขยายคาน") {
+  const own = new Set(itemsIn.map((x) => x.t.name)), std = STD_GROUND_BEAMS.filter((t) => !own.has(t.name)).map((t) => ({ t, ext: { spans: 1, cant: 0 }, std: true }));
+  const items = [...std, ...itemsIn]; // first → on sheet 1
   const d = new Dxf(), th = 0.035, cellW = (t) => Math.max(1.2, t.b + 1.0), pad = 0.18, tagH = 0.15;
   // panels: cells = sections of one type (one "ตลอดคาน" when it has no extra bars; + the cantilever "A")
-  const panels = items.map(({ t, ext }) => {
+  let panels = items.map(({ t, ext, std }) => {
     const cells = [];
     if (ext.spans > 0 || !ext.cant) (hasExtras(t) ? [["sup", "ช่วงหัวเสา"], ["mid", "ช่วงกลางคาน"]] : [["all", "ตลอดคาน"]]).forEach(([at, w]) => cells.push({ at, title: `${t.name} ${w}`, tag: t.name }));
     if (ext.cant > 0) cells.push({ at: "cant", title: `${t.name}A ตลอดคาน`, tag: `${t.name}A`, sub: cantNote(ext) });
     const w = cells.reduce((s) => s + cellW(t), 0) + 2 * pad;
-    return { t, ext, cells, w, h: t.h + 0.8 };
+    return { t, ext, cells: cells.map((c) => ({ ...c, t, ext })), w, h: t.h + 0.8, std };
   }).filter((x) => x.cells.length);
+  // the standard ground beams share one box (as on the user's sheet)
+  const sp = panels.filter((x) => x.std); if (sp.length > 1) panels = [{ ...sp[0], cells: sp.flatMap((x) => x.cells), w: sp.reduce((a, x) => a + x.w, 0) - 2 * pad * (sp.length - 1), h: Math.max(...sp.map((x) => x.h)) }, ...panels.filter((x) => !x.std)];
   // pack panels into rows by width, then rows into sheets by height (sheet 1 keeps the bottom for the elevation + notes)
   const AW = TX - BX0, rows = [], sheets = [];
   for (const pn of panels) { const r = rows.at(-1); if (!r || r.w + pn.w > AW + 1e-9) rows.push({ panels: [pn], w: pn.w, h: pn.h }); else { r.panels.push(pn); r.w += pn.w; r.h = Math.max(r.h, pn.h); } }
@@ -156,10 +166,10 @@ export function beamSheetsDxf(items, mat, project = {}, title = "แบบขย
     for (const row of sh.rows) {
       let x = BX0;
       for (const pn of row.panels) {
-        const yb = row.y0 + tagH, sy = yb + 0.42 + (row.h - 0.8 - pn.t.h) / 2; // section bottom (title + notes below, dimension above)
+        const yb = row.y0 + tagH; // sections: title + notes below, dimension above, centred in the row height
         let cx = x + pad;
         const tags = {};
-        for (const c of pn.cells) { section(d, pn.t, mat, c.at, pn.ext, X + cx + 0.12, sy, c.title, th, c.sub); (tags[c.tag] ??= []).push(cx + cellW(pn.t) / 2 - 0.1); cx += cellW(pn.t); }
+        for (const c of pn.cells) { const csy = yb + 0.42 + (row.h - 0.8 - c.t.h) / 2; section(d, c.t, mat, c.at, c.ext, X + cx + 0.12, csy, c.title, th, c.sub); (tags[c.tag] ??= []).push(cx + cellW(c.t) / 2 - 0.1); cx += cellW(c.t); }
         for (const [tag, xs] of Object.entries(tags)) { const xm = xs.reduce((s, v) => s + v, 0) / xs.length; d.circle(X + xm, row.y0 + tagH / 2, 0.055, "C-TAG"); d.text(X + xm, row.y0 + tagH / 2, 0.05, tag, "C-TAG", 1, 2); }
         x += pn.w;
         d.line(X + x, row.y0, X + x, row.y1, "C-FRAME2");
