@@ -8,6 +8,7 @@ import { barLayout } from "./drawings.js";
 import { barLayers, parseBars } from "../engine/floor.js";
 import { STIRRUPS } from "../engine/tables.js";
 import { sectionNotes, extraFootnote, hasExtras, cantNote } from "../engine/beamDetail.js";
+import { ELEVATION_SAMPLE } from "./elevationSample.js";
 
 // sheets (user 2026-11-18, their A3 sheet EN-08 "แบบขยายคาน" as the model): A3 at 1:25 drawn in metres = 10.50 × 7.425, drawing area
 // inside the red border, title column on the right (fields filled from the project data, logo area left empty, Dwg / Sheet No. empty —
@@ -18,8 +19,9 @@ const f = (v) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(4);
 
 class Dxf {
   constructor() { this.e = []; }
-  line(x1, y1, x2, y2, l) { this.e.push(`0\nLINE\n8\n${l}\n10\n${f(x1)}\n20\n${f(y1)}\n30\n0\n11\n${f(x2)}\n21\n${f(y2)}\n31\n0`); }
-  circle(x, y, r, l) { this.e.push(`0\nCIRCLE\n8\n${l}\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}`); }
+  line(x1, y1, x2, y2, l, color = 0, lt = "") { this.e.push(`0\nLINE\n8\n${l}${lt ? `\n6\n${lt}` : ""}${color ? `\n62\n${color}` : ""}\n10\n${f(x1)}\n20\n${f(y1)}\n30\n0\n11\n${f(x2)}\n21\n${f(y2)}\n31\n0`); }
+  arc(x, y, r, a0, a1, l, color = 0) { this.e.push(`0\nARC\n8\n${l}${color ? `\n62\n${color}` : ""}\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}\n50\n${f(a0)}\n51\n${f(a1)}`); }
+  circle(x, y, r, l, color = 0) { this.e.push(`0\nCIRCLE\n8\n${l}${color ? `\n62\n${color}` : ""}\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}`); }
   // closed polyline; pts [[x, y, bulge]]
   poly(pts, l, closed = true) {
     this.e.push(`0\nPOLYLINE\n8\n${l}\n66\n1\n70\n${closed ? 1 : 0}\n10\n0\n20\n0\n30\n0`);
@@ -27,9 +29,9 @@ class Dxf {
     this.e.push(`0\nSEQEND\n8\n${l}`);
   }
   // h = text height (m); ha 0 left / 1 centre / 2 right, va 0 baseline / 2 middle
-  text(x, y, h, s, l = "C-TEXT", ha = 0, va = 0, rot = 0) {
-    const align = ha || va ? `\n72\n${ha}\n11\n${f(x)}\n21\n${f(y)}\n31\n0\n73\n${va}` : "";
-    this.e.push(`0\nTEXT\n8\n${l}\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(h)}\n1\n${uni(s)}\n7\nT5${rot ? `\n50\n${rot}` : ""}${align}`);
+  text(x, y, h, s, l = "C-TEXT", ha = 0, va = 0, rot = 0, color = 0, at = null, wf = 1) {
+    const align = ha || va ? `\n72\n${ha}\n11\n${f(at ? at[0] : x)}\n21\n${f(at ? at[1] : y)}\n31\n0\n73\n${va}` : "";
+    this.e.push(`0\nTEXT\n8\n${l}${color ? `\n62\n${color}` : ""}${wf !== 1 ? `\n41\n${f(wf)}` : ""}\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(h)}\n1\n${uni(s)}\n7\nT5${rot ? `\n50\n${rot}` : ""}${align}`);
   }
   // dimension drawn with lines + ticks + text (no DIMENSION entity: same look in every CAD program)
   dim(x1, y1, x2, y2, off, label, h) {
@@ -41,7 +43,8 @@ class Dxf {
   }
   toString() {
     const head = ["0\nSECTION\n2\nHEADER", "9\n$ACADVER\n1\nAC1009", "9\n$DWGCODEPAGE\n3\nANSI_874", "9\n$INSUNITS\n70\n6", "0\nENDSEC"].join("\n");
-    const ltype = "0\nTABLE\n2\nLTYPE\n70\n1\n0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n0\nENDTAB";
+    const lts = Object.entries(ELEVATION_SAMPLE.ltypes ?? {}).map(([n, d]) => { const p = d.pattern.filter((v, i) => v > 1e-9 || i % 2 === 0), tot = p.reduce((a, v) => a + v, 0); return `0\nLTYPE\n2\n${n}\n70\n0\n3\n${n}\n72\n65\n73\n${p.length}\n40\n${f(tot)}${p.map((v, i) => `\n49\n${f(i % 2 ? -v : v)}`).join("")}`; }); // dash +, gap − (R12)
+    const ltype = `0\nTABLE\n2\nLTYPE\n70\n${1 + lts.length}\n0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0${lts.length ? "\n" + lts.join("\n") : ""}\n0\nENDTAB`;
     const layer = `0\nTABLE\n2\nLAYER\n70\n${LAYERS.length}\n${LAYERS.map(([n, c]) => `0\nLAYER\n2\n${n}\n70\n0\n62\n${c}\n6\nCONTINUOUS`).join("\n")}\n0\nENDTAB`;
     const style = "0\nTABLE\n2\nSTYLE\n70\n1\n0\nSTYLE\n2\nT5\n70\n0\n40\n0.0\n41\n1.0\n50\n0.0\n71\n0\n42\n0.025\n3\nangsau.ttf\n4\n\n0\nENDTAB";
     return `${head}\n0\nSECTION\n2\nTABLES\n${ltype}\n${layer}\n${style}\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${this.e.join("\n")}\n0\nENDSEC\n0\nEOF\n`;
@@ -113,23 +116,14 @@ function frame(d, X, p, title) {
   T(9.114, 0.865, H, "Dwg. No."); T(9.661, 0.865, H, "Sheet No."); T(9.792, 0.265, H, "Total.");
 }
 
-// typical beam elevation (sheet 1): continuous span L between two column centres, top extras L/4 each side, bottom extra 3L/5
-function elevation(d, X, x0, y0, mat) {
-  const Ls = 3.6, a = x0 + 0.7, b = a + Ls, e0 = x0, e1 = b + 0.7, h = 0.4, c = (mat.cover ?? 3) / 100 + 0.01, cw = 0.2, l = "C-ELEV";
-  const Lx = (x1, y1, x2, y2, ly = l) => d.line(X + x1, y1, X + x2, y2, ly);
-  Lx(e0, y0, e1, y0); Lx(e0, y0 + h, e1, y0 + h);
-  for (const xe of [e0, e1]) { Lx(xe, y0 - 0.05, xe, y0 + h * 0.45); Lx(xe, y0 + h * 0.45, xe + 0.04, y0 + h * 0.55); Lx(xe + 0.04, y0 + h * 0.55, xe, y0 + h * 0.62); Lx(xe, y0 + h * 0.62, xe, y0 + h + 0.05); } // break lines
-  for (const xc of [a, b]) { const x1 = xc - cw / 2, x2 = xc + cw / 2; Lx(x1, y0 - 0.3, x1, y0 + h + 0.3); Lx(x2, y0 - 0.3, x2, y0 + h + 0.3); Lx(x1, y0, x2, y0 + h); Lx(x1, y0 + h, x2, y0); }
-  Lx(e0 + 0.05, y0 + h - c, e1 - 0.05, y0 + h - c, "C-BAR"); Lx(e0 + 0.05, y0 + c, e1 - 0.05, y0 + c, "C-BAR");
-  for (const xc of [a, b]) Lx(xc - Ls / 4, y0 + h - c - 0.035, xc + Ls / 4, y0 + h - c - 0.035, "C-BAR-EXTRA");
-  Lx(a + Ls / 5, y0 + c + 0.035, b - Ls / 5, y0 + c + 0.035, "C-BAR-EXTRA");
-  for (let x = e0 + 0.1; x < e1 - 0.05; x += 0.15) if (Math.abs(x - a) > cw / 2 + 0.02 && Math.abs(x - b) > cw / 2 + 0.02) Lx(x, y0 + c - 0.01, x, y0 + h - c + 0.01, "C-STIRRUP");
-  const th = 0.045;
-  d.dim(X + a, y0 + h, X + b, y0 + h, 0.55, "L", th);
-  d.dim(X + a, y0 + h, X + a + Ls / 4, y0 + h, 0.35, "1/4L", th); d.dim(X + b - Ls / 4, y0 + h, X + b, y0 + h, 0.35, "1/4L", th);
-  d.dim(X + a + Ls / 5, y0, X + b - Ls / 5, y0, -0.35, "3/5L", th);
-  d.text(X + (e0 + e1) / 2, y0 - 0.62, 0.07, "รูปด้านคาน (ทั่วไป)", "C-TITLE", 1, 0); d.text(X + (e0 + e1) / 2, y0 - 0.72, 0.045, "มาตราส่วน 1:25", "C-TEXT", 1, 0);
-  return e1;
+// typical beam elevation (sheet 1) = the user's own drawing, line for line (src/elevationSample.js); (x0, y0) = its bottom-left
+function elevation(d, X, x0, y0) {
+  const E = ELEVATION_SAMPLE, P = (x, y) => [X + x0 + x, y0 + y];
+  for (const [a, b, c, e, col, lt] of E.lines) { const [p1x, p1y] = P(a, b), [p2x, p2y] = P(c, e); d.line(p1x, p1y, p2x, p2y, "C-ELEV", col, lt === "CONTINUOUS" ? "" : lt); }
+  for (const [x, y, r, col] of E.circles) { const [px, py] = P(x, y); d.circle(px, py, r, "C-ELEV", col); }
+  for (const [x, y, r, a0, a1, col] of E.arcs) { const [px, py] = P(x, y); d.arc(px, py, r, a0, a1, "C-ELEV", col); }
+  for (const [x, y, h, t, rot, ha, va, ax, ay, col, wf] of E.texts) { const [px, py] = P(x, y); d.text(px, py, h, t, "C-ELEV", ha, va, rot, col, P(ax, ay), wf); }
+  return x0 + E.w;
 }
 
 // items: [{ t, ext }] = the types in use (ext from extraSpec); project = name / location / owner / engineer / license / date
@@ -191,7 +185,7 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
       d.line(X + BX0, row.y0, X + TX, row.y0, "C-FRAME2"); d.line(X + BX0, row.y0 + tagH, X + TX, row.y0 + tagH, "C-FRAME2");
     }
     if (k === 0) {
-      const ew = 5.0, nw = 2.75, ex0 = BX0 + Math.max(0.2, (AW - ew - 0.45 - nw) / 2), xe = elevation(d, X, ex0, BY0 + 0.95, mat), nx = X + xe + 0.45; // elevation + notes centred in the width
+      const ew = ELEVATION_SAMPLE.w, nw = 2.75, ex0 = BX0 + Math.max(0.2, (AW - ew - 0.45 - nw) / 2), xe = elevation(d, X, ex0, BY0 + 0.15), nx = X + xe + 0.45; // elevation + notes centred in the width
       const notes = ["หมายเหตุ", `1. ระยะหุ้มคอนกรีตของคานไม่น้อยกว่า ${mat.cover ?? 3} ซม.`, "2. L = ระยะศูนย์ถึงศูนย์ของที่รองรับ เหล็กเสริมพิเศษบนวัดจากศูนย์เสาแต่ละข้าง เหล็กเสริมพิเศษล่างวางกึ่งกลางช่วง",
         "3. ความยาวเหล็กเสริมพิเศษตามที่ระบุในรูปตัดของแต่ละ type (L/4, L/3, 3L/5, 4L/5 หรือยาวตลอดช่วง ตามผลตรวจระยะตัดเหล็ก)",
         "4. คานยื่น (A) เหล็กบนทั้งหมดยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลังตามที่ระบุใต้รูปตัด", "5. เหล็กปลอกงอขอ 90° ยาว 6 เท่าของขนาดเหล็ก ไม่น้อยกว่า 7.5 ซม. · ทุกชั้นของเหล็กเสริมมีอย่างน้อย 2 เส้น"];
