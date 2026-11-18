@@ -1,4 +1,4 @@
-// 3D reinforcement cages (user 2026-11-04: realistic figures): a column level (bars + ties with 135° hooks, a storey stub) and a
+// 3D reinforcement cages (user 2026-11-04: realistic figures): a column level (bars + ties with 90° hooks, a storey stub) and a
 // footing (spread footing or pile cap: bottom mat both ways with hooks, column dowels bent on the mat, piles). Bars are real tubes
 // (Rebar3D) at true diameter in translucent concrete. preserveDrawingBuffer lets printReport turn the canvas into a picture.
 import { useMemo } from "react";
@@ -31,8 +31,8 @@ function Scene({ children, span, dark, className }) {
 const Concrete = ({ size, pos, dark }) => (
   <mesh position={pos}><boxGeometry args={size} /><meshPhysicalMaterial color={dark ? "#8a93b8" : "#c9ced6"} transparent opacity={dark ? 0.12 : 0.17} roughness={0.9} depthWrite={false} /><Edges color={dark ? "#6e7591" : "#98a2b3"} /></mesh>
 );
-// closed tie in a horizontal plane at height y, hooks 135° at one corner
-const tie = (y, w, h, d) => { const hw = w / 2, hh = h / 2, k = Math.max(6 * d, 0.05) * 0.7; return { d, kind: "stirrup", points: [[-hw + k, y, -hh + k], [-hw, y, -hh], [hw, y, -hh], [hw, y, hh], [-hw, y, hh], [-hw, y + d, -hh], [-hw + k, y + d, -hh + k]] }; };
+// closed tie in a horizontal plane at height y, 90° hooks at one corner (user 2026-11-18), ends overlapping the two legs by 6·db ≥ 7.5 cm
+const tie = (y, w, h, d) => { const hw = w / 2, hh = h / 2, k = Math.max(6 * d, 0.075); return { d, kind: "stirrup", points: [[-hw + k, y, -hh], [-hw, y, -hh], [-hw, y, hh], [hw, y, hh], [hw, y, -hh], [-hw, y + d, -hh], [-hw, y + d, -hh + k]] }; };
 
 export function ColumnCageParts({ lv, cover = 3, H = 1.6, dark = false }) {
   const parts = useMemo(() => {

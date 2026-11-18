@@ -1,9 +1,10 @@
 // Construction-drawing style details (user 2026-11-04: "รูปประกอบ … สวยสมจริงกว่านี้"): SVG in cm with drafting line weights,
-// concrete / soil hatching, bars at true size, closed stirrups / ties with 135° hooks, leader-line bar marks, dimensions and levels.
+// concrete / soil hatching, bars at true size, closed stirrups / ties with 90° hooks, leader-line bar marks, dimensions and levels.
 // BeamDetail (section at the support or mid-span of a beam type), ColumnDetail (one level of a column type), FootingDetail
 // (spread footing or pile cap: plan + section). Shared between the design step and the report.
 import { barLayout } from "./drawings.js";
 import { barLayers, faceBars, parseBars, stLabel } from "../engine/floor.js";
+import { sectionNotes, extraFootnote } from "../engine/beamDetail.js";
 import { BARS, STIRRUPS, SLAB_BARS } from "../engine/tables.js";
 import { PILES } from "../engine/footing.js";
 import { fmt } from "./beamModel.js";
@@ -35,25 +36,36 @@ const Leader = ({ from, to, s, a = "start", id, size = 3 }) => (<g>
   <polyline points={`${from[0]},${from[1]} ${to[0]},${to[1]} ${to[0] + (a === "start" ? size : -size)},${to[1]}`} fill="none" stroke={INK} strokeWidth={size * 0.08} markerStart={`url(#a${id})`} />
   <Txt x={to[0] + (a === "start" ? size * 1.3 : -size * 1.3)} y={to[1]} s={s} a={a} size={size} />
 </g>);
-// closed stirrup / tie (centre line inset `ins`), radius r, 135° hooks at the top-left corner
+// closed stirrup / tie (centre line inset `ins`), radius r, 90° hooks at the top-left corner (user 2026-11-18: "งอ 90 ก็พอ"):
+// each end bent 90° into the section, the tails lying against the other leg
 function Hoop({ x0, y0, w, h, d, r = 2 }) {
-  const k = Math.max(6 * d, 5) * 0.7;
+  const k = Math.max(6 * d, 7.5); // 90° hook extension 6·db ≥ 7.5 cm
   return (<g fill="none" stroke={TIE} strokeWidth={d} strokeLinejoin="round" strokeLinecap="round">
     <rect x={x0} y={y0} width={w} height={h} rx={r} />
-    <polyline points={`${x0 + d},${y0 + d} ${x0 + d + k},${y0 + d + k}`} /><polyline points={`${x0 + d},${y0 + 0.5} ${x0 + d + k * 0.9},${y0 + d + k * 0.6}`} />
+    <polyline points={`${x0 + d},${y0 + r} ${x0 + d},${y0 + r + k}`} /><polyline points={`${x0 + r},${y0 + d} ${x0 + r + k},${y0 + d}`} />
   </g>);
 }
 const barNote = (l) => [l?.main?.n ? `${l.main.n}-${l.main.bar.replace(" ", "")}` : "", l?.special?.n ? `${l.special.n}-${l.special.bar.replace(" ", "")}` : ""].filter(Boolean).join(" + ");
 
 // ---------------------------------------------------------------- beam section
-export function BeamDetail({ t, mat, at = "sup", className = "" }) {
+// notes as on the construction drawings (user 2026-11-18): through bars, "เสริมพิเศษ L/4" (top extras at the support section),
+// "เสริมพิเศษ 3L/5" (bottom extras at mid-span), stirrups "1ป-RB 6 มม. @ 0.15 ม." — engine/beamDetail.js; each line has its own leader
+// to a bar of that group (extra bars are drawn in a darker colour). ext = extraSpec(...) of the type (lengths from the cut-off check).
+export function BeamDetail({ t, mat, at = "sup", ext, className = "" }) {
   const id = ++uid, B = t.b * 100, H = t.h * 100, cover = mat.cover ?? 3, sd = STIRRUPS[t.st]?.d ?? (t.st === "RB 9" ? 0.9 : 0.6);
   const lay = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x));
   const top = at === "sup" ? lay(t.top, t.topX) : lay(t.top), bot = at === "sup" ? lay(t.bot) : lay(t.bot, t.botX);
   // drawing y down: barLayout gives y up from the bottom face
   const bars = [...barLayout(B, H, cover, sd, top, true), ...barLayout(B, H, cover, sd, bot, false)];
-  const fs = Math.max(3.4, Math.max(B, H) / 8.5), M = fs * 5, W = B + M + fs * 14, Hh = H + 2 * M, Y = (y) => M + H - y;
+  const notes = sectionNotes(t, at, ext), foot = extraFootnote(at, ext);
+  const fs = Math.max(3.4, Math.max(B, H) / 8.5), M = fs * 4, lh = fs * 1.45, tx = M + B + fs * 2.4;
+  const longest = Math.max(...notes.map((n) => n.text.length)), W = tx + longest * fs * 0.52 + fs;
+  const Hh = H + 2 * M + (foot ? fs * 1.8 : 0), Y = (y) => M + H - y;
   const topBar = bars.filter((b) => b.y > H / 2), botBar = bars.filter((b) => b.y <= H / 2), s = at === "sup" ? t.sSup : t.sMid;
+  // the bar a note points at: through → the right-most ordinary bar of the outer layer, extra → a right-most extra bar
+  const pick = (list, extra) => { const c = list.filter((b) => !!b.special === extra), k = c.length ? c : list; return k.reduce((a, b) => (Math.abs(b.y - (list === topBar ? H : 0)) < Math.abs(a.y - (list === topBar ? H : 0)) - 0.1 || (Math.abs(b.y - a.y) < 0.1 && b.x > a.x) ? b : a), k[0]); };
+  const tops = notes.filter((n) => n.side === "top"), bots = notes.filter((n) => n.side === "bot"), st = notes.find((n) => n.side === "st");
+  const rows = [...tops.map((n, i) => ({ n, y: M + fs * 0.4 + i * lh })), ...(st ? [{ n: st, y: M + H / 2 }] : []), ...bots.map((n, i) => ({ n, y: M + H - fs * 0.4 - (bots.length - 1 - i) * lh }))];
   return (
     <svg viewBox={`0 0 ${W} ${Hh}`} className={className}>
       <Defs id={id} />
@@ -61,11 +73,16 @@ export function BeamDetail({ t, mat, at = "sup", className = "" }) {
       <Hoop x0={M + cover + sd / 2} y0={M + cover + sd / 2} w={B - 2 * cover - sd} h={H - 2 * cover - sd} d={sd} />
       {(t.stSets ?? 1) > 1 && <Hoop x0={M + cover + sd * 1.6} y0={M + cover + sd * 1.6} w={B - 2 * cover - sd * 3.2} h={H - 2 * cover - sd * 3.2} d={sd} />}
       {bars.map((b, i) => <circle key={i} cx={M + b.x} cy={Y(b.y)} r={b.d / 2} fill={b.special ? "#7a2e0e" : BAR} stroke={INK} strokeWidth="0.15" />)}
-      {topBar[0] && <Leader size={fs} id={id} from={[M + topBar.at(-1).x, Y(topBar.at(-1).y)]} to={[M + B + fs * 1.6, M - fs * 1.2]} s={`บน ${top.map(barNote).filter(Boolean).join(" / ")}`} />}
-      {botBar[0] && <Leader size={fs} id={id} from={[M + botBar.at(-1).x, Y(botBar.at(-1).y)]} to={[M + B + fs * 1.6, M + H + fs * 1.6]} s={`ล่าง ${bot.map(barNote).filter(Boolean).join(" / ")}`} />}
-      <Leader size={fs} id={id} from={[M + B - cover - sd / 2, M + H / 2]} to={[M + B + fs * 1.6, M + H / 2]} s={`ปลอก ${stLabel(t)} @${fmt(s, 2)}`} />
-      <Dim size={fs} x1={M} y1={M + H + fs * 1.8} x2={M + B} y2={M + H + fs * 1.8} label={fmt(B, 0)} />
-      <Dim size={fs} x1={M - fs * 1.5} y1={M} x2={M - fs * 1.5} y2={M + H} label={fmt(H, 0)} />
+      {rows.map(({ n, y }, i) => {
+        const b = n.side === "st" ? null : pick(n.side === "top" ? topBar : botBar, n.extra), from = b ? [M + b.x, Y(b.y)] : [M + B - cover - sd / 2, M + H / 2];
+        return b === undefined ? null : (<g key={i}>
+          <polyline points={`${from[0]},${from[1]} ${tx - fs * 0.9},${y} ${tx - fs * 0.3},${y}`} fill="none" stroke={INK} strokeWidth={fs * 0.07} markerStart={`url(#a${id})`} />
+          <Txt x={tx} y={y} s={n.text} a="start" size={fs} c={n.extra ? "#7a2e0e" : INK} />
+        </g>);
+      })}
+      <Dim size={fs} x1={M} y1={M - fs * 1.6} x2={M + B} y2={M - fs * 1.6} label={fmt(B / 100, 2)} />
+      <Dim size={fs} x1={M - fs * 1.5} y1={M} x2={M - fs * 1.5} y2={M + H} label={fmt(H / 100, 2)} />
+      {foot && <Txt x={M} y={M + H + fs * 1.9} s={foot} a="start" size={fs * 0.8} c={DIM} />}
     </svg>
   );
 }

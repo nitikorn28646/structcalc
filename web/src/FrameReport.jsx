@@ -6,6 +6,7 @@ import { FootingCageParts } from "./Cage3D.jsx";
 import { BeamCageParts } from "./BeamCage3D.jsx";
 import { Still3D } from "./Snapshot3D.jsx";
 import { beamLayersOf } from "./DesignFigures.jsx";
+import { extraSpec } from "../engine/beamDetail.js";
 import { CalcLink, Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
@@ -217,7 +218,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             if (!list.length) return null;
             const g = list.reduce((a, s) => (s.check.util > a.check.util ? s : a));
             return (
-              <BeamTypeSheet key={i} t={t} g={g} count={list.length} floorName={floors[g.floor].name} mat={mat} />
+              <BeamTypeSheet key={i} t={t} g={g} count={list.length} floorName={floors[g.floor].name} mat={mat} ext={extraSpec(i, spans)} />
             );
           })}
         </Sec>}
@@ -311,12 +312,12 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                 sp.topFull.lifted ? "ปลายช่วงถูกยก (ช่วงสั้นติดช่วงยาว) — ยึดเหล็กเข้าเสา" : "โมเมนต์ลบถึงกลางช่วง (ขอบเขตน้ำหนักจรแบบหมากรุก)"])} />
           </>) : null; })()}
           {/* reinforcement sections of every beam type (support / mid-span) and column level in use */}
-          {o("schedules.beamSec") && <><Sub>รูปตัดเหล็กเสริมคาน (ซ้าย: ช่วงหัวเสา · ขวา: ช่วงกลางคาน)</Sub>
-          <div className="grid grid-cols-2 gap-2">
+          {o("schedules.beamSec") && <><Sub>รูปตัดเหล็กเสริมคาน (ซ้าย: ช่วงหัวเสา · กลาง: ช่วงกลางคาน)</Sub>
+          <div className="grid grid-cols-1 gap-2">
             {types.filter((_, i) => spans.some((sp) => sp.typeIdx === i)).map((t, k) => { const LL = beamLayersOf(t, mat);
               return (
                 <Figure key={t.name} caption={`${t.name} ${fmt(t.b * 100, 0)}×${fmt(t.h * 100, 0)} ซม. · หัวเสา ${stLabel(t)} @${fmt(t.sSup, 2)} · กลางคาน @${fmt(t.sMid, 2)}`}>
-                  <div className="grid grid-cols-3 items-center gap-1"><BeamDetail t={t} mat={mat} at="sup" className="h-[40mm] w-full" /><BeamDetail t={t} mat={mat} at="mid" className="h-[40mm] w-full" />
+                  <div className="grid grid-cols-3 items-center gap-1"><BeamDetail t={t} mat={mat} at="sup" ext={extraSpec(types.indexOf(t), spans)} className="h-[42mm] w-full" /><BeamDetail t={t} mat={mat} at="mid" ext={extraSpec(types.indexOf(t), spans)} className="h-[42mm] w-full" />
                     <Still3D id={`bt-${JSON.stringify([t.b, t.h, t.top, t.topX, t.bot, t.botX, t.st, t.sSup, t.sMid, mat.cover])}`} node={<BeamCageParts b={t.b} h={t.h} L={2.4} cover={mat.cover ?? 3} stirrupBar={t.st} type="both_ends" mid={LL.mid} sup={LL.sup} sEnd={t.sSup} sMid={t.sMid} />} className="h-[40mm] w-full" /></div>
                 </Figure>);
             })}

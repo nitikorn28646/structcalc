@@ -14,12 +14,13 @@ function longBar({ x, y, d, special, z0, z1 }, L, h) {
     ...(z0 <= e ? [[x, y + hk, a]] : []), [x, y, a], [x, y, b], ...(z1 >= L - e ? [[x, y + hk, b]] : [])] };
 }
 
-// Closed stirrup with overlapping 135° hooks at the top-left corner (hook extension 6d, min 5 cm).
+// Closed stirrup with 90° hooks at the top-left corner (user 2026-11-18): the ends overlap the top and the left leg by the hook
+// extension 6·db, at least 7.5 cm
 function stirrup(z, w, h, d) {
-  const hw = w / 2, hh = h / 2, k = Math.max(6 * d, 0.05) * 0.7;
+  const hw = w / 2, hh = h / 2, k = Math.max(6 * d, 0.075);
   return { d, kind: "stirrup", points: [
-    [-hw + k, hh - k, z], [-hw, hh, z], [hw, hh, z], [hw, -hh, z], [-hw, -hh, z],
-    [-hw, hh, z + d], [-hw + k, hh - k, z + d]] };
+    [-hw + k, hh, z], [-hw, hh, z], [-hw, -hh, z], [hw, -hh, z], [hw, hh, z],
+    [-hw, hh, z + d], [-hw, hh - k, z + d]] };
 }
 
 function useBeamParts({ b, h, L, cover, stirrupBar, type, mid, sup, sEnd, sMid }) {

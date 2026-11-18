@@ -34,7 +34,7 @@ function beamFace(tag, r, M, V, tensionTop, b, fcp) {
   return { eqs: eqs.filter(Boolean), checks };
 }
 
-export function BeamTypeSheet({ t, g, count, floorName, mat }) {
+export function BeamTypeSheet({ t, g, count, floorName, mat, ext }) {
   const b = t.b * 100, fcp = mat.fcBeam ?? mat.fcPrime, c = g.check, d = g.defl;
   const mid = c.mid ? beamFace("กลางคาน", c.mid, g.Mpos, g.V, false, b, fcp) : { eqs: [], checks: [] };
   const sup = c.sup ? beamFace("หัวเสา", c.sup, g.Mneg, g.V, true, b, fcp) : { eqs: [], checks: [] };
@@ -52,7 +52,7 @@ export function BeamTypeSheet({ t, g, count, floorName, mat }) {
       checks={[...mid.checks, ...sup.checks, ...(defl ?? [])]}
       note={c.error ?? (g.kind === "cantilever" ? "คานยื่น: เหล็กบนยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลัง" : undefined)}
       figure={<div className="grid gap-1">{[["sup", g.kind === "cantilever" ? "โคนคานยื่น" : "ปลายคาน (หัวเสา)", t.sSup], ["mid", g.kind === "cantilever" ? "ปลายคานยื่น" : "กลางคาน", t.sMid]].map(([at, cap, sp]) => (
-        <div key={at} className="text-center"><BeamDetail t={t} mat={mat} at={at} className="h-[36mm] w-full" /><div className="text-[7.5pt] text-[#667085]">{cap} · ปลอก @{n2(sp)}</div></div>))}</div>} />
+        <div key={at} className="text-center"><BeamDetail t={t} mat={mat} at={at} ext={ext} className="h-[36mm] w-full" /><div className="text-[7.5pt] text-[#667085]">{cap} · ปลอก @{n2(sp)}</div></div>))}</div>} />
   );
 }
 
