@@ -3,7 +3,7 @@
 // (1 unit = 1 m, $INSUNITS 6), with the same bars / notes as the app and the report (engine/beamDetail.js), dimensions, titles and a
 // type tag. Written by hand as DXF R12 (AC1009) so the file opens in AutoCAD / ZWCAD / GstarCAD / LibreCAD:
 //   layers C-CONC (outline) · C-STIRRUP · C-BAR · C-BAR-EXTRA · C-DIM · C-TEXT · C-TITLE,
-//   text style T5 (AngsanaUPC.ttf, the same name / font as the user's drawings — user 2026-11-18), every non-ASCII character written as \U+XXXX (Thai shows correctly whatever the code page).
+//   text style T5 (font file angsau.ttf = AngsanaUPC on Windows — "AngsanaUPC.ttf" does not exist, AutoCAD fell back to an SHX font and showed ??? (user 2026-11-18);, the same name / font as the user's drawings — user 2026-11-18), every non-ASCII character written as \U+XXXX (Thai shows correctly whatever the code page).
 import { barLayout } from "./drawings.js";
 import { barLayers, parseBars } from "../engine/floor.js";
 import { STIRRUPS } from "../engine/tables.js";
@@ -43,7 +43,7 @@ class Dxf {
     const head = ["0\nSECTION\n2\nHEADER", "9\n$ACADVER\n1\nAC1009", "9\n$DWGCODEPAGE\n3\nANSI_874", "9\n$INSUNITS\n70\n6", "0\nENDSEC"].join("\n");
     const ltype = "0\nTABLE\n2\nLTYPE\n70\n1\n0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n0\nENDTAB";
     const layer = `0\nTABLE\n2\nLAYER\n70\n${LAYERS.length}\n${LAYERS.map(([n, c]) => `0\nLAYER\n2\n${n}\n70\n0\n62\n${c}\n6\nCONTINUOUS`).join("\n")}\n0\nENDTAB`;
-    const style = "0\nTABLE\n2\nSTYLE\n70\n1\n0\nSTYLE\n2\nT5\n70\n0\n40\n0.0\n41\n1.0\n50\n0.0\n71\n0\n42\n0.025\n3\nAngsanaUPC.ttf\n4\n\n0\nENDTAB";
+    const style = "0\nTABLE\n2\nSTYLE\n70\n1\n0\nSTYLE\n2\nT5\n70\n0\n40\n0.0\n41\n1.0\n50\n0.0\n71\n0\n42\n0.025\n3\nangsau.ttf\n4\n\n0\nENDTAB";
     return `${head}\n0\nSECTION\n2\nTABLES\n${ltype}\n${layer}\n${style}\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${this.e.join("\n")}\n0\nENDSEC\n0\nEOF\n`;
   }
 }
