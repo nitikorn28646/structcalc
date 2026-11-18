@@ -54,14 +54,14 @@ const barNote = (l) => [l?.main?.n ? `${l.main.n}-${l.main.bar.replace(" ", "")}
 export function BeamDetail({ t, mat, at = "sup", ext, className = "" }) {
   const id = ++uid, B = t.b * 100, H = t.h * 100, cover = mat.cover ?? 3, sd = STIRRUPS[t.st]?.d ?? (t.st === "RB 9" ? 0.9 : 0.6);
   const lay = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x));
-  const top = at === "sup" ? lay(t.top, t.topX) : lay(t.top), bot = at === "sup" ? lay(t.bot) : lay(t.bot, t.botX);
+  const top = at !== "mid" ? lay(t.top, t.topX) : lay(t.top), bot = at !== "mid" ? lay(t.bot) : lay(t.bot, t.botX); // "cant" = cantilever root = support bars
   // drawing y down: barLayout gives y up from the bottom face
   const bars = [...barLayout(B, H, cover, sd, top, true), ...barLayout(B, H, cover, sd, bot, false)];
   const notes = sectionNotes(t, at, ext), foot = extraFootnote(at, ext);
   const fs = Math.max(3.4, Math.max(B, H) / 8.5), M = fs * 4, lh = fs * 1.45, tx = M + B + fs * 2.4;
   const longest = Math.max(...notes.map((n) => n.text.length)), W = tx + longest * fs * 0.52 + fs;
   const Hh = H + 2 * M + (foot ? fs * 1.8 : 0), Y = (y) => M + H - y;
-  const topBar = bars.filter((b) => b.y > H / 2), botBar = bars.filter((b) => b.y <= H / 2), s = at === "sup" ? t.sSup : t.sMid;
+  const topBar = bars.filter((b) => b.y > H / 2), botBar = bars.filter((b) => b.y <= H / 2), s = at === "mid" ? t.sMid : t.sSup;
   // the bar a note points at: through → the right-most ordinary bar of the outer layer, extra → a right-most extra bar
   const pick = (list, extra) => { const c = list.filter((b) => !!b.special === extra), k = c.length ? c : list; return k.reduce((a, b) => (Math.abs(b.y - (list === topBar ? H : 0)) < Math.abs(a.y - (list === topBar ? H : 0)) - 0.1 || (Math.abs(b.y - a.y) < 0.1 && b.x > a.x) ? b : a), k[0]); };
   const tops = notes.filter((n) => n.side === "top"), bots = notes.filter((n) => n.side === "bot"), st = notes.find((n) => n.side === "st");

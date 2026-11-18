@@ -26,8 +26,8 @@ export function BeamTypeFigures({ types, mat, spans = [], count = () => null }) 
           <div className="mb-1 flex items-center justify-between"><b className="text-[12px] text-[#344054]">{t.name} {fmt(t.b * 100, 0)}×{fmt(t.h * 100, 0)} ซม.{count(i) !== null ? <span className="font-normal text-gray-500"> · ใช้ {count(i)} ช่วง</span> : null}</b>
             <button onClick={() => setCage(cage === i ? null : i)} className={btn(cage === i)}>3D</button></div>
           {cage === i ? <BeamCage3D b={t.b} h={t.h} L={3} cover={mat.cover ?? 3} stirrupBar={t.st} type="both_ends" mid={L.mid} sup={L.sup} sEnd={t.sSup} sMid={t.sMid} className="h-[230px] overflow-hidden rounded-lg" />
-            : <div className="grid grid-cols-1 gap-1">{[["หัวเสา", "sup"], ["กลางคาน", "mid"]].map(([w, at]) => (
-              <div key={w}><BeamDetail t={t} mat={mat} at={at} ext={extraSpec(i, spans)} className="mx-auto h-[46mm] w-full" /><p className={cap}>{w} · {stLabel(t)} @{fmt(at === "sup" ? t.sSup : t.sMid, 2)}</p></div>))}</div>}
+            : <div className="grid grid-cols-1 gap-1">{[["หัวเสา", "sup"], ["กลางคาน", "mid"], ...(extraSpec(i, spans).cant > 0 ? [[`คานยื่น ${t.name}A · โคนคานยื่น (${extraSpec(i, spans).cant} ตัว)`, "cant"]] : [])].map(([w, at]) => (
+              <div key={w}><BeamDetail t={t} mat={mat} at={at} ext={extraSpec(i, spans)} className="mx-auto h-[46mm] w-full" /><p className={cap}>{w} · {stLabel(t)} @{fmt(at === "mid" ? t.sMid : t.sSup, 2)}</p></div>))}</div>}
         </div>); })}</div>
     </div>
   );

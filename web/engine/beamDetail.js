@@ -14,7 +14,10 @@ const TOP_STEPS = [[0.25, "L/4"], [1 / 3, "L/3"]], BOT_STEPS = [[0.6, "3L/5"], [
 // (top bars full length, span.detail) and are reported apart
 export function extraSpec(ti, spans) {
   const mine = spans.filter((s) => s.typeIdx === ti), cant = mine.filter((s) => s.kind === "cantilever").length;
-  let topR = 0, topFull = 0, botR = 0, botFull = 0, n = 0;
+  let topR = 0, topFull = 0, botR = 0, botFull = 0, n = 0, cantBack = 0, cantThrough = 0, cantNoBack = 0, cantLen = 0;
+  // cantilever spans (type name + "A"): every top bar runs the whole cantilever, hooked at the tip, and back into the span behind it
+  // ext = max(cantilever length, ld) (floor.js span.detail); a back span shorter than that → the bars run its whole length
+  for (const s of mine) if (s.kind === "cantilever" && s.detail) { cantLen = Math.max(cantLen, s.len); if (s.detail.noBack) cantNoBack++; else if (s.detail.through) cantThrough++; else cantBack = Math.max(cantBack, s.detail.ext); }
   for (const s of mine) {
     if (s.kind === "cantilever" || !(s.len > 0)) continue; n++;
     const c = s.cut ?? s.check?.cut;
@@ -29,7 +32,7 @@ export function extraSpec(ti, spans) {
     top: top ?? "ยาวตลอดช่วง", bot: bot ?? "ยาวตลอดช่วง", topFull, botFull, cant, spans: n,
     // some spans need the extras over the whole span while the type label is a fraction: the label says so (cut-off table has each span)
     topNote: topFull && top ? `${topFull} ช่วงยาวตลอด` : "", botNote: botFull && bot ? `${botFull} ช่วงยาวตลอด` : "",
-    topRatio: topR, botRatio: botR,
+    topRatio: topR, botRatio: botR, cantBack, cantThrough, cantNoBack, cantLen,
   };
 }
 
@@ -40,6 +43,13 @@ const stTxt = (t, s) => `${t.stSets ?? 1}ป-${t.st} มม. @ ${Number(s).toFix
 export function sectionNotes(t, at, ext = { top: "L/4", bot: "3L/5" }) {
   const out = [], add = (text, side, extra = false) => { if (text) out.push({ text, side, extra }); };
   const xt = (s, lab, note) => { const b = barTxt(s); return b ? `${b} เสริมพิเศษ ${lab}${note ? " *" : ""}` : null; };
+  if (at === "cant") { // cantilever root: top bars over the whole cantilever + into the back span
+    const back = ext.cantBack > 0 ? `ฝากช่วงหลัง ${Number(ext.cantBack).toFixed(2)} ม.` : ext.cantThrough ? "ยาวตลอดช่วงหลัง" : "ฝังในเสา ≥ ld";
+    const mark = (ext.cantBack > 0 ? 1 : 0) + (ext.cantThrough ? 1 : 0) + (ext.cantNoBack ? 1 : 0) > 1 ? " *" : "";
+    add(barTxt(t.top) && `${barTxt(t.top)} ยาวตลอดคานยื่น งอขอที่ปลาย`, "top");
+    const bx = barTxt(t.topX); if (bx) add(`${bx} เสริมพิเศษ ตลอดคานยื่น + ${back}${mark}`, "top", true);
+    add(stTxt(t, t.sSup), "st"); add(barTxt(t.bot), "bot"); return out;
+  }
   add(barTxt(t.top), "top");
   if (at === "sup") add(xt(t.topX, ext.top, ext.topNote), "top", true);
   add(stTxt(t, at === "sup" ? t.sSup : t.sMid), "st");
@@ -50,6 +60,8 @@ export function sectionNotes(t, at, ext = { top: "L/4", bot: "3L/5" }) {
 
 // footnote for the "*" of a section (spans of the type that need the extra bars over the whole span)
 export function extraFootnote(at, ext) {
+  if (at === "cant") { const p = [ext?.cantThrough && `${ext.cantThrough} ตัวมีช่วงหลังสั้น: เหล็กบนยาวตลอดช่วงหลัง`, ext?.cantNoBack && `${ext.cantNoBack} ตัวไม่มีช่วงหลัง: ฝังในเสา ≥ ld`].filter(Boolean);
+    return p.length && (ext.cantBack > 0 || p.length > 1) ? `* ${p.join(" · ")}` : ""; }
   const n = at === "sup" ? ext?.topNote && ext.topFull : ext?.botNote && ext.botFull;
   return n ? `* ${n} ช่วงของ type นี้ต้องเสริม${at === "sup" ? "บน" : "ล่าง"}ยาวตลอดช่วง — ดูตารางระยะตัดเหล็กเสริม` : "";
 }

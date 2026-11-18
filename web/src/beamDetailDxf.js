@@ -49,7 +49,7 @@ class Dxf {
 function section(d, t, mat, at, ext, ox, oy, title) {
   const B = t.b * 100, H = t.h * 100, cover = mat.cover ?? 3, sd = STIRRUPS[t.st]?.d ?? 0.6, m = (v) => v / 100;
   const lay = (a, b) => barLayers(t.b, mat, t.st, parseBars(a), parseBars(b));
-  const top = at === "sup" ? lay(t.top, t.topX) : lay(t.top), bot = at === "sup" ? lay(t.bot) : lay(t.bot, t.botX);
+  const top = at !== "mid" ? lay(t.top, t.topX) : lay(t.top), bot = at !== "mid" ? lay(t.bot) : lay(t.bot, t.botX); // "cant" = cantilever root
   const bars = [...barLayout(B, H, cover, sd, top, true), ...barLayout(B, H, cover, sd, bot, false)];
   const th = 0.025; // text height 2.5 cm at 1:1 → 2.5 mm on a 1:10 sheet
   d.poly([[ox, oy], [ox + t.b, oy], [ox + t.b, oy + t.h], [ox, oy + t.h]], "C-CONC");
@@ -88,7 +88,8 @@ export function beamDetailsDxf(items, mat, title = "") {
     y -= t.h + rowGap;
     section(d, t, mat, "sup", ext, 0, y, `${t.name} ช่วงหัวเสา`);
     section(d, t, mat, "mid", ext, colW, y, `${t.name} ช่วงกลางคาน`);
-    d.text(colW * 2 + 0.2, y + t.h / 2, 0.035, `${t.name}  ${(t.b * 100).toFixed(0)}×${(t.h * 100).toFixed(0)} ซม.`, "C-TITLE", 0, 2);
+    if (ext.cant > 0) section(d, t, mat, "cant", ext, colW * 2, y, `${t.name}A คานยื่น (โคนคานยื่น)`);
+    d.text(colW * (ext.cant > 0 ? 3 : 2) + 0.2, y + t.h / 2, 0.035, `${t.name}  ${(t.b * 100).toFixed(0)}×${(t.h * 100).toFixed(0)} ซม.`, "C-TITLE", 0, 2);
     y -= 0.15;
   }
   d.text(0, y - 0.25, 0.025, "หน่วย: เมตร (1 หน่วย = 1 ม.) · L = ช่วงคานศูนย์ถึงศูนย์ที่รองรับ · เสริมพิเศษบนวัดจากศูนย์เสาแต่ละข้าง · เสริมพิเศษล่างวางกึ่งกลางช่วง", "C-TEXT");

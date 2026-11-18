@@ -284,27 +284,26 @@ export function barLayers(b, mat, st, main, special) {
   const cap = (db) => { const s = Math.max(mat.barClear ?? DEFAULT_BAR_CLEAR, db); return Math.max(2, Math.floor((b * 100 - 2 * (mat.cover ?? 3) - 2 * ds + s) / (db + s) + 1e-9)); };
   const groups = [main, special].filter((g) => g?.n > 0), N = groups.reduce((t, g) => t + g.n, 0);
   if (!N) return L;
-  // bars per layer: the first layer up to what fits across the width (clear spacing max(barClear, db), largest bar of the face);
-  // a layer above never holds ONE bar alone (user 2026-11-04: it floats in the middle — nothing to tie it to): its bars start as a
-  // pair against the stirrup legs (more bars between them tie to a spacer bar). 4 → 2 + 2, 5 → 3 + 2, 6 → 3 + 3, 7 → 3 + 2 + 2
-  // (width for 3). The third layer takes the rest. A single bar that cannot be paired (narrow beam: 2 + 1) → L.odd (warning,
-  // auto types avoid it).
-  const C = cap(Math.max(...groups.map((g) => BARS[g.bar]?.d ?? 1.2))), cnt = [Math.min(N, C)];
-  let r = N - cnt[0];
-  while (r > 0) { const k = cnt.length === 2 ? r : Math.min(r, C); cnt.push(k); r -= k; }
+  // main = bars running through the whole span, special = extra bars of this section (top extras at the support, bottom extras at
+  // mid-span). The through bars keep the SAME place in both sections (user 2026-11-18: a bar cannot change layer along the beam —
+  // before, both sections were split on their own, e.g. 3 through bars sat in layer 1 at mid-span but 2 + 2 at the support):
+  // 1. through bars alone: layer 1 up to what fits across the width (clear spacing max(barClear, db), largest bar of the face),
+  //    an upper layer never holds ONE bar alone (4 → 2 + 2, 5 → 3 + 2, 7 → 3 + 2 + 2; user 2026-11-04);
+  // 2. extra bars fill the free places of layer 1, then layer 2, then layer 3; a layer left with one extra bar alone takes one
+  //    more extra bar from the layer below (the through bars never move); still alone → L.odd (cannot be built: warning, auto
+  //    types reject it).
+  const C = cap(Math.max(...groups.map((g) => BARS[g.bar]?.d ?? 1.2))), M = main?.n > 0 ? main.n : 0, X = special?.n > 0 ? special.n : 0;
+  const tc = [];
+  if (M) { tc.push(Math.min(M, C)); let r = M - tc[0]; while (r > 0) { const k = tc.length === 2 ? r : Math.min(r, C); tc.push(k); r -= k; }
+    for (let k = tc.length - 1; k >= 1; k--) if (tc[k] === 1) { if (tc[k - 1] - 1 >= 2) { tc[k - 1]--; tc[k]++; } else if (k >= 2 && tc[0] - 1 >= 2) { tc[0]--; tc[k]++; } else L.odd = true; } }
+  const xc = tc.map(() => 0); let r = X;
+  for (let k = 0; r > 0; k++) { if (k >= tc.length) { tc.push(0); xc.push(0); } const free = Math.max(0, C - tc[k] - xc[k]), take = k >= 2 ? r : Math.min(r, free); xc[k] += take; r -= take; }
+  for (let k = tc.length - 1; k >= 1; k--) if (tc[k] + xc[k] === 1) { if (xc[k - 1] >= 1 && tc[k - 1] + xc[k - 1] - 1 >= 2) { xc[k - 1]--; xc[k]++; } else L.odd = true; }
+  const cnt = tc.map((t, k) => t + xc[k]);
   if (cnt.length > 3 || cnt.some((c) => c > C)) L.over = { cnt, C }; // more bars than fit across the width in a layer (audit F5)
-  for (let k = cnt.length - 1; k >= 1; k--) if (cnt[k] === 1) {
-    if (cnt[k - 1] - 1 >= 2) { cnt[k - 1]--; cnt[k]++; } else if (k >= 2 && cnt[0] - 1 >= 2) { cnt[0]--; cnt[k]++; } else L.odd = true;
-  }
-  // the bars, main group first, fill the layers in order (a layer holds at most two groups: main + special)
-  let gi = 0, left = groups[0].n;
-  cnt.forEach((c, k) => {
-    while (c > 0 && gi < groups.length) {
-      const g = groups[gi], take = Math.min(c, left), l = L[k];
-      if (!l.main) l.main = { n: take, bar: g.bar }; else if (l.main.bar === g.bar && !l.special) l.main = { n: l.main.n + take, bar: g.bar }; else l.special = { n: (l.special?.n ?? 0) + take, bar: g.bar };
-      c -= take; left -= take;
-      if (!left) { gi++; left = groups[gi]?.n ?? 0; }
-    }
+  cnt.forEach((_, k) => { if (k > 2) return;
+    if (tc[k]) L[k].main = { n: tc[k], bar: main.bar };
+    if (xc[k]) L[k].special = { n: xc[k], bar: special.bar }; // a layer of extra bars only keeps them as extras (drawn / labelled as such)
   });
   return L;
 }
@@ -377,7 +376,8 @@ export function checkSpan(t, sp, mat) {
   const base = { ...mat, fcPrime: mat.fcBeam ?? mat.fcPrime, type: sp.kind, b: t.b, h: t.h, L: sp.len, V: sp.V, Mt: MtUse, stirrup: { bar: t.st, sets: t.stSets ?? 1 } }; // stSets 2 = double stirrups (2 sets, user: RB9 is the largest)
   const out = {};
   try {
-    const lay = (m, x) => barLayers(t.b, mat, t.st, m, x);
+    // the frozen sheet (beam.js) reads a layer as main bars + special bars: a layer of extra bars only goes in as its main bars (as before)
+    const lay = (m, x) => { const L = barLayers(t.b, mat, t.st, m, x); return Object.assign(L.map((l) => (!l.main && l.special ? { main: l.special } : l)), { odd: L.odd, over: L.over }); };
     if (sp.kind !== "cantilever") out.mid = designSection({ ...base, M: sp.Mpos, s: t.sMid, top: lay(top), bottom: lay(bot, botX) });
     out.sup = designSection({ ...base, M: sp.Mneg, s: t.sSup, top: lay(bot), bottom: lay(top, topX) }); // tension at the top
   } catch (e) { return { error: e.message, ok: false }; }
