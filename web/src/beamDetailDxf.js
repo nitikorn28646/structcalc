@@ -9,29 +9,31 @@ import { barLayers, parseBars } from "../engine/floor.js";
 import { STIRRUPS } from "../engine/tables.js";
 import { sectionNotes, extraFootnote, hasExtras, cantNote } from "../engine/beamDetail.js";
 import { ELEVATION_SAMPLE } from "./elevationSample.js";
+import { DXF2010 } from "./dxfTemplate2010.js";
 
 // sheets (user 2026-11-18, their A3 sheet EN-08 "แบบขยายคาน" as the model): A3 at 1:25 drawn in metres = 10.50 × 7.425, drawing area
 // inside the red border, title column on the right (fields filled from the project data, logo area left empty, Dwg / Sheet No. empty —
 // user), one panel per beam type with a tag bubble, sheet 1 also carries the typical beam elevation (L, 1/4L, 3/5L) and the notes
-const LAYERS = [["C-CONC", 3], ["C-STIRRUP", 1], ["C-BAR", 5], ["C-BAR-EXTRA", 5], ["C-DIM", 2], ["C-TEXT", 3], ["C-TITLE", 3], ["C-TAG", 5], ["C-FRAME", 1], ["C-FRAME2", 8], ["C-ELEV", 3], ["Defpoints", 7]];
-const uni = (s) => [...String(s)].map((ch) => { const c = ch.codePointAt(0); return c < 128 ? ch : `\\U+${c.toString(16).toUpperCase().padStart(4, "0")}`; }).join("");
 const f = (v) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(4);
 
+// R2010 writer (user 2026-11-18: R12 could not carry the AngsanaUPC font family → Thai showed ???): entities with handles and the
+// modelspace owner, appended to the ezdxf-made skeleton (src/dxfTemplate2010.js); text in UTF-8 as is
+const OWNER = "17";
 class Dxf {
-  constructor() { this.e = []; }
-  line(x1, y1, x2, y2, l, color = 0, lt = "") { this.e.push(`0\nLINE\n8\n${l}${lt ? `\n6\n${lt}` : ""}${color ? `\n62\n${color}` : ""}\n10\n${f(x1)}\n20\n${f(y1)}\n30\n0\n11\n${f(x2)}\n21\n${f(y2)}\n31\n0`); }
-  arc(x, y, r, a0, a1, l, color = 0) { this.e.push(`0\nARC\n8\n${l}${color ? `\n62\n${color}` : ""}\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}\n50\n${f(a0)}\n51\n${f(a1)}`); }
-  circle(x, y, r, l, color = 0) { this.e.push(`0\nCIRCLE\n8\n${l}${color ? `\n62\n${color}` : ""}\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}`); }
-  // closed polyline; pts [[x, y, bulge]]
+  constructor() { this.e = []; this.h = 0x1000; }
+  head(type, l, color) { return `0\n${type}\n5\n${(this.h++).toString(16).toUpperCase()}\n330\n${OWNER}\n100\nAcDbEntity\n8\n${l}${color ? `\n62\n${color}` : ""}`; }
+  line(x1, y1, x2, y2, l, color = 0) { this.e.push(`${this.head("LINE", l, color)}\n100\nAcDbLine\n10\n${f(x1)}\n20\n${f(y1)}\n30\n0\n11\n${f(x2)}\n21\n${f(y2)}\n31\n0`); }
+  arc(x, y, r, a0, a1, l, color = 0) { this.e.push(`${this.head("ARC", l, color)}\n100\nAcDbCircle\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}\n100\nAcDbArc\n50\n${f(a0)}\n51\n${f(a1)}`); }
+  circle(x, y, r, l, color = 0) { this.e.push(`${this.head("CIRCLE", l, color)}\n100\nAcDbCircle\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}`); }
+  // polyline; pts [[x, y, bulge]]
   poly(pts, l, closed = true) {
-    this.e.push(`0\nPOLYLINE\n8\n${l}\n66\n1\n70\n${closed ? 1 : 0}\n10\n0\n20\n0\n30\n0`);
-    for (const [x, y, b = 0] of pts) this.e.push(`0\nVERTEX\n8\n${l}\n10\n${f(x)}\n20\n${f(y)}\n30\n0${b ? `\n42\n${f(b)}` : ""}`);
-    this.e.push(`0\nSEQEND\n8\n${l}`);
+    this.e.push(`${this.head("LWPOLYLINE", l, 0)}\n100\nAcDbPolyline\n90\n${pts.length}\n70\n${closed ? 1 : 0}\n43\n0${pts.map(([x, y, b = 0]) => `\n10\n${f(x)}\n20\n${f(y)}${b ? `\n42\n${f(b)}` : ""}`).join("")}`);
   }
-  // h = text height (m); ha 0 left / 1 centre / 2 right, va 0 baseline / 2 middle
+  // h = text height (m); ha 0 left / 1 centre / 2 right, va 0 baseline / 1 bottom / 2 middle / 3 top
   text(x, y, h, s, l = "C-TEXT", ha = 0, va = 0, rot = 0, color = 0, at = null, wf = 1) {
-    const align = ha || va ? `\n72\n${ha}\n11\n${f(at ? at[0] : x)}\n21\n${f(at ? at[1] : y)}\n31\n0\n73\n${va}` : "";
-    this.e.push(`0\nTEXT\n8\n${l}${color ? `\n62\n${color}` : ""}${wf !== 1 ? `\n41\n${f(wf)}` : ""}\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(h)}\n1\n${uni(s)}\n7\nT5${rot ? `\n50\n${rot}` : ""}${align}`);
+    const al = ha || va ? `\n72\n${ha}\n11\n${f(at ? at[0] : x)}\n21\n${f(at ? at[1] : y)}\n31\n0` : "";
+    const txt = String(s).replace(/[\r\n]+/g, " ");
+    this.e.push(`${this.head("TEXT", l, color)}\n100\nAcDbText\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(h)}\n1\n${txt}${rot ? `\n50\n${f(rot)}` : ""}${wf !== 1 ? `\n41\n${f(wf)}` : ""}\n7\nT5${al}\n100\nAcDbText${va ? `\n73\n${va}` : ""}`);
   }
   // dimension drawn with lines + ticks + text (no DIMENSION entity: same look in every CAD program)
   dim(x1, y1, x2, y2, off, label, h) {
@@ -42,14 +44,9 @@ class Dxf {
       for (const y of [y1, y2]) this.line(x - t * 0.6, y - t * 0.6, x + t * 0.6, y + t * 0.6, "C-DIM"); this.text(x - h * 0.5, (y1 + y2) / 2, h, label, "C-DIM", 1, 0, 90); }
   }
   toString() {
-    const head = ["0\nSECTION\n2\nHEADER", "9\n$ACADVER\n1\nAC1009", "9\n$DWGCODEPAGE\n3\nANSI_874", "9\n$INSUNITS\n70\n6", "0\nENDSEC"].join("\n");
-    const ltype = "0\nTABLE\n2\nLTYPE\n70\n1\n0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n0\nENDTAB"; // only CONTINUOUS: a file with extra line types lost its Thai text style in AutoCAD (user 2026-11-18) — dashed lines are drawn as pieces
-    const layer = `0\nTABLE\n2\nLAYER\n70\n${LAYERS.length}\n${LAYERS.map(([n, c]) => `0\nLAYER\n2\n${n}\n70\n0\n62\n${c}\n6\nCONTINUOUS`).join("\n")}\n0\nENDTAB`;
-    // T5 exactly as AutoCAD writes it in the user's drawings: file name + ACAD xdata with the family "AngsanaUPC" and 1071 = 56850
-    // (charset 222 = THAI, pitch/family 0x12) — AutoCAD finds a TrueType font by that family; without it the text fell back to an SHX font (???)
-    const appid = "0\nTABLE\n2\nAPPID\n70\n1\n0\nAPPID\n2\nACAD\n70\n0\n0\nENDTAB";
-    const style = "0\nTABLE\n2\nSTYLE\n70\n1\n0\nSTYLE\n2\nT5\n70\n0\n40\n0.0\n41\n1.0\n50\n0.0\n71\n0\n42\n0.025\n3\nAngsanaUPC.ttf\n4\n\n1001\nACAD\n1000\nAngsanaUPC\n1071\n56850\n0\nENDTAB";
-    return `${head}\n0\nSECTION\n2\nTABLES\n${appid}\n${ltype}\n${layer}\n${style}\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${this.e.join("\n")}\n0\nENDSEC\n0\nEOF\n`;
+    const ents = this.e.join("\n");
+    return DXF2010.replace("\n  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n", `\n  0\nSECTION\n  2\nENTITIES\n${ents}\n  0\nENDSEC\n`)
+      .replace(/(\$HANDSEED\n\s*5\n)[0-9A-F]+/, `$1${this.h.toString(16).toUpperCase()}`);
   }
 }
 
