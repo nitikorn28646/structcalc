@@ -43,8 +43,7 @@ class Dxf {
   }
   toString() {
     const head = ["0\nSECTION\n2\nHEADER", "9\n$ACADVER\n1\nAC1009", "9\n$DWGCODEPAGE\n3\nANSI_874", "9\n$INSUNITS\n70\n6", "0\nENDSEC"].join("\n");
-    const lts = Object.entries(ELEVATION_SAMPLE.ltypes ?? {}).map(([n, d]) => { const p = d.pattern.filter((v, i) => v > 1e-9 || i % 2 === 0), tot = p.reduce((a, v) => a + v, 0); return `0\nLTYPE\n2\n${n}\n70\n0\n3\n${n}\n72\n65\n73\n${p.length}\n40\n${f(tot)}${p.map((v, i) => `\n49\n${f(i % 2 ? -v : v)}`).join("")}`; }); // dash +, gap − (R12)
-    const ltype = `0\nTABLE\n2\nLTYPE\n70\n${1 + lts.length}\n0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0${lts.length ? "\n" + lts.join("\n") : ""}\n0\nENDTAB`;
+    const ltype = "0\nTABLE\n2\nLTYPE\n70\n1\n0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n0\nENDTAB"; // only CONTINUOUS: a file with extra line types lost its Thai text style in AutoCAD (user 2026-11-18) — dashed lines are drawn as pieces
     const layer = `0\nTABLE\n2\nLAYER\n70\n${LAYERS.length}\n${LAYERS.map(([n, c]) => `0\nLAYER\n2\n${n}\n70\n0\n62\n${c}\n6\nCONTINUOUS`).join("\n")}\n0\nENDTAB`;
     const style = "0\nTABLE\n2\nSTYLE\n70\n1\n0\nSTYLE\n2\nT5\n70\n0\n40\n0.0\n41\n1.0\n50\n0.0\n71\n0\n42\n0.025\n3\nangsau.ttf\n4\n\n0\nENDTAB";
     return `${head}\n0\nSECTION\n2\nTABLES\n${ltype}\n${layer}\n${style}\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${this.e.join("\n")}\n0\nENDSEC\n0\nEOF\n`;
@@ -119,7 +118,14 @@ function frame(d, X, p, title) {
 // typical beam elevation (sheet 1) = the user's own drawing, line for line (src/elevationSample.js); (x0, y0) = its bottom-left
 function elevation(d, X, x0, y0) {
   const E = ELEVATION_SAMPLE, P = (x, y) => [X + x0 + x, y0 + y];
-  for (const [a, b, c, e, col, lt] of E.lines) { const [p1x, p1y] = P(a, b), [p2x, p2y] = P(c, e); d.line(p1x, p1y, p2x, p2y, "C-ELEV", col, lt === "CONTINUOUS" ? "" : lt); }
+  // dashed line types of the original (HIDDEN2, CENTER2) drawn as dash pieces; PHANTOM2 there has 15.9 m dashes = continuous at this size
+  const pat = (lt) => (lt === "HIDDEN2" || lt === "CENTER2" ? E.ltypes?.[lt]?.pattern : null);
+  for (const [a, b, c, e, col, lt] of E.lines) {
+    const [p1x, p1y] = P(a, b), [p2x, p2y] = P(c, e), pp = pat(lt), L = Math.hypot(p2x - p1x, p2y - p1y);
+    if (!pp || L < 1e-6) { d.line(p1x, p1y, p2x, p2y, "C-ELEV", col); continue; }
+    const ux = (p2x - p1x) / L, uy = (p2y - p1y) / L; let t = 0, k = 0;
+    while (t < L - 1e-9) { const seg = Math.max(pp[k % pp.length], 1e-3); if (k % 2 === 0) { const t2 = Math.min(L, t + seg); d.line(p1x + ux * t, p1y + uy * t, p1x + ux * t2, p1y + uy * t2, "C-ELEV", col); } t += seg; k++; }
+  }
   for (const [x, y, r, col] of E.circles) { const [px, py] = P(x, y); d.circle(px, py, r, "C-ELEV", col); }
   for (const [x, y, r, a0, a1, col] of E.arcs) { const [px, py] = P(x, y); d.arc(px, py, r, a0, a1, "C-ELEV", col); }
   for (const [x, y, h, t, rot, ha, va, ax, ay, col, wf] of E.texts) { const [px, py] = P(x, y); d.text(px, py, h, t, "C-ELEV", ha, va, rot, col, P(ax, ay), wf); }
