@@ -61,7 +61,7 @@ export function BeamDetail({ t, mat, at = "sup", ext, className = "" }) {
   const fs = Math.max(3.4, Math.max(B, H) / 8.5), M = fs * 4, lh = fs * 1.45, tx = M + B + fs * 2.4;
   const longest = Math.max(...notes.map((n) => n.text.length)), W = tx + longest * fs * 0.52 + fs;
   const Hh = H + 2 * M + (foot ? fs * 1.8 : 0), Y = (y) => M + H - y;
-  const topBar = bars.filter((b) => b.y > H / 2), botBar = bars.filter((b) => b.y <= H / 2), s = at === "mid" ? t.sMid : t.sSup;
+  const topBar = bars.filter((b) => b.y > H / 2), botBar = bars.filter((b) => b.y <= H / 2), s = at === "mid" ? t.sMid : at === "all" ? Math.min(t.sSup, t.sMid) : t.sSup;
   // the bar a note points at: through → the right-most ordinary bar of the outer layer, extra → a right-most extra bar
   const pick = (list, extra) => { const c = list.filter((b) => !!b.special === extra), k = c.length ? c : list; return k.reduce((a, b) => (Math.abs(b.y - (list === topBar ? H : 0)) < Math.abs(a.y - (list === topBar ? H : 0)) - 0.1 || (Math.abs(b.y - a.y) < 0.1 && b.x > a.x) ? b : a), k[0]); };
   const tops = notes.filter((n) => n.side === "top"), bots = notes.filter((n) => n.side === "bot"), st = notes.find((n) => n.side === "st");

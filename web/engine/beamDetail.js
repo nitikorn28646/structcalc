@@ -43,13 +43,13 @@ const stTxt = (t, s) => `${t.stSets ?? 1}ป-${t.st} มม. @ ${Number(s).toFix
 export function sectionNotes(t, at, ext = { top: "L/4", bot: "3L/5" }) {
   const out = [], add = (text, side, extra = false) => { if (text) out.push({ text, side, extra }); };
   const xt = (s, lab, note) => { const b = barTxt(s); return b ? `${b} เสริมพิเศษ ${lab}${note ? " *" : ""}` : null; };
-  if (at === "cant") { // cantilever root: top bars over the whole cantilever + into the back span
-    const back = ext.cantBack > 0 ? `ฝากช่วงหลัง ${Number(ext.cantBack).toFixed(2)} ม.` : ext.cantThrough ? "ยาวตลอดช่วงหลัง" : "ฝังในเสา ≥ ld";
-    const mark = (ext.cantBack > 0 ? 1 : 0) + (ext.cantThrough ? 1 : 0) + (ext.cantNoBack ? 1 : 0) > 1 ? " *" : "";
-    add(barTxt(t.top) && `${barTxt(t.top)} ยาวตลอดคานยื่น งอขอที่ปลาย`, "top");
-    const bx = barTxt(t.topX); if (bx) add(`${bx} เสริมพิเศษ ตลอดคานยื่น + ${back}${mark}`, "top", true);
+  if (at === "cant") { // cantilever (B1A): every top bar runs the whole cantilever — written as one count like the drawings (user's sheet)
+    const a = parseBars(t.top), x = parseBars(t.topX);
+    if (a && x && a.bar === x.bar) add(`${a.n + x.n}-${a.bar} มม.`, "top"); else { add(barTxt(t.top), "top"); add(barTxt(t.topX), "top"); }
     add(stTxt(t, t.sSup), "st"); add(barTxt(t.bot), "bot"); return out;
   }
+  // a type without extra bars (GB, GB-A …): one section "ตลอดคาน" (user 2026-11-18)
+  if (at === "all") { add(barTxt(t.top), "top"); add(stTxt(t, Math.min(t.sSup, t.sMid)), "st"); add(barTxt(t.bot), "bot"); return out; }
   add(barTxt(t.top), "top");
   if (at === "sup") add(xt(t.topX, ext.top, ext.topNote), "top", true);
   add(stTxt(t, at === "sup" ? t.sSup : t.sMid), "st");
@@ -59,11 +59,17 @@ export function sectionNotes(t, at, ext = { top: "L/4", bot: "3L/5" }) {
 }
 
 // footnote for the "*" of a section (spans of the type that need the extra bars over the whole span)
-export function extraFootnote(at, ext) {
+// back-span anchorage of a type's cantilevers (shown under the "A" section title)
+export function cantNote(ext) {
+  if (!ext?.cant) return "";
+  return ext.cantBack > 0 ? `เหล็กบนงอขอที่ปลาย ฝากช่วงหลัง ≥ ${Number(ext.cantBack).toFixed(2)} ม.` : ext.cantThrough ? "เหล็กบนงอขอที่ปลาย ยาวตลอดช่วงหลัง" : "เหล็กบนงอขอที่ปลาย ฝังในเสา ≥ ld";
+}
+export const hasExtras = (t) => !!(parseBars(t.topX) || parseBars(t.botX));
+export function extraFootnote(at, ext, short = false) {
   if (at === "cant") { const p = [ext?.cantThrough && `${ext.cantThrough} ตัวมีช่วงหลังสั้น: เหล็กบนยาวตลอดช่วงหลัง`, ext?.cantNoBack && `${ext.cantNoBack} ตัวไม่มีช่วงหลัง: ฝังในเสา ≥ ld`].filter(Boolean);
     return p.length && (ext.cantBack > 0 || p.length > 1) ? `* ${p.join(" · ")}` : ""; }
   const n = at === "sup" ? ext?.topNote && ext.topFull : ext?.botNote && ext.botFull;
-  return n ? `* ${n} ช่วงของ type นี้ต้องเสริม${at === "sup" ? "บน" : "ล่าง"}ยาวตลอดช่วง — ดูตารางระยะตัดเหล็กเสริม` : "";
+  return n ? (short ? `* ${n} ช่วงเสริม${at === "sup" ? "บน" : "ล่าง"}ยาวตลอดช่วง` : `* ${n} ช่วงของ type นี้ต้องเสริม${at === "sup" ? "บน" : "ล่าง"}ยาวตลอดช่วง — ดูตารางระยะตัดเหล็กเสริม`) : "";
 }
 // bar diameter (cm) of a bar string, for drawing
 export const barDia = (s) => BARS[parseBars(s)?.bar]?.d ?? 1.2;

@@ -631,7 +631,7 @@ export default function App() {
               <ReportOptions frame={frame} roof={roof} res={fres} report={st.project.report} onChange={(v) => set("project.report", v)} />
               <WorkReport frame={frame} roof={roof} project={st.project} />
             </div></main>
-          ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} focus={focus} onProjectInfo={() => setProjOpen(true)}  onRoofFromFrame={roofFromStructure} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
+          ) : <FramePage frame={frame} set={setFrame} dark={dark} roof={roof} setRoof={setRoof} res={fres} step={step} project={st.project} focus={focus} onProjectInfo={() => setProjOpen(true)}  onRoofFromFrame={roofFromStructure} />) : mod === "footing" ? <FootingPage f={footing} set={setFooting} dark={dark} /> : mod === "stair" ? <StairPage s={stairSt} set={setStair} dark={dark} /> : mod === "column" ? <ColumnPage c={column} set={setColumn} dark={dark} /> : mod === "slab" ? <SlabPage s={slab} set={setSlab} dark={dark} /> : (
           <main className="grid min-h-0 flex-1 gap-4 p-4 md:p-5 xl:grid-cols-[300px_1fr_1fr_1.15fr] xl:grid-rows-[auto_1fr]">
             {/* inputs */}
             <div className="space-y-4 xl:row-span-2 xl:overflow-y-auto">

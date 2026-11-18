@@ -281,7 +281,7 @@ const STEPS = [["frame", "1 โครง", false, "ขั้น 1 โครง: 
   ["wall", "4 ผนัง", false, "ขั้น 4 ผนัง"], ["other", "5 น้ำหนักอื่น", false, "ขั้น 5 น้ำหนักอื่น: ราวกันตก น้ำหนักจุด แรงจากหลังคา"], ["result", "6 ผลคาน", false, "ผลออกแบบคาน (WSD)"], ["cols", "7 ผลเสา", false, "ผลออกแบบเสา (WSD)"],
   ["types", "Type คาน", false, "ตาราง Type คาน"], ["ctypes", "Type เสา", false, "ตาราง Type เสา"]];
 
-export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo, onRoofFromFrame, focus = false }) {
+export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", onProjectInfo, onRoofFromFrame, focus = false, project = {} }) {
   const [multiSel, setMultiSel] = useState([]), [pickSet, setPickSet] = useState(null), [armed, setArmed] = useState(false), pickRef = useRef(null); // Load Cases page
   // checklist bar (Help.jsx StepChecklist) → open the sub-tab where a task is done
   const setDrawerRef = useRef(null); // the side panel (warnings …) is declared further down
@@ -405,7 +405,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </Card>
       </div>
     </div>
-  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} project={project} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
     : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} delType={(i) => { const r = deleteColType(frame, i); set("colTypes", r.colTypes); set("colPick", r.colPick); }} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (() => {

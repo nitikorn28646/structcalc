@@ -6,23 +6,23 @@ import BeamCage3D from "./BeamCage3D.jsx";
 import { ColumnCage3D } from "./Cage3D.jsx";
 import { barLayers, parseBars, stLabel } from "../engine/floor.js";
 import { fmt } from "./beamModel.js";
-import { extraSpec, fixLoneBars } from "../engine/beamDetail.js";
-import { beamDetailsDxf, downloadText } from "./beamDetailDxf.js";
+import { extraSpec, fixLoneBars, hasExtras, cantNote } from "../engine/beamDetail.js";
+import { beamSheetsDxf, downloadText } from "./beamDetailDxf.js";
 
 const card = "rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200", cap = "mt-1 text-center text-[11px] text-[#667085]";
 const btn = (on) => `rounded-md px-2 py-0.5 text-[11px] ring-1 ${on ? "bg-brand-500 text-[#fff] ring-brand-500" : "text-gray-600 ring-gray-300 hover:bg-gray-50"}`;
 export const beamLayersOf = (t, mat) => { const L = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x));
   return { mid: { top: L(t.top), bottom: L(t.bot, t.botX) }, sup: { top: L(t.top, t.topX), bottom: L(t.bot) } }; };
 
-export function BeamTypeFigures({ types, mat, spans = [], count = () => null, onTypes = null }) {
+export function BeamTypeFigures({ types, mat, spans = [], count = () => null, onTypes = null, project = {} }) {
   const fixes = types.map((t) => fixLoneBars(t, mat)), nFix = fixes.filter((f) => f?.type).length;
   const fixAll = () => onTypes?.(types.map((t, i) => fixes[i]?.type ?? t));
   const [cage, setCage] = useState(null);
   return (
     <div className="mt-4"><div className="mb-1 flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-gray-800">รูปตัดเหล็กเสริม type คาน (หัวเสา · กลางคาน)</p>
       <button onClick={() => { const items = types.map((t, i) => ({ t, ext: extraSpec(i, spans), used: count(i) })).filter((x) => x.used !== 0);
-        downloadText(beamDetailsDxf(items, mat, "แบบขยายคาน"), "แบบขยายคาน.dxf"); }} className={btn(false)}>ส่งออก DXF แบบขยายคาน</button>
-      <span className="text-[11px] text-gray-500">หน่วยเมตร · type ที่ใช้งานทั้งหมด · ความยาวเสริมพิเศษตามผลตรวจระยะตัดเหล็ก</span>
+        downloadText(beamSheetsDxf(items, mat, project).dxf, "แบบขยายคาน.dxf"); }} className={btn(false)}>ส่งออก DXF แบบขยายคาน</button>
+      <span className="text-[11px] text-gray-500">กระดาษ A3 มาตราส่วน 1:25 (หน่วยเมตร) · กรอบแบบ + ตารางชื่อจากข้อมูลโครงการ · type ที่ใช้งานทั้งหมด</span>
       {nFix > 0 && onTypes && <button onClick={fixAll} className="rounded-md bg-[#b42318] px-2 py-0.5 text-[11px] font-medium text-[#fff]">แก้ {nFix} type ที่มีเหล็กเส้นเดียวลอย (เพิ่มเหล็กเสริมให้ชั้นละ ≥ 2 เส้น)</button>}</div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{types.map((t, i) => { const L = beamLayersOf(t, mat); return (
         <div key={i} className={card}>
@@ -31,8 +31,8 @@ export function BeamTypeFigures({ types, mat, spans = [], count = () => null, on
               {fixes[i] && !fixes[i].type && <span className="text-[11px] text-[#b42318]">{fixes[i].why}</span>}
               <button onClick={() => setCage(cage === i ? null : i)} className={btn(cage === i)}>3D</button></span></div>
           {cage === i ? <BeamCage3D b={t.b} h={t.h} L={3} cover={mat.cover ?? 3} stirrupBar={t.st} type="both_ends" mid={L.mid} sup={L.sup} sEnd={t.sSup} sMid={t.sMid} className="h-[230px] overflow-hidden rounded-lg" />
-            : <div className="grid grid-cols-1 gap-1">{[["หัวเสา", "sup"], ["กลางคาน", "mid"], ...(extraSpec(i, spans).cant > 0 ? [[`คานยื่น ${t.name}A · โคนคานยื่น (${extraSpec(i, spans).cant} ตัว)`, "cant"]] : [])].map(([w, at]) => (
-              <div key={w}><BeamDetail t={t} mat={mat} at={at} ext={extraSpec(i, spans)} className="mx-auto h-[46mm] w-full" /><p className={cap}>{w} · {stLabel(t)} @{fmt(at === "mid" ? t.sMid : t.sSup, 2)}</p></div>))}</div>}
+            : <div className="grid grid-cols-1 gap-1">{[...(extraSpec(i, spans).spans > 0 || !extraSpec(i, spans).cant ? (hasExtras(t) ? [["หัวเสา", "sup"], ["กลางคาน", "mid"]] : [["ตลอดคาน", "all"]]) : []), ...(extraSpec(i, spans).cant > 0 ? [[`${t.name}A ตลอดคาน (คานยื่น ${extraSpec(i, spans).cant} ตัว) · ${cantNote(extraSpec(i, spans))}`, "cant"]] : [])].map(([w, at]) => (
+              <div key={w}><BeamDetail t={t} mat={mat} at={at} ext={extraSpec(i, spans)} className="mx-auto h-[46mm] w-full" /><p className={cap}>{w}</p></div>))}</div>}
         </div>); })}</div>
     </div>
   );
