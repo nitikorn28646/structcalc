@@ -95,9 +95,10 @@ export function beamDetailsDxf(items, mat, title = "") {
   return d.toString();
 }
 
+// save a text file: try a download, and always offer the save box of the app (App listens to "structcalc:savefile") because the
+// claude.ai frame blocks downloads (user 2026-11-18: "กดส่งออกไม่ได้") — new tab / copy the text
 export function downloadText(text, name, type = "application/dxf") {
   const url = URL.createObjectURL(new Blob([text], { type }));
-  const a = Object.assign(document.createElement("a"), { href: url, download: name });
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  try { const a = Object.assign(document.createElement("a"), { href: url, download: name }); document.body.appendChild(a); a.click(); a.remove(); } catch { /* blocked */ }
+  window.dispatchEvent(new CustomEvent("structcalc:savefile", { detail: { name, url, text } }));
 }

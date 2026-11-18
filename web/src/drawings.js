@@ -533,11 +533,9 @@ export function toDxf(model) {
 }
 
 export function downloadDxf(model, name) {
-  const dxf = toDxf(model);
-  const url = URL.createObjectURL(new Blob([dxf], { type: "application/dxf" }));
-  const a = Object.assign(document.createElement("a"), { href: url, download: `${name}.dxf` });
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const dxf = toDxf(model), file = `${name}.dxf`, url = URL.createObjectURL(new Blob([dxf], { type: "application/dxf" }));
+  try { const a = Object.assign(document.createElement("a"), { href: url, download: file }); document.body.appendChild(a); a.click(); a.remove(); } catch { /* blocked */ }
+  window.dispatchEvent(new CustomEvent("structcalc:savefile", { detail: { name: file, url, text: dxf } })); // the app's save box (claude.ai frame blocks downloads)
 }
 
 

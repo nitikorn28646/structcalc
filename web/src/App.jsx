@@ -350,7 +350,9 @@ export default function App() {
   const fns = useMemo(() => spanFunctions(st.geom.type, st.geom.L, forces.w, forces.ML, forces.MR),
     [st.geom.type, st.geom.L, forces.w, forces.ML, forces.MR]);
   const [viewOpen, setViewOpen] = useState(false);
-  const openRef = useRef(null), [notice, setNotice] = useState(null), [saveBox, setSaveBox] = useState(null);
+  const openRef = useRef(null), [notice, setNotice] = useState(null), [saveBox, setSaveBox] = useState(null), [fileBox, setFileBox] = useState(null);
+  // exported files (DXF …): every export also opens this box — the claude.ai frame blocks downloads (user 2026-11-18)
+  useEffect(() => { const on = (e) => setFileBox(e.detail); window.addEventListener("structcalc:savefile", on); return () => window.removeEventListener("structcalc:savefile", on); }, []);
   // a notice fades after 10 s (UI test 2026-11-04: it stayed in the header through every step); errors stay until clicked
   useEffect(() => { if (!notice?.ok) return; const t = setTimeout(() => setNotice(null), 10000); return () => clearTimeout(t); }, [notice]);
   const brand = useBrand(), [brandOpen, setBrandOpen] = useState(false);
@@ -606,6 +608,17 @@ export default function App() {
             </div>
             <textarea id="sc-savetext" readOnly value={projectJson()} className="h-28 w-full rounded border border-gray-200 p-1 font-mono text-[10px]" onFocus={(e) => e.target.select()} />
             <p className="text-[11px] text-gray-500">คัดลอกแล้ววางใน Notepad บันทึกชื่อ {saveBox.name} — เปิดกลับด้วยปุ่ม "เปิด" ได้ตามปกติ · งานล่าสุดยังเก็บในเบราว์เซอร์นี้ด้วย (ปุ่ม "กู้คืน") · ถ้ารันโปรแกรมบนเครื่องตัวเอง ปุ่มบันทึกจะเขียนไฟล์ได้ตรง</p>
+          </DialogContent></Dialog>}
+          {fileBox && <Dialog open onOpenChange={(o) => !o && setFileBox(null)}><DialogContent className="max-w-lg">
+            <DialogTitle>ส่งออกไฟล์ {fileBox.name}</DialogTitle>
+            <p className="text-[13px] text-gray-600">ถ้าไฟล์ลงเครื่องแล้ว ปิดกล่องนี้ได้เลย · ถ้าไม่มีไฟล์ (หน้าเว็บใน claude.ai บล็อกการดาวน์โหลด) ใช้ทางใดทางหนึ่ง:</p>
+            <div className="flex flex-wrap gap-2 text-[13px]">
+              <a href={fileBox.url} download={fileBox.name} className="rounded-md bg-brand-500 px-3 py-1.5 font-medium text-white">ดาวน์โหลดอีกครั้ง</a>
+              <button onClick={() => { const w = window.open(fileBox.url, "_blank"); if (!w) setNotice({ ok: false, text: "เปิดแท็บใหม่ไม่ได้ (ถูกบล็อก) — ใช้ปุ่มคัดลอก" }); }} className="rounded-md px-3 py-1.5 ring-1 ring-gray-300">เปิดในแท็บใหม่</button>
+              <button onClick={async () => { let ok = false; try { await navigator.clipboard.writeText(fileBox.text); ok = true; } catch { const a = document.getElementById("sc-filetext"); a.select(); try { ok = document.execCommand("copy"); } catch { /* blocked */ } } setNotice({ ok, text: ok ? `คัดลอกแล้ว — วางลง Notepad แล้วบันทึกชื่อ ${fileBox.name}` : "คัดลอกอัตโนมัติไม่ได้ — คลิกในกล่องแล้ว Ctrl+A, Ctrl+C" }); }} className="rounded-md px-3 py-1.5 ring-1 ring-gray-300">คัดลอกข้อความไฟล์</button>
+            </div>
+            <textarea id="sc-filetext" readOnly value={fileBox.text} className="h-28 w-full rounded border border-gray-200 p-1 font-mono text-[10px]" onFocus={(e) => e.target.select()} />
+            <p className="text-[11px] text-gray-500">คัดลอกแล้ววางใน Notepad → บันทึกเป็น → ตั้งชื่อลงท้าย .dxf (ชนิดไฟล์ "All files") แล้วเปิดด้วย AutoCAD ได้ · ตัวหนังสือไทยเก็บเป็นรหัส \U+ จึงไม่เพี้ยนเมื่อคัดลอก</p>
           </DialogContent></Dialog>}
           {wizard && <NewProjectWizard onBuild={buildFromWizard} onSkip={() => setWizard(null)} />}
           {tour && <Tour steps={WORKFLOW} onClose={closeTour} onGo={(k) => { closeTour(); setStep(k); }} onNew={frame === DEFAULT_FRAME ? () => { closeTour(); newProject(); } : null} />}
