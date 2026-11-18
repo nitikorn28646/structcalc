@@ -49,6 +49,8 @@ class Dxf {
 }
 
 // one section at (ox, oy) = bottom-left corner of the concrete (m)
+// group width of one section with its notes (m): section + leader gap + the longest note (AngsanaUPC ≈ 0.42·h per character)
+const groupW = (t, at, ext, th) => t.b + 0.09 + Math.max(...sectionNotes(t, at, ext).map((n) => n.text.length)) * th * 0.42;
 function section(d, t, mat, at, ext, ox, oy, title, th = 0.035, sub = "") {
   const B = t.b * 100, H = t.h * 100, cover = mat.cover ?? 3, sd = STIRRUPS[t.st]?.d ?? 0.6, m = (v) => v / 100;
   const lay = (a, b) => barLayers(t.b, mat, t.st, parseBars(a), parseBars(b));
@@ -77,9 +79,10 @@ function section(d, t, mat, at, ext, ox, oy, title, th = 0.035, sub = "") {
   }
   d.dim(ox, oy + t.h, ox + t.b, oy + t.h, 0.08, t.b.toFixed(2), th);
   d.dim(ox, oy, ox, oy + t.h, -0.09, t.h.toFixed(2), th);
-  d.text(ox - 0.05, oy - 0.15, th * 1.6, title, "C-TITLE", 0, 0);
+  const gc = ox + groupW(t, at, ext, th) / 2; // titles centred under the section + its notes
+  d.text(gc, oy - 0.15, th * 1.6, title, "C-TITLE", 1, 0);
   const foot = [sub, top.odd || bot.odd ? "⚠ ชั้น 2 เหลือเส้นเดียว เสริมจริงไม่ได้" : "", extraFootnote(at, ext, true)].filter(Boolean);
-  foot.forEach((x, i) => d.text(ox - 0.05, oy - 0.22 - i * th * 1.3, th * 0.85, x, "C-TEXT", 0, 0));
+  foot.forEach((x, i) => d.text(gc, oy - 0.22 - i * th * 1.3, th * 0.85, x, "C-TEXT", 1, 0));
 }
 
 // ---------------------------------------------------------------- sheet frame (A3 1:25 in metres) — the user's title block layout
@@ -150,15 +153,25 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
   }).filter((x) => x.cells.length);
   // the standard ground beams share one box (as on the user's sheet)
   const sp = panels.filter((x) => x.std); if (sp.length > 1) panels = [{ ...sp[0], cells: sp.flatMap((x) => x.cells), w: sp.reduce((a, x) => a + x.w, 0) - 2 * pad * (sp.length - 1), h: Math.max(...sp.map((x) => x.h)) }, ...panels.filter((x) => !x.std)];
-  // pack panels into rows by width, then rows into sheets by height (sheet 1 keeps the bottom for the elevation + notes)
-  const AW = TX - BX0, rows = [], sheets = [];
-  for (const pn of panels) { const r = rows.at(-1); if (!r || r.w + pn.w > AW + 1e-9) rows.push({ panels: [pn], w: pn.w, h: pn.h }); else { r.panels.push(pn); r.w += pn.w; r.h = Math.max(r.h, pn.h); } }
-  let sheet = null, y = 0;
-  const newSheet = () => { sheet = { rows: [], bottom: sheets.length === 0 ? BY0 + 2.1 : BY0 }; sheets.push(sheet); y = BY1; };
+  // rows: as few as the greedy packing needs, then the panels split over them so the row widths are as even as possible (order kept);
+  // every row is stretched to the full width and each section sits in the middle of its equal slot (user 2026-11-18: "จัดให้สมมาตร")
+  const AW = TX - BX0, sheets = [];
+  let nRows = 0; { let w = Infinity; for (const pn of panels) { if (w + pn.w > AW + 1e-9) { nRows++; w = pn.w; } else w += pn.w; } }
+  const splitRows = (list, n) => { // linear partition: minimise the widest row
+    const N = list.length, pre = [0]; list.forEach((p, k) => pre.push(pre[k] + p.w));
+    const best = Array.from({ length: n + 1 }, () => Array(N + 1).fill(Infinity)), cut = Array.from({ length: n + 1 }, () => Array(N + 1).fill(0)); best[0][0] = 0;
+    for (let r = 1; r <= n; r++) for (let e = 1; e <= N; e++) for (let s0 = r - 1; s0 < e; s0++) { const v = Math.max(best[r - 1][s0], pre[e] - pre[s0]); if (v < best[r][e] - 1e-12) { best[r][e] = v; cut[r][e] = s0; } }
+    const out = []; let e = N; for (let r = n; r >= 1; r--) { const s0 = cut[r][e]; out.unshift(list.slice(s0, e)); e = s0; }
+    return out.filter((x) => x.length);
+  };
+  const rows = splitRows(panels, Math.max(1, Math.min(nRows, panels.length))).map((ps) => { const w = ps.reduce((a, p) => a + p.w, 0); return { panels: ps.map((p) => ({ ...p, w: (p.w * AW) / w })), h: Math.max(...ps.map((p) => p.h)) }; });
+  let sheet = null;
+  const newSheet = () => { sheet = { rows: [], bottom: sheets.length === 0 ? BY0 + 2.1 : BY0 }; sheets.push(sheet); };
   newSheet();
-  for (const r of rows) {
-    if (y - r.h - tagH < sheet.bottom - 1e-9 && sheet.rows.length) newSheet();
-    r.y1 = y; r.y0 = y - r.h - tagH; y = r.y0; sheet.rows.push(r);
+  for (const r of rows) { const used = sheet.rows.reduce((a, x) => a + x.h + tagH, 0); if (BY1 - used - r.h - tagH < sheet.bottom - 1e-9 && sheet.rows.length) newSheet(); sheet.rows.push(r); }
+  for (const sh of sheets) { // spare height shared by the rows (≤ 0.5 m each), so a part-filled sheet is not all at the top
+    const used = sh.rows.reduce((a, x) => a + x.h + tagH, 0), add = Math.min(0.5, (BY1 - sh.bottom - used) / sh.rows.length);
+    let y = BY1; for (const r of sh.rows) { r.h += Math.max(0, add); r.y1 = y; r.y0 = y - r.h - tagH; y = r.y0; }
   }
   sheets.forEach((sh, k) => {
     const X = k * (SW + 0.5);
@@ -166,18 +179,19 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
     for (const row of sh.rows) {
       let x = BX0;
       for (const pn of row.panels) {
-        const yb = row.y0 + tagH; // sections: title + notes below, dimension above, centred in the row height
-        let cx = x + pad;
-        const tags = {};
-        for (const c of pn.cells) { const csy = yb + 0.42 + (row.h - 0.8 - c.t.h) / 2; section(d, c.t, mat, c.at, c.ext, X + cx + 0.12, csy, c.title, th, c.sub); (tags[c.tag] ??= []).push(cx + cellW(c.t) / 2 - 0.1); cx += cellW(c.t); }
+        const yb = row.y0 + tagH, slot = pn.w / pn.cells.length, tags = {};
+        pn.cells.forEach((c, n) => {
+          const xc = x + slot * (n + 0.5), gw = groupW(c.t, c.at, c.ext, th), csy = yb + 0.42 + (row.h - 0.8 - c.t.h) / 2;
+          section(d, c.t, mat, c.at, c.ext, X + xc - gw / 2, csy, c.title, th, c.sub); (tags[c.tag] ??= []).push(xc);
+        });
         for (const [tag, xs] of Object.entries(tags)) { const xm = xs.reduce((s, v) => s + v, 0) / xs.length; d.circle(X + xm, row.y0 + tagH / 2, 0.055, "C-TAG"); d.text(X + xm, row.y0 + tagH / 2, 0.05, tag, "C-TAG", 1, 2); }
         x += pn.w;
-        d.line(X + x, row.y0, X + x, row.y1, "C-FRAME2");
+        if (x < TX - 1e-6) d.line(X + x, row.y0, X + x, row.y1, "C-FRAME2");
       }
-      d.line(X + BX0, row.y0, X + TX, row.y0, "C-FRAME2"); d.line(X + BX0, row.y0 + tagH, X + x, row.y0 + tagH, "C-FRAME2");
+      d.line(X + BX0, row.y0, X + TX, row.y0, "C-FRAME2"); d.line(X + BX0, row.y0 + tagH, X + TX, row.y0 + tagH, "C-FRAME2");
     }
     if (k === 0) {
-      const xe = elevation(d, X, BX0 + 0.5, BY0 + 0.95, mat), nx = X + xe + 0.45;
+      const ew = 5.0, nw = 2.75, ex0 = BX0 + Math.max(0.2, (AW - ew - 0.45 - nw) / 2), xe = elevation(d, X, ex0, BY0 + 0.95, mat), nx = X + xe + 0.45; // elevation + notes centred in the width
       const notes = ["หมายเหตุ", `1. ระยะหุ้มคอนกรีตของคานไม่น้อยกว่า ${mat.cover ?? 3} ซม.`, "2. L = ระยะศูนย์ถึงศูนย์ของที่รองรับ เหล็กเสริมพิเศษบนวัดจากศูนย์เสาแต่ละข้าง เหล็กเสริมพิเศษล่างวางกึ่งกลางช่วง",
         "3. ความยาวเหล็กเสริมพิเศษตามที่ระบุในรูปตัดของแต่ละ type (L/4, L/3, 3L/5, 4L/5 หรือยาวตลอดช่วง ตามผลตรวจระยะตัดเหล็ก)",
         "4. คานยื่น (A) เหล็กบนทั้งหมดยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลังตามที่ระบุใต้รูปตัด", "5. เหล็กปลอกงอขอ 90° ยาว 6 เท่าของขนาดเหล็ก ไม่น้อยกว่า 7.5 ซม. · ทุกชั้นของเหล็กเสริมมีอย่างน้อย 2 เส้น"];
