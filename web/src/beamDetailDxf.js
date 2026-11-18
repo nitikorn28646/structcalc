@@ -76,7 +76,7 @@ function section(d, t, mat, at, ext, ox, oy, title) {
   d.dim(ox, oy + t.h, ox + t.b, oy + t.h, 0.08, t.b.toFixed(2), th);
   d.dim(ox, oy, ox, oy + t.h, -0.09, t.h.toFixed(2), th);
   d.text(ox, oy - 0.14, th * 1.8, title, "C-TITLE", 0, 0);
-  const foot = extraFootnote(at, ext); if (foot) d.text(ox, oy - 0.21, th * 0.8, foot, "C-TEXT", 0, 0);
+  const foot = [top.odd || bot.odd ? "เหล็กชั้นที่ 2 เหลือเส้นเดียว — เสริมจริงไม่ได้ (ต้อง ≥ 2 เส้นต่อชั้น)" : "", extraFootnote(at, ext)].filter(Boolean).join("  "); if (foot) d.text(ox, oy - 0.21, th * 0.8, foot, "C-TEXT", 0, 0);
 }
 
 // types in use, each with its extraSpec; returns the DXF text

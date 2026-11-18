@@ -57,7 +57,7 @@ export function BeamDetail({ t, mat, at = "sup", ext, className = "" }) {
   const top = at !== "mid" ? lay(t.top, t.topX) : lay(t.top), bot = at !== "mid" ? lay(t.bot) : lay(t.bot, t.botX); // "cant" = cantilever root = support bars
   // drawing y down: barLayout gives y up from the bottom face
   const bars = [...barLayout(B, H, cover, sd, top, true), ...barLayout(B, H, cover, sd, bot, false)];
-  const notes = sectionNotes(t, at, ext), foot = extraFootnote(at, ext);
+  const notes = sectionNotes(t, at, ext), lone = top.odd || bot.odd ? "⚠ เหล็กชั้นที่ 2 เหลือเส้นเดียว — เสริมจริงไม่ได้ (ต้อง ≥ 2 เส้นต่อชั้น)" : "", foot = [lone, extraFootnote(at, ext)].filter(Boolean).join("  ");
   const fs = Math.max(3.4, Math.max(B, H) / 8.5), M = fs * 4, lh = fs * 1.45, tx = M + B + fs * 2.4;
   const longest = Math.max(...notes.map((n) => n.text.length)), W = tx + longest * fs * 0.52 + fs;
   const Hh = H + 2 * M + (foot ? fs * 1.8 : 0), Y = (y) => M + H - y;
@@ -82,7 +82,7 @@ export function BeamDetail({ t, mat, at = "sup", ext, className = "" }) {
       })}
       <Dim size={fs} x1={M} y1={M - fs * 1.6} x2={M + B} y2={M - fs * 1.6} label={fmt(B / 100, 2)} />
       <Dim size={fs} x1={M - fs * 1.5} y1={M} x2={M - fs * 1.5} y2={M + H} label={fmt(H / 100, 2)} />
-      {foot && <Txt x={M} y={M + H + fs * 1.9} s={foot} a="start" size={fs * 0.8} c={DIM} />}
+      {foot && <Txt x={M} y={M + H + fs * 1.9} s={foot} a="start" size={fs * 0.8} c={lone ? "#b42318" : DIM} />}
     </svg>
   );
 }

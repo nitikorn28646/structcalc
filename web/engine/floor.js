@@ -300,6 +300,7 @@ export function barLayers(b, mat, st, main, special) {
   for (let k = 0; r > 0; k++) { if (k >= tc.length) { tc.push(0); xc.push(0); } const free = Math.max(0, C - tc[k] - xc[k]), take = k >= 2 ? r : Math.min(r, free); xc[k] += take; r -= take; }
   for (let k = tc.length - 1; k >= 1; k--) if (tc[k] + xc[k] === 1) { if (xc[k - 1] >= 1 && tc[k - 1] + xc[k - 1] - 1 >= 2) { xc[k - 1]--; xc[k]++; } else L.odd = true; }
   const cnt = tc.map((t, k) => t + xc[k]);
+  L.cap = C;
   if (cnt.length > 3 || cnt.some((c) => c > C)) L.over = { cnt, C }; // more bars than fit across the width in a layer (audit F5)
   cnt.forEach((_, k) => { if (k > 2) return;
     if (tc[k]) L[k].main = { n: tc[k], bar: main.bar };
@@ -410,6 +411,8 @@ export function checkSpan(t, sp, mat) {
       r.act = { kd, I, fc: (M * 100 * kd) / I, fs: (n * M * 100 * (d - kd)) / I }; r.stressOk = r.act.fc <= r.fc * 1.001 && r.act.fs <= r.fs * 1.001; }
     // F5: bars that do not fit in their layers
     if (lay[0].over || lay[1].over) r.barsFit = false;
+    // a layer with ONE bar alone cannot be built (user 2026-11-18: "ต้องอย่างน้อย 2 เส้น") — the span fails until the bars change
+    if (lay[0].odd || lay[1].odd) { r.barsFit = false; r.barsLone = true; }
     // F3: minimum shear reinforcement (ACI 318-11 11.4.6.1: where V > ½Vc — the WSD form of Vu > 0.5φVc; exempt (d) h ≤ 250 mm;
     // (e) beams integral with slabs is not applied) — Av,min = max(0.062√f′c, 0.35)·bw·s/fyt (eq. 11-13; ksc: 0.2√f′c, 3.5), s ≤ d/2 ≤ 600 mm (11.4.5.1)
     const need = base.V > r.Vc / 2 && !(hcm <= 25 + 1e-9 && r.Vp === 0 && !torsionOn) && !r.stExempt;
@@ -457,7 +460,8 @@ export function spanReasons(c) {
     if (r.AminOk === false) out.push(`${w}: เหล็กปลอกน้อยกว่าขั้นต่ำ — Av ${(+r.Aact).toFixed(2)} < 0.0015·b·s = ${(+r.Amin).toFixed(2)} ซม.²${r.AminAt ? ` (s ${r.AminAt.toFixed(2)} ม.)` : ""}`);
     if (r.compBarsOk === false) out.push(`${w}: เหล็กรับแรงอัดอยู่ใต้แกนสะเทิน (k ${r.k.toFixed(3)} < d′/d ${(r.dPrime / r.d).toFixed(3)}) — หน้าตัดตื้นเกินไป ต้องเพิ่มความลึก`);
     if (r.stressOk === false) out.push(`${w}: หน่วยแรงจริงของเหล็กที่ใส่ fc ${r.act.fc.toFixed(1)} / ${r.fc.toFixed(1)} · fs ${r.act.fs.toFixed(0)} / ${r.fs.toFixed(0)} กก./ซม.² เกินที่ยอมให้`);
-    if (r.barsFit === false) out.push(`${w}: จัดเหล็กไม่ได้ — จำนวนเหล็กต่อชั้นเกินที่ใส่ได้ตามความกว้าง (หรือเกิน 3 ชั้น)`);
+    if (r.barsLone) out.push(`${w}: เหล็กชั้นที่ 2 เหลือเส้นเดียว (ชั้นแรกเต็มตามความกว้างแล้ว) — เสริมจริงไม่ได้ ต้องมีอย่างน้อย 2 เส้นต่อชั้น: ปรับจำนวนเหล็กเดินตลอด / เสริมพิเศษ (เช่น 2 + 2 หรือ 3 + 2) หรือขยายความกว้างคาน`);
+    else if (r.barsFit === false) out.push(`${w}: จัดเหล็กไม่ได้ — จำนวนเหล็กต่อชั้นเกินที่ใส่ได้ตามความกว้าง (หรือเกิน 3 ชั้น)`);
     if (r.minShearOk === false) out.push(`${w}: เหล็กปลอกขั้นต่ำ (ACI 318-11 11.4.6: V > ½Vc) — Av ${r.minShear.Av.toFixed(2)} ≥ ${r.minShear.AvMin.toFixed(2)} ซม.² และ s ≤ ${r.minShear.sMax.toFixed(3)} ม.`);
     if (r.torsionAciOk === false) out.push(`${w}: แรงบิด (ACI 318-11 11.5 ท่อผนังบาง) — s ≤ ${Math.min(r.torsionAci.sReq, r.torsionAci.sTor).toFixed(3)} ม., เหล็กตามยาวเพิ่ม ${r.torsionAci.extraFace.toFixed(2)} ซม.²/ด้าน`);
   }
@@ -811,8 +815,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   // a type whose bars leave one bar alone in an upper layer (too narrow to make a pair): cannot be tied — say which (user 2026-11-04)
   for (const ti of new Set(result.spans.map((sp) => sp.typeIdx))) {
     const t = types[ti]; if (!t) continue;
-    const L = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x)), bad = [["บน", L(t.top, t.topX)], ["ล่าง", L(t.bot, t.botX)]].filter(([, l]) => l.odd).map(([w]) => w);
-    if (bad.length) warnings.push(`Type ${t.name}: เหล็ก${bad.join(" / ")}ชั้นบนเหลือเส้นเดียว (คานกว้าง ${Math.round(t.b * 100)} ซม. วางชั้นแรกได้แค่ 2 เส้น) — ผูกเหล็กลอยกลางคานไม่ได้: เพิ่มเป็นคู่ ใช้เหล็กเส้นใหญ่ขึ้น หรือขยายความกว้างคาน`);
+    const L = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x)), lays = [["บน", L(t.top, t.topX)], ["ล่าง", L(t.bot, t.botX)]].filter(([, l]) => l.odd), bad = lays.map(([w]) => w), cap = lays[0]?.[1].cap ?? 2;
+    if (bad.length) warnings.push(`Type ${t.name}: เหล็ก${bad.join(" / ")}ชั้นบนเหลือเส้นเดียว (คานกว้าง ${Math.round(t.b * 100)} ซม. ชั้นแรกวางได้ ${cap} เส้น เหล็กเดินตลอดอยู่ชั้นแรกตลอดความยาว) — เสริมจริงไม่ได้ ต้อง ≥ 2 เส้นต่อชั้น: ปรับจำนวนเหล็กเดินตลอด / เสริมพิเศษ (เช่น 2 + 2 หรือ 3 + 2) หรือขยายความกว้างคาน — ช่วงที่ใช้ type นี้ไม่ผ่านจนกว่าจะแก้`);
   }
   const groups = { DL: 0, SDL: 0, WALL: 0, LL: 0, SP: pointLoads.reduce((s, pl) => s + (pl.on === "column" ? pl.P : 0), 0) };
   for (const ln of lines) {
