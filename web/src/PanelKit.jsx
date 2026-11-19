@@ -2,7 +2,7 @@
 // pieces so the tabs read the same — Panel (card: icon, title, one action at the right, a short hint), Section (small heading above a
 // list), List + Row (left: marker, title 13 px, detail 11 px · right: number 14 px bold with its unit under it, then small actions; a row
 // can open an editor under it), PField (label 11 px above an input 32 px high), Notice (ok / warn / bad line), Note (footnote 11 px).
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import { Card } from "./ui.jsx";
 
 export const inputCls = "mt-0.5 h-8 w-full min-w-0 rounded-md border border-gray-300 bg-transparent px-2 text-[13px] text-gray-800 dark:border-gray-700 dark:text-gray-200";
@@ -71,3 +71,9 @@ export function Notice({ kind = "ok", children, onEnter, onLeave, action = null 
 }
 
 export const Note = ({ children, className = "" }) => <p className={`mt-2 text-[11px] leading-relaxed text-gray-400 ${className}`}>{children}</p>;
+
+// a computed result in words / numbers (wall load, slab load, cantilever line load …) — one box style everywhere
+export const Result = ({ children, className = "" }) => <div className={`rounded-md bg-gray-50 px-2 py-1.5 text-[12px] tabular-nums text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:text-gray-300 dark:ring-gray-800 ${className}`}>{children}</div>;
+export const btnGhost = "inline-flex shrink-0 items-center justify-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50 dark:text-gray-200";
+// delete in the panel header (the same place in every panel)
+export const DelButton = ({ onClick, children = "ลบ", title }) => <button onClick={onClick} title={title} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-red-600 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" />{children}</button>;

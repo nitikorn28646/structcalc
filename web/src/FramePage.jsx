@@ -40,7 +40,7 @@ import { BeamTypeFigures, ColumnTypeFigures } from "./DesignFigures.jsx";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
 import WallTypesPanel from "./WallTypesPanel.jsx";
 import LoadLibPanel from "./LoadLibPanel.jsx";
-import { Note, Notice, Panel as SidePanel, btnCls } from "./PanelKit.jsx";
+import { Badge as KBadge, DelButton, List, Note, Notice, Panel as SidePanel, Result, Row, Section, btnCls, btnGhost } from "./PanelKit.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
@@ -574,7 +574,15 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     /> : null;
   // a selection that no longer exists (new / opened project, deleted item, other floor) shows the floor cards, not an empty card
   const selOk = !!(beam || col || panel || wall || cant || stair || lineL || pointL);
-  const inspector = sel && selOk ? (          <Card title={beam ? `คาน (แนว ${line ? line.id + 1 : "-"})` : col ? `เสา #${sel.i + 1}` : panel ? `แผ่นพื้น P${an.panels.indexOf(panel) + 1}` : wall ? `ผนัง ${sel.i + 1}` : cant ? `พื้นยื่น ${sel.i + 1}` : stair ? `บันได ${sel.i + 1}` : lineL ? "น้ำหนักเส้น" : pointL ? "น้ำหนักจุด" : "เลือก"} icon={Ruler}>
+  // one place for delete / reset in every selected-item panel: its header (PanelKit DelButton)
+  const delAction = wall ? <DelButton onClick={() => { setFloor({ walls: wallsOf(fl).filter((_, i) => i !== sel.i) }); setSel(null); }} title="ลบผนังนี้" />
+    : cant ? <DelButton onClick={() => { setFloor({ cants: fl.cants.filter((_, i) => i !== sel.i) }); setSel(null); }} title="ลบพื้นยื่นนี้" />
+    : stair ? <DelButton onClick={() => delList("stairs")} title="ลบบันไดนี้" />
+    : lineL ? <DelButton onClick={() => delList("lineLoads")} title="ลบน้ำหนักเส้นนี้" />
+    : pointL ? <DelButton onClick={() => delList("pointLoads")} title="ลบน้ำหนักจุดนี้" />
+    : panel && fl.panels?.[panel.key] ? <button onClick={() => setFloor({ panels: Object.fromEntries(Object.entries(fl.panels ?? {}).filter(([k]) => k !== panel.key)) })} className={btnGhost} title="ล้างค่าที่ตั้งเองของแผ่นนี้ กลับไปใช้ค่าของชั้น">ใช้ค่าของชั้น</button>
+    : null;
+  const inspector = sel && selOk ? (          <SidePanel action={delAction} title={beam ? `คาน (แนว ${line ? line.id + 1 : "-"})` : col ? `เสา #${sel.i + 1}` : panel ? `แผ่นพื้น P${an.panels.indexOf(panel) + 1}` : wall ? `ผนัง ${sel.i + 1}` : cant ? `พื้นยื่น ${sel.i + 1}` : stair ? `บันได ${sel.i + 1}` : lineL ? "น้ำหนักเส้น" : pointL ? "น้ำหนักจุด" : "เลือก"} icon={Ruler}>
             {wall && (() => { const r = an.walls[sel.i], rw = resolveWall(wall, frame, cur), L = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]), ops = wall.openings ?? [];
               const setOp = (k, p) => setWall({ openings: ops.map((o, j) => (j === k ? { ...o, ...p } : o)) }), oArea = ops.reduce((a, o) => a + o.w * o.h, 0);
               const addOp = ([type, name, w, h, sill]) => { const at = Math.max(0, Math.min(L - w, ops.reduce((a, o) => Math.max(a, (o.at ?? 0) + o.w + 0.3), 0.3))); setWall({ openings: [...ops, { type, name, w, h, sill, at: +at.toFixed(2) }], open: 0 }); };
@@ -586,7 +594,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <Field label="ผนัง"><Select value={wall.layers ?? 1} onChange={(v) => setWall({ layers: Number(v) })} options={[[1, "ชั้นเดียว"], [2, "เบิ้ล (2 ชั้น)"]]} /></Field>
               <label className="col-span-2 flex items-center gap-2 text-[13px] text-gray-700"><input type="checkbox" checked={!!wall.gable} onChange={(e) => setWall({ gable: e.target.checked })} />ผนังจั่ว (สามเหลี่ยม · เฉลี่ยครึ่งความสูง)</label>
               <div className="col-span-2 rounded-lg border border-gray-200 p-2">
-                <div className="mb-1 flex items-center justify-between text-[12px] font-medium text-gray-700">ประตู / หน้าต่าง <span className="text-[11px] font-normal text-gray-400">ระยะจากปลาย A · กว้าง × สูง · ขอบล่าง (ม.)</span></div>
+                <div className="mb-1.5"><div className="text-[11px] font-semibold text-gray-500">ประตู / หน้าต่าง</div><div className="text-[11px] text-gray-400">ระยะจากปลาย A · กว้าง × สูง · ขอบล่าง (ม.)</div></div>
                 {ops.map((o, k) => <div key={k} className="mb-1 grid grid-cols-[1fr_52px_52px_52px_52px_16px] items-center gap-1 text-[12px]">
                   <span className="truncate">{o.name ?? (o.type === "door" ? "ประตู" : "หน้าต่าง")}</span>
                   {["at", "w", "h", "sill"].map((f) => <input key={f} type="number" step="0.05" value={o[f] ?? 0} onChange={(e) => setOp(k, { [f]: Number(e.target.value) })} className="h-7 rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums" title={{ at: "ห่างจากปลาย A", w: "กว้าง", h: "สูง", sill: "ขอบล่างจากพื้น" }[f]} />)}
@@ -594,9 +602,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 <div className="mt-1 flex flex-wrap gap-1">{OPENINGS.map((o) => <button key={o[1]} onClick={() => addOp(o)} className="rounded-md px-1.5 py-0.5 text-[11px] text-brand-600 ring-1 ring-brand-200 hover:bg-brand-50">+ {o[1]}</button>)}</div>
                 {!ops.length && <div className="mt-2 flex items-center gap-2 text-[12px] text-gray-500">หรือช่องเปิดเป็น %<input type="number" step="5" value={wall.open ?? 0} onChange={(e) => setWall({ open: Number(e.target.value) })} className="h-7 w-16 rounded border border-gray-300 bg-transparent px-1 text-right" /></div>}
               </div>
-              <p className="col-span-2 rounded-lg bg-[#b54708]/10 px-2 py-1.5 text-[12px] tabular-nums text-[#b54708]">ยาว {fmt(L, 2)} × สูง {fmt(rw.h, 2)} ม.{wall.gable ? " (เฉลี่ย)" : ""} = {fmt(L * rw.h, 2)} ม.² − ช่องเปิด {fmt(oArea || (L * rw.h * (rw.open ?? 0)) / 100, 2)} ม.²
-                <br /><b className="text-[13px]">{fmt(wallLoad(rw, wallTypes), 0)} กก./ม.</b> · {r?.on.length ? `ลงคาน ${r.on.map((o) => (typeof o === "object" ? `แนว ${o.line + 1}` : o)).join(", ")}` : r?.panel ? `กระจายลงแผ่นพื้น ${r.panel}` : "ยังไม่มีคาน/พื้นรับ"}</p>
-              <button onClick={() => { setFloor({ walls: wallsOf(fl).filter((_, i) => i !== sel.i) }); setSel(null); }} className="col-span-2 text-left text-[12px] text-red-600">ลบผนัง</button>
+              <Result className="col-span-2">ยาว {fmt(L, 2)} × สูง {fmt(rw.h, 2)} ม.{wall.gable ? " (เฉลี่ย)" : ""} = {fmt(L * rw.h, 2)} ม.² − ช่องเปิด {fmt(oArea || (L * rw.h * (rw.open ?? 0)) / 100, 2)} ม.²
+                <br /><b className="text-[14px] text-[#b54708]">{fmt(wallLoad(rw, wallTypes), 0)} กก./ม.</b> · {r?.on.length ? `ลงคาน ${r.on.map((o) => (typeof o === "object" ? `แนว ${o.line + 1}` : o)).join(", ")}` : r?.panel ? `กระจายลงแผ่นพื้น ${r.panel}` : "ยังไม่มีคาน/พื้นรับ"}</Result>
             </div>); })()}
             {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={fl.h} r0={an.stairs?.[sel.i]} mat={frame.mat} onLandingBeam={() => {
               // landing edge (far end of the run) extended along its line to the nearest columns of this floor on each side
@@ -606,48 +613,44 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               const s0 = Math.max(...on.filter((v) => v <= lo + 0.05), -Infinity), s1 = Math.min(...on.filter((v) => v >= hi - 0.05), Infinity);
               const A = Number.isFinite(s0) ? s0 : lo, B = Number.isFinite(s1) ? s1 : hi, P = (v) => (ax === "x" ? [c, v] : [v, c]);
               setFloor({ beams: [...fl.beams, { a: P(A), b: P(B), type: null, lvl: +(fl.h / 2).toFixed(2) }] });
-            }} />
-              <button onClick={() => delList("stairs")} className="mt-2 text-left text-[12px] text-red-600">ลบบันไดนี้</button></>}
+            }} /></>}
             {lineL && (<div className="grid grid-cols-2 gap-3">
               <Field label="ชื่อ"><input value={lineL.name ?? ""} onChange={(e) => setList("lineLoads", { name: e.target.value })} className="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-[13px]" /></Field>
               <Field label="น้ำหนัก" unit="kg/m"><NumberInput value={lineL.q} step="10" onChange={(v) => setList("lineLoads", { q: v })} /></Field>
-              <p className="col-span-2 text-[12px] text-gray-500">{({ cant: "อยู่ปลายพื้นยื่น → ลงคานริม + แรงบิด", beam: "อยู่บนคาน → ลงคาน", panel: "อยู่บนพื้น → กระจายลงแผ่นพื้น" })[an.lineLoads?.[sel.i]?.on] ?? "ไม่มีอะไรรับ"}</p>
-              <button onClick={() => delList("lineLoads")} className="col-span-2 text-left text-[12px] text-red-600">ลบ</button>
+              <Result className="col-span-2">{({ cant: "อยู่ปลายพื้นยื่น → ลงคานริม + แรงบิด", beam: "อยู่บนคาน → ลงคาน", panel: "อยู่บนพื้น → กระจายลงแผ่นพื้น" })[an.lineLoads?.[sel.i]?.on] ?? "ไม่มีอะไรรับ"}</Result>
             </div>)}
             {pointL && (<div className="grid grid-cols-2 gap-3">
               <Field label="ชื่อ"><input value={pointL.name ?? ""} onChange={(e) => setList("pointLoads", { name: e.target.value })} className="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-[13px]" /></Field>
               <Field label="น้ำหนัก" unit="kg"><NumberInput value={pointL.P} step="50" onChange={(v) => setList("pointLoads", { P: v })} /></Field>
               <Field label="X" unit="m"><NumberInput value={pointL.p[0]} step="0.05" onChange={(v) => setList("pointLoads", { p: [v, pointL.p[1]] })} /></Field>
               <Field label="Y" unit="m"><NumberInput value={pointL.p[1]} step="0.05" onChange={(v) => setList("pointLoads", { p: [pointL.p[0], v] })} /></Field>
-              <p className="col-span-2 text-[12px] text-gray-500">{({ beam: "อยู่บนคาน → แรงจุดบนคาน", panel: "อยู่บนพื้น → กระจายลงแผ่นพื้น" })[an.pointLoads?.[sel.i]?.on] ?? "ไม่มีอะไรรับ"}</p>
-              <button onClick={() => delList("pointLoads")} className="col-span-2 text-left text-[12px] text-red-600">ลบ</button>
+              <Result className="col-span-2">{({ beam: "อยู่บนคาน → แรงจุดบนคาน", panel: "อยู่บนพื้น → กระจายลงแผ่นพื้น" })[an.pointLoads?.[sel.i]?.on] ?? "ไม่มีอะไรรับ"}</Result>
             </div>)}
             {cant && (<div className="grid grid-cols-2 gap-3">
               <Field label="ยื่น" unit="m"><NumberInput value={cant.L} step="0.1" onChange={(v) => setCant({ L: v })} /></Field>
-              <Field label="ด้าน"><button onClick={() => setCant({ side: -(cant.side ?? 1) })} className="h-11 w-full rounded-lg text-sm ring-1 ring-gray-300">สลับด้าน</button></Field>
+              <Field label="ด้าน"><button onClick={() => setCant({ side: -(cant.side ?? 1) })} className={`${btnGhost} h-8 w-full`}>สลับด้าน</button></Field>
               <Field label="หนา" unit="m"><NumberInput value={cant.t ?? fl.t} step="0.01" onChange={(v) => setCant({ t: v })} /></Field>
               <Field label="ปูผิว" unit="kg/m²"><NumberInput value={cant.finish ?? fl.finish} step="10" onChange={(v) => setCant({ finish: v })} /></Field>
               <Field label="จร" unit="kg/m²"><NumberInput value={cant.live ?? fl.live} step="50" onChange={(v) => setCant({ live: v })} /></Field>
-              <p className="col-span-2 text-[12px] text-gray-500">คานริมรับ w·L = {fmt((an.cants[sel.i]?.w ?? 0) * cant.L, 0)} กก./ม. และแรงบิด wL²/2 = {fmt(((an.cants[sel.i]?.w ?? 0) * cant.L ** 2) / 2, 0)} กก.-ม./ม. (ตรวจในคาน)</p>
-              <button onClick={() => { setFloor({ cants: fl.cants.filter((_, i) => i !== sel.i) }); setSel(null); }} className="col-span-2 text-left text-[12px] text-red-600">ลบพื้นยื่นนี้</button>
+              <Result className="col-span-2">คานริมรับ w·L = {fmt((an.cants[sel.i]?.w ?? 0) * cant.L, 0)} กก./ม. และแรงบิด wL²/2 = {fmt(((an.cants[sel.i]?.w ?? 0) * cant.L ** 2) / 2, 0)} กก.-ม./ม. (ตรวจในคาน)</Result>
             </div>)}
             {beam && (<div className="grid grid-cols-2 gap-3">
-              <Field label="Type"><Select value={beam.type ?? ""} onChange={(v) => setBeam({ type: v === "" ? null : Number(v), autoLock: undefined })} options={[["", "อัตโนมัติ (โปรแกรมเลือก)"], ...types.map((t, i) => [i, `${t.name} · ${Math.round(t.b * 100)}×${Math.round(t.h * 100)}${t.manual ? " (สร้างเอง)" : ""}`])]} /></Field>
+              <div className="col-span-2"><Field label="Type"><Select value={beam.type ?? ""} onChange={(v) => setBeam({ type: v === "" ? null : Number(v), autoLock: undefined })} options={[["", "อัตโนมัติ (โปรแกรมเลือก)"], ...types.map((t, i) => [i, `${t.name} · ${Math.round(t.b * 100)}×${Math.round(t.h * 100)}${t.manual ? " (สร้างเอง)" : ""}`])]} /></Field></div>
               {(() => { const n = beamTypeNote(sel.i); return <p className="col-span-2 -mt-2 text-[11px] text-gray-500">{n.text}{n.sug != null && types[n.sug] && <> · <span className="font-medium text-red-600">ไม่ผ่าน — {types[n.sug].name} ผ่าน (ประมาณจากแรงตอนนี้)</span> <button onClick={() => setBeam({ type: n.sug, autoLock: undefined })} className="ml-1 rounded bg-brand-500 px-1.5 py-0.5 font-medium text-[#fff]">ใช้ {types[n.sug].name}</button></>}</p>; })()}
-              <Field label={beam.arc?.s ? "ยาวตามส่วนโค้ง" : "ยาว"} unit="m"><div className="flex h-11 items-center text-sm tabular-nums">{fmt(arcGeom(beam.a, beam.b, beam.arc?.s)?.L ?? Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1]), 2)}</div></Field>
+              <Field label={beam.arc?.s ? "ยาวตามส่วนโค้ง" : "ยาว"} unit="m"><div className="flex h-8 items-center text-[13px] font-medium tabular-nums">{fmt(arcGeom(beam.a, beam.b, beam.arc?.s)?.L ?? Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1]), 2)}</div></Field>
               <Field label="ระดับคาน (ม. จากพื้นชั้นล่าง)">
                 <NumberInput value={beam.lvl ?? ""} step="0.05" onChange={(v) => setBeam({ lvl: v > 0 ? v : undefined })} /></Field>
-              <p className="-mt-1 text-[11px] text-gray-500">เว้นว่าง = คานระดับพื้นชั้นนี้ · ใส่ค่า = คานกลางชั้น เช่น คานรับชานพักบันได (วางบนเสาของชั้นนี้ ไม่รับพื้น)</p>
-              <Field label="บทบาทที่จุดตัดคาน (ไม่มีเสา)"><Select value={beam.role ?? ""} onChange={(v) => setBeam({ role: v || undefined })} options={[["", "อัตโนมัติ (คานที่มีเสามากกว่า / ช่วงสั้นกว่า = คานหลัก)"], ["main", "คานหลัก — คานอื่นวางบนคานนี้"], ["secondary", "คานซอย — วางบนคานที่ตัดผ่าน"]]} /></Field>
+              <p className="col-span-2 -mt-2 text-[11px] text-gray-500">เว้นว่าง = คานระดับพื้นชั้นนี้ · ใส่ค่า = คานกลางชั้น เช่น คานรับชานพักบันได (วางบนเสาของชั้นนี้ ไม่รับพื้น)</p>
+              <div className="col-span-2"><Field label="บทบาทที่จุดตัดคาน (ไม่มีเสา)"><Select value={beam.role ?? ""} onChange={(v) => setBeam({ role: v || undefined })} options={[["", "อัตโนมัติ (คานที่มีเสามากกว่า / ช่วงสั้นกว่า = คานหลัก)"], ["main", "คานหลัก — คานอื่นวางบนคานนี้"], ["secondary", "คานซอย — วางบนคานที่ตัดผ่าน"]]} /></Field></div>
               {(() => { const mine = an.lines.filter((l) => l.members.includes(sel.i)), rests = mine.flatMap((l) => l.carriers.map((c) => an.lines.find((o) => o.id === c.host)?.id + 1)).filter(Boolean), carries = an.lines.filter((o) => o.carriers.some((c) => mine.some((l) => l.id === c.host))).map((o) => o.id + 1);
-                return <p className="self-end text-[12px] text-gray-600">{rests.length ? `วางบนแนว ${[...new Set(rests)].join(", ")}` : "วางบนเสา"}{carries.length ? ` · รับแนว ${[...new Set(carries)].join(", ")}` : ""}</p>; })()}
+                return <Result className="col-span-2">{rests.length ? `วางบนแนว ${[...new Set(rests)].join(", ")}` : "วางบนเสา"}{carries.length ? ` · รับแนว ${[...new Set(carries)].join(", ")}` : ""}</Result>; })()}
               {step === "frame" && (<>
-              <Field label="คานโค้ง: ระยะป่องกลางช่วง" unit="m (+ ซ้าย / − ขวา)"><NumberInput value={beam.arc?.s ?? 0} step="0.05" onChange={(v) => setBeam({ arc: v ? { s: v } : undefined })} /></Field>
-              <div className="flex flex-wrap items-end gap-1 text-[12px]">{[["¼ วงกลม ซ้าย", 1], ["¼ วงกลม ขวา", -1], ["ตรง", 0]].map(([lab, sg]) => (
-                <button key={lab} onClick={() => setBeam({ arc: sg ? { s: sg * quarterSagitta(Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1])) } : undefined })} className="rounded-md px-2 py-1 ring-1 ring-gray-300 hover:bg-gray-50">{lab}</button>))}</div></>)}
+              <div className="col-span-2"><Field label="คานโค้ง: ระยะป่องกลางช่วง" unit="m (+ ซ้าย / − ขวา)"><NumberInput value={beam.arc?.s ?? 0} step="0.05" onChange={(v) => setBeam({ arc: v ? { s: v } : undefined })} /></Field></div>
+              <div className="col-span-2 -mt-1 flex flex-wrap items-end gap-1 text-[12px]">{[["¼ วงกลม ซ้าย", 1], ["¼ วงกลม ขวา", -1], ["ตรง", 0]].map(([lab, sg]) => (
+                <button key={lab} onClick={() => setBeam({ arc: sg ? { s: sg * quarterSagitta(Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1])) } : undefined })} className={btnGhost}>{lab}</button>))}</div></>)}
               {beam.arc?.s ? <p className="col-span-2 text-[11px] text-gray-500">R = {fmt(arcGeom(beam.a, beam.b, beam.arc.s).R, 2)} ม. · มุม {fmt((arcGeom(beam.a, beam.b, beam.arc.s).th * 180) / Math.PI, 0)}° · โครง 3 มิติแบ่ง 12 ชิ้นตามส่วนโค้ง (มีแรงบิดจากความโค้ง) · คานต่อเนื่องใช้ช่วงตามคอร์ด</p> : null}
               {(() => { const on = line ? an.walls.filter((w) => w.on.some((o) => o.line === line.id)) : []; return (
-                <div className="col-span-2 text-[12px] text-gray-600">ผนังบนแนวคานนี้: {on.length ? on.map((w) => `ผนัง ${w.i + 1} ${fmt(w.q, 0)}`).join(" · ") + ` กก./ม. (รวม ${fmt(on.reduce((s, w) => s + w.q, 0), 0)})` : "ไม่มี"} — แก้ที่ขั้น 5 น้ำหนักบรรทุก</div>); })()}
+                <p className="col-span-2 text-[11px] text-gray-500">ผนังบนแนวคานนี้: {on.length ? on.map((w) => `ผนัง ${w.i + 1} ${fmt(w.q, 0)}`).join(" · ") + ` กก./ม. (รวม ${fmt(on.reduce((s, w) => s + w.q, 0), 0)})` : "ไม่มี"} — แก้ที่ขั้น 5 น้ำหนักบรรทุก</p>); })()}
               {(step === "analysis" || step === "design") && (() => { const sps = an.spans.filter((s) => (s.members ?? [s.member]).includes(sel.i)); return sps.length ? (
                 <div className="col-span-2 space-y-1.5 text-[12px]">{sps.map((s) => { const why = spanReasons(s.check); return (
                   <div key={s.id} className={`rounded-md px-2 py-1.5 ring-1 ${s.ok ? "ring-gray-200" : "bg-red-50 ring-red-200 dark:bg-red-500/10"}`}>
@@ -664,8 +667,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             </div>)}
             {col && (() => { const c = colAt(sel.i), st = res.stacks.find((s) => s.key === stackKey(col)); return (<div className="space-y-2 text-[13px]">
               <Field label="Type เสา (ทั้งต้นทุกชั้น)"><Select value={frame.colPick?.[stackKey(col)] ?? ""} onChange={(v) => set("colPick", { ...frame.colPick, [stackKey(col)]: v === "" ? null : Number(v) })} options={[["", "อัตโนมัติ"], ...cTypes.map((t, i) => [i, t.name])]} /></Field>
-              <p className="tabular-nums">X {fmt(col[0], 2)} · Y {fmt(col[1], 2)} · แรงจากคานชั้นนี้ {fmt((c?.R ?? 0) / 1000, 2)} ตัน</p>
-              {st?.list.map((x) => <p key={x.floor} className={`tabular-nums ${x.ok ? "" : "text-red-600"}`}>{frame.floors[x.floor].name}: {x.lv.Bx}×{x.lv.By} {x.lv.n}-{x.lv.mainBar} · P {fmt(x.Pbot / 1000, 2)} ตัน · {colWhy(x)}</p>)}
+              <Result>X {fmt(col[0], 2)} · Y {fmt(col[1], 2)} · แรงจากคานชั้นนี้ <b>{fmt((c?.R ?? 0) / 1000, 2)} ตัน</b></Result>
+              {st?.list.length > 0 && <List>{st.list.map((x) => <Row key={x.floor} title={`${frame.floors[x.floor].name} · ${x.lv.Bx}×${x.lv.By} ${x.lv.n}-${x.lv.mainBar}`} sub={`P ${fmt(x.Pbot / 1000, 2)} ตัน · ${colWhy(x)}`}
+                value={<b className={`text-[13px] ${x.ok ? "text-green-600" : "text-red-600"}`}>{x.ok ? "ผ่าน" : "ไม่ผ่าน"}</b>} />)}</List>}
             </div>); })()}
             {panel && (<div className="grid grid-cols-2 gap-3">
               <Field label="ชนิดพื้น"><Select value={panel.st} onChange={(v) => setPanel({ kind: v })} options={Object.entries(SLAB_KINDS)} /></Field>
@@ -677,10 +681,9 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <Field label="ฝ้า/งานระบบเพิ่ม" unit="kg/m²"><NumberInput value={panel.extraSDL ?? 0} step="10" onChange={(v) => setPanel({ extra: v })} /></Field></>
               : <p className="col-span-2 self-end text-[11px] text-gray-500">น้ำหนักบนแผ่น (ปูผิว {fmt(panel.finish, 0)} · จร {fmt(panel.live, 0)} กก./ม.²) ใส่ที่ขั้น "น้ำหนักบรรทุก" → Load Cases</p>}
               <Field label="ช่องเปิด"><Select value={panel.open ? "1" : ""} onChange={(v) => setPanel({ open: !!v })} options={[["", "มีพื้น"], ["1", "ช่องเปิด (ไม่มีพื้น)"]]} /></Field>
-              <p className="col-span-2 text-[12px] text-gray-500">{panel.st === "GS" ? "พื้นวางบนดิน — ไม่ส่งน้ำหนักลงคาน" : panel.st === "PS" ? `แผ่นพาด ${fmt(panel.span ?? 0, 2)} ม. → ลงคาน 2 ด้านที่รับปลายแผ่น` : panel.kind === "twoway" ? `พื้นสองทาง S/L = ${fmt(panel.m, 2)} → สามเหลี่ยม/คางหมู` : panel.kind === "oneway" ? "พื้นทางเดียว (L/S > 2) → ลงคานด้านยาว wS/2" : "รูปไม่ใช่สี่เหลี่ยม → แบ่งตามพื้นที่ (โดยประมาณ)"} · {fmt(panel.area, 2)} ม² · {["DL", "SDL", "WALL", "LL"].map((g) => `${g === "WALL" ? "ผนัง" : g} ${fmt(panel.g[g], 0)}`).join(" · ")} = {fmt(panel.w, 0)} กก./ม²</p>
-              <button onClick={() => setFloor({ panels: Object.fromEntries(Object.entries(fl.panels ?? {}).filter(([k]) => k !== panel.key)) })} className="col-span-2 text-left text-[12px] text-brand-500">ใช้ค่าของชั้น</button>
+              <Result className="col-span-2">{panel.st === "GS" ? "พื้นวางบนดิน — ไม่ส่งน้ำหนักลงคาน" : panel.st === "PS" ? `แผ่นพาด ${fmt(panel.span ?? 0, 2)} ม. → ลงคาน 2 ด้านที่รับปลายแผ่น` : panel.kind === "twoway" ? `พื้นสองทาง S/L = ${fmt(panel.m, 2)} → สามเหลี่ยม/คางหมู` : panel.kind === "oneway" ? "พื้นทางเดียว (L/S > 2) → ลงคานด้านยาว wS/2" : "รูปไม่ใช่สี่เหลี่ยม → แบ่งตามพื้นที่ (โดยประมาณ)"} · {fmt(panel.area, 2)} ม² · {["DL", "SDL", "WALL", "LL"].map((g) => `${g === "WALL" ? "ผนัง" : g} ${fmt(panel.g[g], 0)}`).join(" · ")} = <b>{fmt(panel.w, 0)} กก./ม²</b></Result>
             </div>)}
-          </Card>
+          </SidePanel>
   ) : step === "loads" && sub === "cases" ? (<LoadCases frame={frame} fl={fl} an={an} cur={cur} setFloor={setFloor} multi={multiSel} setPickSet={setPickSet} armed={armed} setArmed={setArmed} pickRef={pickRef} onLateral={() => setSubState("lateral")} />
   ) : step === "loads" && sub === "wall" ? (<WallTypesPanel wallTypes={wallTypes} setWallTypes={(v) => set("wallTypes", v)} frame={frame} />
   ) : step === "loads" && sub === "other" ? (<>
@@ -693,7 +696,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             </div>
             <Note>ราวกันตก / น้ำหนักเส้น: วาดที่ปลายพื้นยื่น (ลงคานริม + แรงบิด) บนคาน หรือบนพื้น · น้ำหนักจุด: คลิกวาง · ฝ้า / งานระบบ: แก้ที่แผ่นพื้น (ขั้น 2)</Note>
           </SidePanel></>
-  ) : step === "stair" ? (          <Card title="บันได" icon={Ruler}><p className="text-[12px] text-gray-500">วาดบันไดบนชั้นที่บันไดเริ่มขึ้น แล้วบันไดจะขึ้นไปชั้นบนถัดไป (เก็บไว้ที่ชั้นบน แสดงเป็นเส้นประบนชั้นนี้ คลิกเพื่อแก้) · วาดกรอบช่องบันได แล้วเลือกแบบ: {Object.values(STAIR_KINDS).join(" · ")} · ปลายล่างของแบบพาดตามยาว/มีชานพักลงคานชั้นล่างที่แนวเดียวกัน</p></Card>
+  ) : step === "stair" ? (          <SidePanel title="บันได" icon={Ruler}><p className="text-[12px] leading-relaxed text-gray-600">วาดบันไดบนชั้นที่บันไดเริ่มขึ้น แล้วบันไดจะขึ้นไปชั้นบนถัดไป (เก็บไว้ที่ชั้นบน แสดงเป็นเส้นประบนชั้นนี้ คลิกเพื่อแก้) · วาดกรอบช่องบันได แล้วเลือกแบบ: {Object.values(STAIR_KINDS).join(" · ")} · ปลายล่างของแบบพาดตามยาว/มีชานพักลงคานชั้นล่างที่แนวเดียวกัน</p><Note>คลิกบันไดบนแปลนเพื่อแก้ขนาด ทิศ น้ำหนัก และเหล็กเสริม</Note></SidePanel>
   ) : step === "slab" ? (<>          <Card title="พื้น" icon={Ruler}><p className="text-[12px] text-gray-500">คลิกแผ่นพื้นเพื่อเลือกชนิด S หล่อในที่ / PS พื้นสำเร็จ (เลือกทิศวางแผ่น) / GS วางบนดิน หรือช่องเปิด · เครื่องมือ "พื้นยื่น" คลิกบนคานด้านที่จะยื่น · ค่าเริ่มต้นความหนา ปูผิว จร อยู่ในการ์ดชั้น</p></Card>
     <Card title={`ค่าเริ่มต้นแผ่นพื้น — ${fl.name}`} icon={Layers}>
           <div className="grid grid-cols-2 gap-3">
@@ -703,48 +706,51 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         </Card></>
   ) : step === "grid" ? (<>
     <StoreyTable frame={frame} set={set} cur={cur} goFloor={goFloor} />
-              <Card title="กริด (ระยะแกน ม.)" icon={Ruler}>
+              <SidePanel title="กริด (ระยะแกน ม.)" icon={Ruler}>
             <div className="space-y-2">
               {gridInput("dx", "แกน X (A, B, …)")}{gridInput("dy", "แกน Y (ล่าง → บน)")}
               <Field label="แบ่งช่องกริด"><Select value={G.sub ?? 1} onChange={(v) => setGrid({ ...G, sub: Number(v) })} options={[1, 2, 3, 4].map((v) => [v, v === 1 ? "เฉพาะแกน" : `ช่องละ ${v}`])} /></Field>
             </div>
-          </Card></>
+          </SidePanel></>
   ) : step === "analysis" || step === "design" ? (
-    <section className="rounded-2xl border border-gray-200 bg-white px-3 pt-2">        
-          <div className="flex items-center justify-between px-1 text-sm font-semibold text-gray-800">{line?.res ? `แรงเฉือน / โมเมนต์ แนวคาน ${line.id + 1}` : (boardStep === "cols" ? `อัตราใช้งานเสา ใต้${fl.name}` : `อัตราใช้งานคาน ${fl.name}`)}
-            <span className="text-[11px] font-normal text-gray-500">{line?.res ? `ยาว ${fmt(line.L, 2)} ม.` : "ค่ามากสุดของ เหล็กที่ต้องการ/ที่ใส่ · แรงเฉือน · ระยะแอ่น (ไม่รวมข้อกำหนดระยะปลอก d/2 — คลิกคานดูเหตุผล)"}</span></div>
+    <SidePanel icon={Layers} title={line?.res ? `แรงเฉือน / โมเมนต์ แนวคาน ${line.id + 1}` : (boardStep === "cols" ? `อัตราใช้งานเสา ใต้${fl.name}` : `อัตราใช้งานคาน ${fl.name}`)}
+          hint={line?.res ? `ยาว ${fmt(line.L, 2)} ม.` : "ค่ามากสุดของ เหล็กที่ต้องการ/ที่ใส่ · แรงเฉือน · ระยะแอ่น (ไม่รวมข้อกำหนดระยะปลอก d/2 — คลิกคานดูเหตุผล)"}>
           {line?.res ? <ForceCharts L={line.L} fns={{ V: line.res.V, M: line.res.M }} dark={dark} height={260} animate={false} /> : <UtilBars items={boardStep === "cols" ? colsHere.map((c) => ({ label: `${cTypes[c.typeIdx]?.name} ${stackKey(c.p)}`, util: c.check.util, ok: c.ok, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length], sel: { kind: "column", i: c.i } }))
             : an.spans.map((s) => ({ label: `${s.id} ${s.typeName ?? types[s.typeIdx]?.name ?? ""}`, util: s.check.util, ok: s.ok, color: TYPE_COLORS[s.typeIdx % TYPE_COLORS.length], sel: { kind: "beam", i: s.member } }))} dark={dark} height={260} onPick={(x) => x?.sel && setSel(x.sel)} />}
-        </section>
+        </SidePanel>
   ) : step === "footing" ? (<>
-    <Card title="สรุปฐานราก" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums">
-      <p className={res.footings.every((f) => f.ok) ? "font-semibold text-green-600" : "font-semibold text-red-600"}>ผ่าน {res.footings.filter((f) => f.ok).length}/{res.footings.length} ฐาน · แรงรวม {fmt(res.footings.reduce((a, f) => a + f.P, 0) / 1000, 1)} ตัน</p>
-      {[...new Set(res.footings.map((f) => f.type ?? "อัตโนมัติ"))].map((ty) => { const fs = res.footings.filter((f) => (f.type ?? "อัตโนมัติ") === ty), g = fs[0];
-        return <p key={ty} className="flex justify-between border-b border-gray-100 py-0.5"><span className="font-medium">{ty}</span><span>{g.kind === "spread" ? `ฐานแผ่ ${fmt(g.r?.Bx ?? 0, 2)}×${fmt(g.r?.By ?? 0, 2)}` : `${g.n} × ${g.pile}`}</span><span>{fs.length} ฐาน</span></p>; })}
-    </div></Card>
+    <SidePanel title="สรุปฐานราก" icon={Layers}>
+      <Notice kind={res.footings.every((f) => f.ok) ? "ok" : "bad"}>ผ่าน {res.footings.filter((f) => f.ok).length}/{res.footings.length} ฐาน · แรงรวม {fmt(res.footings.reduce((a, f) => a + f.P, 0) / 1000, 1)} ตัน</Notice>
+      <Section title="ชนิดฐานรากที่ใช้" className="mt-3"><List>
+      {[...new Set(res.footings.map((f) => f.type ?? "อัตโนมัติ"))].map((ty) => { const fs = res.footings.filter((f) => (f.type ?? "อัตโนมัติ") === ty), g = fs[0], ng = fs.filter((f) => !f.ok).length;
+        return <Row key={ty} title={ty} sub={g.kind === "spread" ? `ฐานแผ่ ${fmt(g.r?.Bx ?? 0, 2)} × ${fmt(g.r?.By ?? 0, 2)} ม.` : `${g.n} × ${g.pile}`} badge={ng > 0 && <span className="shrink-0 rounded bg-red-50 px-1 text-[10px] text-red-600">ไม่ผ่าน {ng}</span>} value={fs.length} unit="ฐาน" />; })}
+      </List></Section>
+    </SidePanel>
     <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-[300px] overflow-hidden rounded-xl border border-gray-200" />
   </>  ) : step === "project" ? (
-    <Card title="ภาพรวมโครงการ" icon={Layers}><div className="space-y-1 text-[12px] tabular-nums text-gray-600">
-      {[...frame.floors.keys()].reverse().map((k) => <p key={k} className="flex justify-between border-b border-gray-100 py-0.5"><span>{frame.floors[k].name}</span><span>{frame.floors[k].columns.length} เสา · {frame.floors[k].beams.length} คาน</span></p>)}
-      <p className="pt-1 text-[11px] text-gray-400">ระดับและความสูงชั้นแก้ในขั้น 1 · น้ำหนักพื้นแก้ในขั้น 5 น้ำหนักบรรทุก / ตาราง "แผ่นพื้นทั้งชั้น"</p>
-    </div></Card>
-  ) : <Card title={`ชั้น ${fl.name}`} icon={Layers}>
+    <SidePanel title="ภาพรวมโครงการ" icon={Layers}>
+      <List>{[...frame.floors.keys()].reverse().map((k) => <Row key={k} title={frame.floors[k].name} sub={`${frame.floors[k].columns.length} เสา · ${frame.floors[k].beams.length} คาน`} value={fmt(frame.floors[k].h ?? 0, 2)} unit="ม. (สูงชั้น)" />)}</List>
+      <Note>ระดับและความสูงชั้นแก้ในขั้น 1 · น้ำหนักพื้นแก้ในขั้น 5 น้ำหนักบรรทุก / ตาราง "แผ่นพื้นทั้งชั้น"</Note>
+    </SidePanel>
+  ) : <SidePanel title={`ชั้น ${fl.name}`} icon={Layers}>
           <div className="grid grid-cols-2 gap-3">
             {fv("t", "พื้นหนา (ค่าเริ่มต้น)", "m", "0.01")}
           </div>
           {(() => { // floor summary (user: the empty right card): counts, loads, what fails — click selects it
             const ngS = an.spans.filter((x) => !x.ok), ngC = colsHere.filter((c) => !c.ok), tot = Object.values(an.groups ?? {}).reduce((a, b) => a + b, 0);
-            return <div className="mt-2 space-y-1 border-t border-gray-100 pt-2 text-[12px] tabular-nums text-gray-600">
-              <div className="grid grid-cols-3 gap-1 text-center">{[["เสา", fl.columns.length], ["คาน", fl.beams.length], ["แผ่นพื้น", an.panels.length]].map(([t, n]) => <div key={t} className="rounded-md bg-gray-50 py-1"><div className="text-[15px] font-semibold text-gray-800">{n}</div>{t}</div>)}</div>
-              <p className="flex justify-between"><span>น้ำหนักลงเสาทั้งชั้น</span><b>{fmt(tot / 1000, 1)} ตัน</b></p>
-              <p className="flex justify-between"><span>ช่วงคานผ่าน</span><b className={ngS.length ? "text-red-600" : "text-green-600"}>{an.spans.length - ngS.length}/{an.spans.length}</b></p>
-              <p className="flex justify-between"><span>เสาใต้ชั้นนี้ผ่าน</span><b className={ngC.length ? "text-red-600" : "text-green-600"}>{colsHere.length - ngC.length}/{colsHere.length}</b></p>
-              {(ngS.length > 0 || ngC.length > 0) && <div className="max-h-40 overflow-auto rounded-md bg-red-50 p-1.5 text-red-700">
+            return <Section title="สรุปชั้นนี้" className="mt-3">
+              <List>
+                <Row title="เสา · คาน · แผ่นพื้น" value={`${fl.columns.length} · ${fl.beams.length} · ${an.panels.length}`} unit="ชิ้น" />
+                <Row title="น้ำหนักลงเสาทั้งชั้น" value={fmt(tot / 1000, 1)} unit="ตัน" />
+                <Row title="ช่วงคานผ่าน" value={<b className={`text-[14px] ${ngS.length ? "text-red-600" : "text-green-600"}`}>{an.spans.length - ngS.length}/{an.spans.length}</b>} />
+                <Row title="เสาใต้ชั้นนี้ผ่าน" value={<b className={`text-[14px] ${ngC.length ? "text-red-600" : "text-green-600"}`}>{colsHere.length - ngC.length}/{colsHere.length}</b>} />
+              </List>
+              {(ngS.length > 0 || ngC.length > 0) && <div className="mt-2 max-h-40 space-y-0.5 overflow-auto rounded-md bg-red-50 p-1.5 text-[12px] text-red-700 dark:bg-red-500/10">
                 {ngS.map((x) => <button key={x.id} onClick={() => setSel({ kind: "beam", i: x.member })} className="block w-full truncate text-left hover:underline">✕ ช่วง {x.id} {x.typeName ?? x.type?.name} — {spanReasons(x.check)[0] ?? "ไม่ผ่าน"}</button>)}
                 {ngC.map((c) => <button key={c.i} onClick={() => setSel({ kind: "column", i: c.i })} className="block w-full truncate text-left hover:underline">✕ เสา ({fmt(fl.columns[c.i]?.[0], 2)}, {fmt(fl.columns[c.i]?.[1], 2)}) {cTypes[c.typeIdx]?.name}</button>)}</div>}
-            </div>; })()}
-          <p className="mt-1 text-[11px] text-gray-400">{step === "frame" ? "วาดเสา คาน แล้วคลิกแผ่นพื้นที่เกิดจากคานล้อมรอบเพื่อเลือกชนิด S / PS / GS ความหนา ช่องเปิด · เครื่องมือ \"พื้นยื่น\" คลิกบนคานด้านที่จะยื่น · ตารางแผ่นพื้นทั้งชั้นอยู่แถบขวา · " : ""}น้ำหนักปูผิว / จร ใส่ที่ขั้น "น้ำหนักบรรทุก" · ระดับ / ความสูงชั้นแก้ในขั้น 1</p>
-        </Card>;
+            </Section>; })()}
+          <Note>{step === "frame" ? "วาดเสา คาน แล้วคลิกแผ่นพื้นที่เกิดจากคานล้อมรอบเพื่อเลือกชนิด S / PS / GS ความหนา ช่องเปิด · เครื่องมือ \"พื้นยื่น\" คลิกบนคานด้านที่จะยื่น · ตารางแผ่นพื้นทั้งชั้นอยู่แถบขวา · " : ""}น้ำหนักปูผิว / จร ใส่ที่ขั้น "น้ำหนักบรรทุก" · ระดับ / ความสูงชั้นแก้ในขั้น 1</Note>
+        </SidePanel>;
   const [drawer, setDrawer] = useState(null), resultStep = ["analysis", "design", "footing"].includes(step);
   setDrawerRef.current = setDrawer;
   // side panels (tables / warnings) on the right, opened on demand from the tab rail

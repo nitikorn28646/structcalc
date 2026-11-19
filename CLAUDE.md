@@ -661,3 +661,11 @@ small actions · editor opens under the row), Pick (● = the item the drawing t
 lists — row title = load kind, value box + unit, เลือก / delete; logic unchanged), WallTypesPanel.jsx, LoadLibPanel.jsx (new: library sections per
 kind, ● picks the item for the tool, click → name / value / delete) + "หลังคา และน้ำหนักอื่น" panel. In FramePage it is imported as SidePanel
 (Panel there is react-resizable-panels). New panels should use the kit. E2E 47/47.
+PANEL KIT ALL STEPS (2026-11-19, user "ทำเลย ค่อยๆทำ"): every right-hand panel of the workflow now uses PanelKit — FramePage inspector (SidePanel;
+delete / "ใช้ค่าของชั้น" moved to the header as DelButton / btnGhost for wall, cantilever slab, stair, line / point load, panel; computed text in
+Result boxes; beam fields full width in the narrow panel; column levels as List / Row with ผ่าน / ไม่ผ่าน), floor summary (Section + rows + failing
+list), project overview, stair hint, grid, result chart (title + hint, no more wrapped title), footing summary (Notice + type rows), StairPanel
+headings / buttons, StoreyTable (rows in a List, "+ เพิ่มชั้น" in the header, h-8 inputs, delete under the list). PanelKit gained Result, btnGhost,
+DelButton. Fix on the way: StoreyTable setH renames the "+x.xx" names of every level above (roof stayed "+6.60" at 6.70). Header delete checked
+(wall 20 → 19 → Ctrl+Z 20). Not converted yet: roof page settings panel (RoofPage), main-area pages (step 0 criteria, step 7 type cards, step 9).
+E2E 47/47, regress identical.
