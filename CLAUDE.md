@@ -654,3 +654,10 @@ WALL TYPE PANEL (2026-11-19, user "หน้าต่างนี้ออกแ
 under the row (one at a time: name, material with density, thickness / plaster / sides in one row, the weight worked out in one line,
 "ใช้ลากผนัง", delete disabled while walls use the type). src/wallDraw.js useWallDraw() = the wall-to-draw choice shared by the panel and the
 FloorBoard toolbar (localStorage structcalc.wallDraw + window event). Weights unchanged (floor.js wallTypeW). E2E 47/47.
+PANEL KIT (2026-11-19, user "แต่ละหน้ารูปแบบหน้าต่างไม่เหมือนกันเลย"): src/PanelKit.jsx = the one look for right-hand panels — Panel (card title + one
+action at the right + hint), Section (small heading + action), List / Row (marker · title 13 px · detail 11 px · number 14 px with unit under it ·
+small actions · editor opens under the row), Pick (● = the item the drawing tool uses), PField (label 11 px over a 32 px input), Notice
+(ok / warn / bad), Note; inputCls / numCls / smallNum / btnCls / btnMain. Step 5 uses it in all three tabs: LoadCases.jsx (defaults, checks, case
+lists — row title = load kind, value box + unit, เลือก / delete; logic unchanged), WallTypesPanel.jsx, LoadLibPanel.jsx (new: library sections per
+kind, ● picks the item for the tool, click → name / value / delete) + "หลังคา และน้ำหนักอื่น" panel. In FramePage it is imported as SidePanel
+(Panel there is react-resizable-panels). New panels should use the kit. E2E 47/47.

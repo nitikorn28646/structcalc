@@ -6,14 +6,13 @@
 // built from them (items = groups of equal value and name), so old projects show up here unchanged.
 import { useState } from "react";
 import { ChevronDown, ChevronRight, MousePointerClick, Trash2 } from "lucide-react";
-import { Card } from "./ui.jsx";
+import { List, Note, Notice, Panel, PField, Row, Section, btnCls, btnMain, inputCls, numCls, smallNum } from "./PanelKit.jsx";
 import { fmt } from "./beamModel.js";
 import { highlight } from "./highlight.js";
 import { wallLoad, wallsOf } from "../engine/floor.js";
 
 const KINDS = [["floor", "Floor Load — แผ่นพื้น", "kg/m²"], ["uni", "Member Load UNI — แผ่บนคาน", "kg/m"], ["con", "Member Load CON — จุดบนคาน", "kg"], ["node", "Nodal Load — หัวเสา", "kg"]];
 const CASES = [["DL", "1 : DL น้ำหนักคงที่"], ["LL", "2 : LL น้ำหนักจร"]];
-const inp = "h-7 w-full rounded-md border border-gray-200 bg-white px-2 text-[12px] tabular-nums dark:border-gray-700 dark:bg-gray-900";
 const segsOf = (P) => P.map((p, i) => [p, P[(i + 1) % P.length]]);
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.03;
 
@@ -104,77 +103,78 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
   if (pickRef) pickRef.current = (t) => assign([t]);
 
   const Head = ({ k, label, tag = "L" }) => (
-    <button onClick={() => setOpen({ ...open, [k]: !open[k] })} className="flex w-full items-center gap-1 py-0.5 text-left text-[12.5px] font-semibold text-gray-800 dark:text-gray-100">
+    <button onClick={() => setOpen({ ...open, [k]: !open[k] })} className="flex items-center gap-1.5 text-left text-[12px] font-semibold text-gray-700 dark:text-gray-200">
       {open[k] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
       <span className={`grid h-4 w-4 place-items-center rounded-sm text-[9px] font-bold text-white ${tag === "C" ? "bg-[#3e63dd]" : "bg-[#b42318]"}`}>{tag}</span>{label}</button>);
   const sel = { panel: multi.filter((m) => m.kind === "panel" || m.kind === "cant").length, beam: multi.filter((m) => m.kind === "beam").length, column: multi.filter((m) => m.kind === "column").length };
+  const isActive = (it) => it.form && JSON.stringify(it.form) === JSON.stringify({ ...it.form, ...Object.fromEntries(Object.keys(it.form).map((k) => [k, k === "v" ? Number(form.v) : form[k]])) });
 
   return (<>
-    <Card title={`Load Cases — ${fl.name}`}>
-      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md bg-gray-50 px-2 py-1.5 text-[11.5px] text-gray-600 dark:bg-white/5 dark:text-gray-300">
-        <span className="font-medium">ค่าเริ่มต้นทั้งชั้น</span>
-        <label className="flex items-center gap-1">ปูผิว/ฝ้า<input type="number" step="10" defaultValue={fl.finish} key={`f${cur}-${fl.finish}`} onBlur={(e) => Number(e.target.value) !== fl.finish && setFloor({ finish: Number(e.target.value) || 0 })} className="h-6 w-16 rounded border border-gray-200 bg-white px-1 text-right tabular-nums dark:border-gray-700 dark:bg-gray-900" /></label>
-        <label className="flex items-center gap-1">จร<input type="number" step="50" defaultValue={fl.live} key={`l${cur}-${fl.live}`} onBlur={(e) => Number(e.target.value) !== fl.live && setFloor({ live: Number(e.target.value) || 0 })} className="h-6 w-16 rounded border border-gray-200 bg-white px-1 text-right tabular-nums dark:border-gray-700 dark:bg-gray-900" /></label>
-        <span className="text-gray-400">กก./ม.² · ใช้กับแผ่นที่ไม่ได้ Assign เอง</span>
+    <Panel title={`Load Cases — ${fl.name}`} hint="ชี้รายการ = ไฮไลต์บนแปลน · คลิกรายการ = ใช้ในฟอร์ม Assign · แก้ตัวเลขแล้ว Enter = แก้ทุกชิ้นในรายการ">
+      <Section title={<span>ค่าเริ่มต้นทั้งชั้น <span className="font-normal text-gray-400">(กก./ม.² · ใช้กับแผ่นที่ไม่ได้ Assign เอง)</span></span>}>
+        <div className="grid grid-cols-2 gap-2">
+          <PField label="ปูผิว / ฝ้า"><input type="number" step="10" defaultValue={fl.finish} key={`f${cur}-${fl.finish}`} onBlur={(e) => Number(e.target.value) !== fl.finish && setFloor({ finish: Number(e.target.value) || 0 })} className={numCls} /></PField>
+          <PField label="น้ำหนักจร"><input type="number" step="50" defaultValue={fl.live} key={`l${cur}-${fl.live}`} onBlur={(e) => Number(e.target.value) !== fl.live && setFloor({ live: Number(e.target.value) || 0 })} className={numCls} /></PField>
+        </div>
+      </Section>
+      <Section title="ตรวจน้ำหนักแผ่นพื้น">
+        <div className="space-y-1">
+          {checks.length ? checks.map((c) => (
+            <Notice key={c.text} kind={c.bad ? "bad" : "warn"} onEnter={() => highlight({ floor: cur, polys: c.polys ?? c.ps.map((p) => p.P), bad: c.bad })} onLeave={() => highlight(null)}
+              action={c.ps.length > 0 && <button onClick={() => setPickSet(c.ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })))} className="shrink-0 font-medium text-brand-600 hover:underline">เลือก</button>}>{c.text}</Notice>))
+            : <Notice kind="ok">✓ ทุกแผ่นมีน้ำหนักปูผิวและน้ำหนักจร และ Assign ครบแล้ว</Notice>}
+        </div>
+      </Section>
+      <div className="max-h-[46vh] overflow-auto pr-0.5">
+        {CASES.map(([k, label]) => (
+          <Section key={k} title={<Head k={k} label={label} />}>
+            {open[k] && (tree[k].length ? <List>{tree[k].map((it) => <Item key={it.id} it={it} cur={cur} setPickSet={setPickSet} active={isActive(it)}
+              onUse={it.form ? () => { setForm({ ...form, ...it.form }); setMsg(`รายการปัจจุบัน: ${it.text} — เลือกบนแปลนแล้วกด Assign`); } : null} />)}</List>
+              : <p className="px-1 text-[11px] text-gray-400">ยังไม่มีรายการ</p>)}
+          </Section>))}
+        <Section title={<Head k="C" label="3 : DL+LL (ชุดผสม)" tag="C" />}>
+          {open.C && <p className="rounded-lg border border-gray-200 px-2.5 py-2 text-[12px] text-gray-600 dark:border-gray-800 dark:text-gray-300">1.0 DL + 1.0 LL (WSD) · น้ำหนักจรจัดเรียงทีละช่วงเพื่อหาค่ามากสุด · ลม / แผ่นดินไหว{onLateral ? <> ดูที่ <button onClick={onLateral} className="text-brand-600 hover:underline">แท็บลม / แผ่นดินไหว</button></> : null}</p>}
+        </Section>
       </div>
-      <div className="mb-2 space-y-0.5 text-[11.5px]">
-        {checks.length ? checks.map((c) => (
-          <div key={c.text} onMouseEnter={() => highlight({ floor: cur, polys: c.polys ?? c.ps.map((p) => p.P), bad: c.bad })} onMouseLeave={() => highlight(null)}
-            className={`flex items-start gap-1.5 rounded px-1.5 py-0.5 ${c.bad ? "bg-red-50 text-red-700 dark:bg-red-500/10" : "bg-amber-50 text-[#b54708] dark:bg-amber-500/10"}`}>
-            <span>{c.bad ? "⚠" : "ⓘ"}</span><span className="flex-1">{c.text}</span>
-            <button onClick={() => setPickSet(c.ps.map((p) => ({ kind: "panel", i: panels.indexOf(p) })))} className="shrink-0 text-brand-500 hover:underline">เลือก</button></div>))
-          : <p className="rounded bg-green-50 px-1.5 py-0.5 text-green-700 dark:bg-green-500/10">✓ ทุกแผ่นมีน้ำหนักปูผิวและน้ำหนักจร และ Assign ครบแล้ว</p>}
+      <Note>"เลือก" = เลือกชิ้นของรายการนั้นบนแปลน · ช่องตัวเลข = แก้ทุกชิ้นในรายการพร้อมกัน</Note>
+    </Panel>
+    <Panel title="เพิ่มน้ำหนัก แล้ว Assign" hint={`เลือกบนแปลน: คาน ${sel.beam} · เสา ${sel.column} · แผ่นพื้น ${sel.panel} — คลิก, Ctrl/Shift+คลิก, ลากกรอบ, Ctrl+A ทั้งหมด`}>
+      <div className="grid grid-cols-2 gap-2">
+        <PField label="ชนิด" className="col-span-2"><select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value, ...(e.target.value === "floor" ? { name: "" } : {}) })} className={inputCls}>{KINDS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></PField>
+        <PField label="Load case"><select value={form.lc} onChange={(e) => setForm({ ...form, lc: e.target.value })} className={inputCls}>{CASES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></PField>
+        {form.kind === "uni" && form.lc === "DL" ? <PField label="กลุ่ม"><select value={form.g} onChange={(e) => setForm({ ...form, g: e.target.value })} className={inputCls}><option value="WALL">ผนัง</option><option value="SDL">งานระบบ/ปูผิว</option><option value="SP">อื่น ๆ</option></select></PField> : <span />}
+        {form.kind !== "floor" && <PField label="ชื่อ" className="col-span-2"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} placeholder="เช่น ผนังอิฐมอญ, ราวกันตก, ถังน้ำ" /></PField>}
+        <PField label={`${form.kind === "floor" ? (form.lc === "LL" ? "น้ำหนักจร" : "ปูผิว/ฝ้า") : "W1"} (${unit})`}><input type="number" value={form.v} onChange={(e) => setForm({ ...form, v: e.target.value })} className={numCls} /></PField>
+        {form.kind === "con" ? <PField label="d1 จากต้นคาน (m)"><input type="number" step="0.05" value={form.d1} onChange={(e) => setForm({ ...form, d1: e.target.value })} className={numCls} /></PField> : <span />}
       </div>
-      <div className="max-h-[46vh] space-y-0.5 overflow-auto pr-1">
-        {CASES.map(([k, label]) => (<div key={k}><Head k={k} label={label} />
-          {open[k] && <div className="ml-4 border-l border-gray-200 pl-1.5 dark:border-gray-700">{tree[k].length ? tree[k].map((it) => <Item key={it.id} it={it} cur={cur} setPickSet={setPickSet} active={it.form && JSON.stringify(it.form) === JSON.stringify({ ...it.form, ...Object.fromEntries(Object.keys(it.form).map((k) => [k, k === "v" ? Number(form.v) : form[k]])) })} onUse={it.form ? () => { setForm({ ...form, ...it.form }); setMsg(`รายการปัจจุบัน: ${it.text} — เลือกบนแปลนแล้วกด Assign`); } : null} />) : <p className="px-1 text-[11px] text-gray-400">ยังไม่มีรายการ</p>}</div>}</div>))}
-        <Head k="C" label="3 : DL+LL (ชุดผสม)" tag="C" />
-        {open.C && <div className="ml-4 border-l border-gray-200 pl-2 text-[11px] text-gray-500 dark:border-gray-700">1.0 DL + 1.0 LL (WSD) · น้ำหนักจรจัดเรียงทีละช่วงเพื่อหาค่ามากสุด · ลม / แผ่นดินไหว{onLateral ? <> ดูที่ <button onClick={onLateral} className="text-brand-500 hover:underline">แท็บลม / แผ่นดินไหว</button></> : null}</div>}
-      </div>
-      <p className="mt-1 text-[10.5px] text-gray-400">ชี้รายการ = ไฮไลต์บนแปลน / 3D (ยังไม่ใช่การเลือก) · คลิกรายการ = ใช้เป็นน้ำหนักในฟอร์ม Assign · "เลือก" = เลือกชิ้นของรายการนั้นบนแปลน · แก้ตัวเลขแล้ว Enter = แก้ทุกชิ้นในรายการ</p>
-    </Card>
-    <Card title="เพิ่มน้ำหนัก (Add) แล้ว Assign">
-      <div className="grid grid-cols-2 gap-2 text-[12px]">
-        <label className="col-span-2">ชนิด<select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value, ...(e.target.value === "floor" ? { name: "" } : {}) })} className={inp}>{KINDS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
-        <label>Load case<select value={form.lc} onChange={(e) => setForm({ ...form, lc: e.target.value })} className={inp}>{CASES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
-        {form.kind === "uni" && form.lc === "DL" ? <label>กลุ่ม<select value={form.g} onChange={(e) => setForm({ ...form, g: e.target.value })} className={inp}><option value="WALL">ผนัง</option><option value="SDL">งานระบบ/ปูผิว</option><option value="SP">อื่น ๆ</option></select></label> : <span />}
-        {form.kind !== "floor" && <label className="col-span-2">ชื่อ<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inp} placeholder="เช่น ผนังอิฐมอญ, ราวกันตก, ถังน้ำ" /></label>}
-        <label>{form.kind === "floor" ? (form.lc === "LL" ? "น้ำหนักจร" : "ปูผิว/ฝ้า") : "W1"} ({unit})<input type="number" value={form.v} onChange={(e) => setForm({ ...form, v: e.target.value })} className={inp} /></label>
-        {form.kind === "con" ? <label>d1 จากต้นคาน (m)<input type="number" step="0.05" value={form.d1} onChange={(e) => setForm({ ...form, d1: e.target.value })} className={inp} /></label> : <span />}
-      </div>
-      <p className="mt-1.5 text-[11px] text-gray-500">เลือกบนแปลน: คาน {sel.beam} · เสา {sel.column} · แผ่นพื้น {sel.panel} — คลิก, Ctrl/Shift+คลิก เพิ่ม, ลากกรอบ (ซ้าย→ขวา ทั้งชิ้น / ขวา→ซ้าย แตะ), Ctrl+A ทั้งหมด</p>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        <button onClick={addItem} className="rounded-md px-2.5 py-1 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50" title="เพิ่มรายการนี้เข้าต้นไม้ Load Cases (ยังไม่ลงชิ้นไหน)">+ Add เข้าต้นไม้</button>
-        <button onClick={() => assign(multi)} className="rounded-md bg-brand-500 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-brand-600">Assign ให้ที่เลือก</button>
-        <button onClick={() => setArmed(!armed)} className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-medium ring-1 ${armed ? "bg-[#f79009] text-white ring-[#f79009]" : "text-gray-700 ring-gray-300 hover:bg-gray-50 dark:text-gray-200"}`}>
-          <MousePointerClick className="h-3.5 w-3.5" />{armed ? "กำลังใช้เคอร์เซอร์ Assign (คลิกเพื่อหยุด)" : "ใช้เคอร์เซอร์ Assign"}</button>
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <button onClick={() => assign(multi)} className={btnMain}>Assign ให้ที่เลือก</button>
+        <button onClick={addItem} className={btnCls} title="เพิ่มรายการนี้เข้าต้นไม้ Load Cases (ยังไม่ลงชิ้นไหน)">+ Add เข้าต้นไม้</button>
+        <button onClick={() => setArmed(!armed)} className={armed ? "inline-flex items-center gap-1 rounded-md bg-[#f79009] px-2.5 py-1 text-[12px] font-medium text-white" : btnCls}>
+          <MousePointerClick className="h-3.5 w-3.5" />{armed ? "กำลังใช้เคอร์เซอร์ (คลิกเพื่อหยุด)" : "ใช้เคอร์เซอร์ Assign"}</button>
       </div>
       {(() => { // the selection does not fit the load kind (user: assigned with UNI while slabs were picked)
         const want = { floor: "panel", uni: "beam", con: "beam", node: "column" }[form.kind], have = Object.entries(sel).filter(([, n]) => n > 0).map(([k]) => k);
         if (!have.length || have.includes(want)) return null;
         const to = have.includes("panel") ? "floor" : have.includes("beam") ? "uni" : "node";
-        return <p className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-[#b54708]">ที่เลือกไว้เป็น{{ panel: "แผ่นพื้น", beam: "คาน", column: "เสา" }[have[0]]} แต่ชนิดน้ำหนักคือ {KINDS.find((k) => k[0] === form.kind)[1]} — <button onClick={() => setForm({ ...form, kind: to })} className="font-medium text-brand-600 underline">เปลี่ยนเป็น {KINDS.find((k) => k[0] === to)[1]}</button></p>;
+        return <div className="mt-2"><Notice kind="warn">ที่เลือกไว้เป็น{{ panel: "แผ่นพื้น", beam: "คาน", column: "เสา" }[have[0]]} แต่ชนิดน้ำหนักคือ {KINDS.find((k) => k[0] === form.kind)[1]} — <button onClick={() => setForm({ ...form, kind: to })} className="font-medium text-brand-600 underline">เปลี่ยนเป็น {KINDS.find((k) => k[0] === to)[1]}</button></Notice></div>;
       })()}
-      {msg && <p className="mt-1 text-[11px] text-brand-600">{msg}</p>}
-      <p className="mt-1 text-[10.5px] text-gray-400">UNI ใส่ตลอดความยาวคาน · ผนังกรอกเป็น kg/m ได้เลย · Floor Load แทนค่าเดิมของแผ่น · น้ำหนักจุด LL คิดเต็มทุกช่วง (ปลอดภัย)</p>
-    </Card>
+      {msg && <div className="mt-2"><Notice kind="ok">{msg}</Notice></div>}
+      <Note>UNI ใส่ตลอดความยาวคาน · ผนังกรอกเป็น kg/m ได้เลย · Floor Load แทนค่าเดิมของแผ่น · น้ำหนักจุด LL คิดเต็มทุกช่วง (ปลอดภัย)</Note>
+    </Panel>
   </>);
 }
 
 function Item({ it, cur, setPickSet, active, onUse }) {
   const [v, setV] = useState(it.v);
   return (
-    <div onMouseEnter={() => highlight({ floor: cur, segs: it.segs ?? [], polys: it.polys ?? [], pts: it.pts ?? [], p: it.pts?.[0] ?? null, bad: false })} onMouseLeave={() => highlight(null)}
-      onClick={(e) => { if (onUse && !["INPUT", "BUTTON"].includes(e.target.tagName)) onUse(); }} title={onUse ? "คลิก = ใช้รายการนี้ในฟอร์ม Assign" : undefined}
-      className={`group flex items-center gap-1.5 rounded px-1 py-0.5 ${onUse ? "cursor-pointer" : ""} ${active ? "bg-brand-50 ring-1 ring-brand-300 dark:bg-white/10" : "hover:bg-brand-50/60 dark:hover:bg-white/5"}`}>
-      <span className={`h-2 w-2 shrink-0 rounded-sm ${it.empty ? "bg-gray-300" : "bg-[#12b76a]"}`} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-mono text-[11.5px] text-gray-800 dark:text-gray-200">{it.text}</div>
-        <div className="truncate text-[10.5px] text-gray-500" title={it.note}>{it.note}</div>
-      </div>
-      {!it.ro && <input type="number" value={v} onChange={(e) => setV(e.target.value)} onBlur={() => Number(v) !== it.v && it.set(Number(v) || 0)} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        className="h-6 w-16 rounded border border-gray-200 bg-white px-1 text-right text-[11.5px] tabular-nums dark:border-gray-700 dark:bg-gray-900" title="แก้ค่า = แก้ทุกชิ้นในรายการนี้" />}
-      {it.pick?.length > 0 && <button onClick={() => setPickSet([...it.pick])} className="rounded px-1 text-[10.5px] text-brand-500 hover:underline" title="เลือกชิ้นที่ได้รับรายการนี้บนแปลน">เลือก</button>}
-      {it.del && <button onClick={it.del} className="text-gray-300 hover:text-red-500" title="ลบรายการนี้"><Trash2 className="h-3.5 w-3.5" /></button>}
-    </div>);
+    <Row active={active} onClick={onUse ?? null} rowTitle={onUse ? "คลิก = ใช้รายการนี้ในฟอร์ม Assign" : undefined}
+      onEnter={() => highlight({ floor: cur, segs: it.segs ?? [], polys: it.polys ?? [], pts: it.pts ?? [], p: it.pts?.[0] ?? null, bad: false })} onLeave={() => highlight(null)}
+      lead={<span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${it.empty ? "bg-gray-300" : "bg-[#12b76a]"}`} />}
+      // the number is in the box at the right: the title keeps the load kind, the unit goes under the box (as in the other panels)
+      title={it.ro ? it.text : it.text.split(" −")[0]} sub={it.note}
+      value={!it.ro ? <input type="number" value={v} onChange={(e) => setV(e.target.value)} onBlur={() => Number(v) !== it.v && it.set(Number(v) || 0)} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} className={`${smallNum} !w-16`} title="แก้ค่า = แก้ทุกชิ้นในรายการนี้" /> : null}
+      unit={!it.ro ? it.text.replace(/^.* −[\d,]+(\.\d+)? /, "") : null}
+      tail={<>{it.pick?.length > 0 && <button onClick={() => setPickSet([...it.pick])} className="shrink-0 rounded px-1 text-[11px] font-medium text-brand-600 hover:underline" title="เลือกชิ้นที่ได้รับรายการนี้บนแปลน">เลือก</button>}
+        {it.del && <button onClick={it.del} className="shrink-0 text-gray-300 hover:text-red-500" title="ลบรายการนี้"><Trash2 className="h-3.5 w-3.5" /></button>}</>} />);
 }

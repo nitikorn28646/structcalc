@@ -39,6 +39,8 @@ import { FootingTypes } from "./FootingTypes.jsx";
 import { BeamTypeFigures, ColumnTypeFigures } from "./DesignFigures.jsx";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
 import WallTypesPanel from "./WallTypesPanel.jsx";
+import LoadLibPanel from "./LoadLibPanel.jsx";
+import { Note, Notice, Panel as SidePanel, btnCls } from "./PanelKit.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
@@ -682,27 +684,15 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   ) : step === "loads" && sub === "cases" ? (<LoadCases frame={frame} fl={fl} an={an} cur={cur} setFloor={setFloor} multi={multiSel} setPickSet={setPickSet} armed={armed} setArmed={setArmed} pickRef={pickRef} onLateral={() => setSubState("lateral")} />
   ) : step === "loads" && sub === "wall" ? (<WallTypesPanel wallTypes={wallTypes} setWallTypes={(v) => set("wallTypes", v)} frame={frame} />
   ) : step === "loads" && sub === "other" ? (<>
-          <Card title="คลังน้ำหนัก (เลือกแล้ววาดบนแปลน)" icon={Ruler}>
-            <div className="space-y-1 text-[12px]">
-              {[["line", "แผ่ตามแนว (กก./ม.) · เครื่องมือ ราว/น้ำหนักเส้น"], ["point", "แรงจุด (กก.) · เครื่องมือ น้ำหนักจุด"], ["area", "ต่อพื้นที่ (กก./ม.²) · เครื่องมือ เพิ่มบนพื้น"]].map(([kind, title]) => (
-                <div key={kind}><p className="mt-1 text-[11px] font-semibold text-gray-500">{title}</p>
-                  {loadLib.map((it, i) => it.kind === kind && <label key={it.id} className={`flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-0.5 ${libSel === it.id ? "bg-brand-50 text-brand-600" : "hover:bg-gray-50"}`}>
-                    <input type="radio" checked={libSel === it.id} onChange={() => setLibSel(it.id)} />
-                    <input defaultValue={it.name} key={it.name} title={it.name} onBlur={(e) => set("loadLib", loadLib.map((x, j) => (j === i ? { ...x, name: e.target.value || x.name } : x)))} className="h-6 flex-1 rounded border border-transparent bg-transparent px-1 hover:border-gray-300" />
-                    <input type="number" value={it.v} onChange={(e) => set("loadLib", loadLib.map((x, j) => (j === i ? { ...x, v: Number(e.target.value) } : x)))} className="h-6 w-16 rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums" />
-                    <button onClick={() => set("loadLib", loadLib.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3 w-3" /></button></label>)}
-                  <button onClick={() => set("loadLib", [...loadLib, { id: `u${Date.now()}`, name: "รายการใหม่", kind, v: kind === "point" ? 500 : 100 }])} className="ml-1 text-[11px] text-brand-500">+ เพิ่ม</button></div>))}
-              <p className="pt-1 text-[11px] text-gray-400">เลือกรายการ → เลือกเครื่องมือทางซ้าย → คลิกบนแปลน · แก้ชื่อ/ค่าได้ · บันทึกเป็นค่ามาตรฐานของคุณได้ในขั้น 0</p>
-            </div>
-          </Card>
-          <Card title="น้ำหนักอื่น" icon={Ruler}>
-            <div className="space-y-2 text-[12px] text-gray-500">
+          <LoadLibPanel loadLib={loadLib} setLoadLib={(v) => set("loadLib", v)} libSel={libSel} setLibSel={setLibSel} />
+          <SidePanel title="หลังคา และน้ำหนักอื่น" icon={Ruler}>
+            <div className="space-y-2">
               {onRoofFromFrame && <RoofLinkCard frame={frame} roof={roof} onFromFrame={onRoofFromFrame} set={set} />}
-              <p>ราวกันตก/น้ำหนักเส้น: วาดที่ปลายพื้นยื่น (ลงคานริม + แรงบิด) บนคาน หรือบนพื้น · น้ำหนักจุด: คลิกวาง · ฝ้า/งานระบบ: แก้ที่แผ่นพื้น (ขั้น 2)</p>
-              <button onClick={roofLoads} disabled={!roof?.pts} className="w-full rounded-lg px-3 py-2 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50 disabled:opacity-40">{frame.roofLink?.on ? `เชื่อมกับ ${frame.floors[frame.roofLink.floor]?.name ?? "-"} อยู่ · ย้ายมาชั้นนี้` : "เชื่อมแรงจากหลังคาลงชั้นนี้ (อัตโนมัติ)"}</button>
-              {roofMsg && <p className="text-[#d6409f]">{roofMsg}</p>}
+              <button onClick={roofLoads} disabled={!roof?.pts} className={`${btnCls} w-full justify-center py-1.5`}>{frame.roofLink?.on ? `เชื่อมกับ ${frame.floors[frame.roofLink.floor]?.name ?? "-"} อยู่ · ย้ายมาชั้นนี้` : "เชื่อมแรงจากหลังคาลงชั้นนี้ (อัตโนมัติ)"}</button>
+              {roofMsg && <Notice kind="warn">{roofMsg}</Notice>}
             </div>
-          </Card></>
+            <Note>ราวกันตก / น้ำหนักเส้น: วาดที่ปลายพื้นยื่น (ลงคานริม + แรงบิด) บนคาน หรือบนพื้น · น้ำหนักจุด: คลิกวาง · ฝ้า / งานระบบ: แก้ที่แผ่นพื้น (ขั้น 2)</Note>
+          </SidePanel></>
   ) : step === "stair" ? (          <Card title="บันได" icon={Ruler}><p className="text-[12px] text-gray-500">วาดบันไดบนชั้นที่บันไดเริ่มขึ้น แล้วบันไดจะขึ้นไปชั้นบนถัดไป (เก็บไว้ที่ชั้นบน แสดงเป็นเส้นประบนชั้นนี้ คลิกเพื่อแก้) · วาดกรอบช่องบันได แล้วเลือกแบบ: {Object.values(STAIR_KINDS).join(" · ")} · ปลายล่างของแบบพาดตามยาว/มีชานพักลงคานชั้นล่างที่แนวเดียวกัน</p></Card>
   ) : step === "slab" ? (<>          <Card title="พื้น" icon={Ruler}><p className="text-[12px] text-gray-500">คลิกแผ่นพื้นเพื่อเลือกชนิด S หล่อในที่ / PS พื้นสำเร็จ (เลือกทิศวางแผ่น) / GS วางบนดิน หรือช่องเปิด · เครื่องมือ "พื้นยื่น" คลิกบนคานด้านที่จะยื่น · ค่าเริ่มต้นความหนา ปูผิว จร อยู่ในการ์ดชั้น</p></Card>
     <Card title={`ค่าเริ่มต้นแผ่นพื้น — ${fl.name}`} icon={Layers}>
