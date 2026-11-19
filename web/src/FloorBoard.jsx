@@ -45,6 +45,9 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const [start, setStart] = useState(null), [cur, setCur] = useState(null), [drag, setDrag] = useState(null), [hist, setHist] = useState({ undo: [], redo: [] });
   // box selection (select tool, drag on empty space): left → right = window (fully inside), right → left = crossing (touching);
   // Delete removes everything selected in one undo step; Shift / middle-drag pans
+  // wall to draw: type + height picked before drawing, remembered in this browser (structcalc.wallDraw)
+  const [wallDraw, setWallDrawS] = useState(() => { try { return { auto: true, h: 3, ...JSON.parse(localStorage.getItem("structcalc.wallDraw") || "{}") }; } catch { return { auto: true, h: 3 }; } });
+  const setWallDraw = (p) => setWallDrawS((w) => { const n = { ...w, ...p }; try { localStorage.setItem("structcalc.wallDraw", JSON.stringify(n)); } catch { /* ignore */ } return n; });
   const [box, setBox] = useState(null), [multi, setMulti] = useState([]), [menu, setMenu] = useState(null), hl = useHighlight(), [tScale] = useTextScale();
   const [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null), [moveMsg, setMoveMsg] = useState("");
   useEffect(() => { setToolState(tools[1]?.[0] ?? "select"); setStart(null); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -130,7 +133,10 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     }
     if (tool === "line") { const it = libItem?.kind === "line" ? libItem : null; commit({ lineLoads: [...lineLoads, { a: start, b: p, q: it?.v ?? 100, name: it?.name ?? "ราวกันตก" }] }); setStart(p); return; }
     if (tool === "beam") commit({ beams: [...beams, { a: start, b: p, type: null }] });
-    else commit({ walls: [...walls, { a: start, b: p, kind: wallTypes[0]?.id ?? "brick", h: 3, hAuto: true, open: 0, layers: 1 }] }); // clear height under the beam above
+    else { // the wall type and height chosen above the plan before drawing (user 2026-11-19); auto = clear height under the beam above
+      const kind = wallTypes.find((t) => t.id === wallDraw.kind)?.id ?? wallTypes[0]?.id ?? "brick", auto = wallDraw.auto !== false;
+      commit({ walls: [...walls, { a: start, b: p, kind, h: auto ? 3 : wallDraw.h, hAuto: auto, open: 0, layers: 1 }] });
+    }
     setStart(p);
   };
   const ITEM = { column: ["columns", (c) => [c]], beam: ["beams", (b) => [b.a, b.b]], wall: ["walls", (w) => [w.a, w.b]], lineLoad: ["lineLoads", (l) => [l.a, l.b]],
@@ -325,6 +331,18 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             {types.map((t, ti) => <option key={ti} value={ti}>{t.name} · {Math.round(t.b * 100)}×{Math.round(t.h * 100)}{t.manual ? " (สร้างเอง)" : ""}</option>)}
             <option value="auto">อัตโนมัติ (โปรแกรมเลือก)</option>
           </select>)}
+        {tool === "wall" && wallTypes.length > 0 && (
+          <span id="sc-wall-draw" className="flex flex-wrap items-center gap-1.5 rounded-md bg-amber-50 px-2 py-0.5 text-[12px] text-gray-700 ring-1 ring-amber-200" title="ผนังเส้นต่อไปที่ลากจะได้ชนิดและความสูงนี้ — แก้ทีละเส้นได้ภายหลังที่แผงขวา">
+            ผนังที่จะลาก
+            <select value={wallTypes.some((t) => t.id === wallDraw.kind) ? wallDraw.kind : wallTypes[0].id} onChange={(e) => setWallDraw({ kind: e.target.value })} className="h-7 rounded-md border border-gray-300 bg-white px-1 text-[12px] dark:bg-gray-900">
+              {wallTypes.map((t) => <option key={t.id} value={t.id}>{t.name}{t.w ? ` · ${Math.round(t.w)} กก./ม.²` : ""}</option>)}
+            </select>
+            สูง
+            <select value={wallDraw.auto !== false ? "auto" : "fix"} onChange={(e) => setWallDraw({ auto: e.target.value === "auto" })} className="h-7 rounded-md border border-gray-300 bg-white px-1 text-[12px] dark:bg-gray-900">
+              <option value="auto">อัตโนมัติ (ถึงใต้คานชั้นบน)</option><option value="fix">กำหนดเอง</option>
+            </select>
+            {wallDraw.auto === false && <><input type="number" min={0.1} max={20} step={0.05} value={wallDraw.h} onChange={(e) => { const v = Number(e.target.value); if (v > 0) setWallDraw({ h: v }); }} className="h-7 w-16 rounded-md border border-gray-300 bg-white px-1 text-right text-[12px] dark:bg-gray-900" />ม.</>}
+          </span>)}
         {moveMsg && <span className="rounded-md bg-green-50 px-2 py-0.5 text-[12px] text-green-700 ring-1 ring-green-200">{moveMsg}</span>}
         <TextSizeControl />
         {onDxf && <button onClick={onDxf} className={`${btn} text-gray-600 ring-gray-300`}><Download className="h-3.5 w-3.5" />DXF</button>}

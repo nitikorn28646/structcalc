@@ -645,3 +645,7 @@ that fails gets an.suggest[m] (frame.js: lightest type passing all its spans wit
 Ctrl+A select beams (BOXABLE.result) → right-click menu or toolbar select "ใช้ type กับคานที่เลือก (n)" (also in the frame step); no deleting in
 result steps (key + menu). Yasothon regress identical; E2E 47/47; browser test: auto 3 types → 53 locked 57/57, B1 weakened → its 29 spans stay
 B1 (auto would move all), new B10 unticked + unused, delete B2 → other names unchanged, Ctrl+A + assign → 26 hand-set, Ctrl+Z back.
+WALL TO DRAW (2026-11-19, user "อยากเลือกชนิดผนังและความสูงก่อนแล้วค่อยลาก"): FloorBoard toolbar #sc-wall-draw while the wall tool is active — wall
+type (with kg/m²) + height อัตโนมัติ (clear height under the beam above, hAuto) | กำหนดเอง (number, hAuto false); every wall drawn takes it; kept per
+browser in localStorage structcalc.wallDraw (unknown type id → first type). Each wall can still be changed in the inspector. Browser check:
+gypsum 2.50 → W21 · 75 kg/m; E2E 47/47.
