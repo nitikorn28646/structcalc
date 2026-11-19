@@ -12,6 +12,7 @@ import { DEFAULT_WALL_TYPES, resolveWall, wallThick, wallsOf } from "../engine/f
 import { useHighlight } from "./highlight.js";
 import { RoofFrameMembers, roofSeat } from "./Roof3D.jsx";
 import { baseLevel } from "./StoreyTable.jsx";
+import { stairRiseOf } from "./StairPanel.jsx";
 import { beamPieces, edgeWidth, insetPolygon } from "./joints3d.js";
 
 const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"], ["roofFrame", "โครงหลังคา"]];
@@ -102,7 +103,9 @@ export function Stair({ st, raw = {}, zb, zt, color }) {
       <mesh position={lc}><boxGeometry args={ax === "x" ? [Ll, t, B] : [B, t, Ll]} /><meshStandardMaterial color={color} /><Edges color="#667085" /></mesh>
     </group>);
   }
-  return <Flight origin={at(0, 0, zb)} u={U} v={V} run={L} rise={H} n={steps(H)} t={t} w={B} color={color} />;
+  // straight flight: its real run (risers − 1) × tread, ending at the head edge (s = L); a longer opening leaves floor in front of the foot
+  const n = steps(H), T0 = raw.tread > 0.1 ? raw.tread : 0.25, run = Math.min(L, Math.max(0.3, (n - 1) * T0));
+  return <Flight origin={at(L - run, 0, zb)} u={U} v={V} run={run} rise={H} n={n} t={t} w={B} color={color} />;
 }
 
 // steel roof planes from the roof module (loaded on demand: the skeleton is a wasm module)
@@ -219,7 +222,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                   if (x < L - 0.01) parts.push([x, L, 0, H]);
                   return <group key={`w${i}`}>{(w0.gable ? [[0, L, 0, w.h]] : parts).map(([a, b, z, h], j) => <Box key={j} p={P(a)} q={P(b)} w={th} z0={Zk + z} h={h} color={col} opacity={0.6} />)}</group>;
                 })}
-                {on.stair && an?.stairs.map((st, i) => <Stair key={`s${i}`} st={st} raw={fl.stairs?.[st.i] ?? {}} zb={zb} zt={Zk} color="#cfd4dc" />)}
+                {on.stair && an?.stairs.map((st, i) => <Stair key={`s${i}`} st={st} raw={fl.stairs?.[st.i] ?? {}} zb={Zk - stairRiseOf(frame, k, fl.stairs?.[st.i] ?? {})} zt={Zk} color="#cfd4dc" />)}
               </group>
             );
           })}

@@ -1,11 +1,11 @@
 // Beam & column framing (P1: one floor): draw columns / beams on a grid, slab panels and loads, continuous beams, beam types.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ColumnChart, LineDiagram, SlabStrip } from "./ReportDiagrams.jsx";
-import { StoreyTable } from "./StoreyTable.jsx";
+import { StoreyTable, elevations } from "./StoreyTable.jsx";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tip } from "@/components/ui/tooltip";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { StairDetail, StairInputs } from "./StairPanel.jsx";
+import { StairDetail, StairInputs, stairRiseOf } from "./StairPanel.jsx";
 import { DesignCriteria } from "./DesignCriteria.jsx";
 import { BeamLoadTable, PanelTable } from "./BulkTables.jsx";
 import { arcGeom, quarterSagitta } from "../engine/arc.js";
@@ -442,7 +442,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const above = frame.floors[cur + 1], below = frame.floors[cur - 1];
   // stairs: drawn on the floor they start from, stored on the floor above (the floor they reach) — the board shows both
   const stairUp = above ? (ns) => { const n = (above.stairs ?? []).length; set("floors", frame.floors.map((f, i) => (i === cur + 1 ? { ...f, stairs: [...(f.stairs ?? []), ns] } : f))); set("cur", cur + 1); setSel({ kind: "stair", i: n }); } : null;
-  const boardEl = (<FloorBoard onMoveTo={moveTo} moveFloors={moveFloors} onAssignType={boardStep === "frame" || boardStep === "result" ? (idx, ti) => setFloor({ beams: assignBeams({ floors: [fl] }, 0, idx, ti)[0].beams }) : null} stairsAbove={above?.stairs ?? []} aboveName={above?.name ?? ""} belowName={below?.name ?? "ฐานราก"} onStairUp={stairUp} onPickAbove={(i) => { set("cur", cur + 1); setSel({ kind: "stair", i }); }} floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
+  const boardEl = (<FloorBoard onMoveTo={moveTo} moveFloors={moveFloors} onAssignType={boardStep === "frame" || boardStep === "result" ? (idx, ti) => setFloor({ beams: assignBeams({ floors: [fl] }, 0, idx, ti)[0].beams }) : null} stairsAbove={above?.stairs ?? []} aboveName={above?.name ?? ""} belowName={below?.name ?? (stairRiseOf(frame, 0, {}) < fl.h - 1e-6 ? "ดิน ±0.00" : "ฐานราก")} onStairUp={stairUp} onPickAbove={(i) => { set("cur", cur + 1); setSel({ kind: "stair", i }); }} floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   // click a beam / column in 3D = select it (its floor becomes the current one) — user 2026-11-04
   const pick3d = (h) => { if (h.floor !== cur) set("cur", h.floor); setSel({ kind: h.kind, i: h.i }); };
@@ -605,7 +605,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <Result className="col-span-2">ยาว {fmt(L, 2)} × สูง {fmt(rw.h, 2)} ม.{wall.gable ? " (เฉลี่ย)" : ""} = {fmt(L * rw.h, 2)} ม.² − ช่องเปิด {fmt(oArea || (L * rw.h * (rw.open ?? 0)) / 100, 2)} ม.²
                 <br /><b className="text-[14px] text-[#b54708]">{fmt(wallLoad(rw, wallTypes), 0)} กก./ม.</b> · {r?.on.length ? `ลงคาน ${r.on.map((o) => (typeof o === "object" ? `แนว ${o.line + 1}` : o)).join(", ")}` : r?.panel ? `กระจายลงแผ่นพื้น ${r.panel}` : "ยังไม่มีคาน/พื้นรับ"}</Result>
             </div>); })()}
-            {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={fl.h} r0={an.stairs?.[sel.i]} mat={frame.mat} onLandingBeam={() => {
+            {stair && <><StairInputs st={stair} set={(p) => setList("stairs", p)} H={stairRiseOf(frame, cur, stair)} Hmax={fl.h} zTop={elevations(frame)[cur]}
+              riseNote={stairRiseOf(frame, cur, {}) < fl.h - 1e-6 ? `จากดิน ±0.00 ถึงระดับชั้นนี้ (ไม่ใช่จากโคนเสา)` : "ความสูงชั้น"} r0={an.stairs?.[sel.i]} mat={frame.mat} onLandingBeam={() => {
               // landing edge (far end of the run) extended along its line to the nearest columns of this floor on each side
               const x0 = Math.min(stair.a[0], stair.b[0]), x1 = Math.max(stair.a[0], stair.b[0]), y0 = Math.min(stair.a[1], stair.b[1]), y1 = Math.max(stair.a[1], stair.b[1]);
               const ax = stair.up?.[1] ?? "x", pos = stair.up?.[0] !== "-", c = ax === "x" ? (pos ? x1 : x0) : (pos ? y1 : y0), lo = ax === "x" ? y0 : x0, hi = ax === "x" ? y1 : x1;
@@ -696,7 +697,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             </div>
             <Note>ราวกันตก / น้ำหนักเส้น: วาดที่ปลายพื้นยื่น (ลงคานริม + แรงบิด) บนคาน หรือบนพื้น · น้ำหนักจุด: คลิกวาง · ฝ้า / งานระบบ: แก้ที่แผ่นพื้น (ขั้น 2)</Note>
           </SidePanel></>
-  ) : step === "stair" ? (          <SidePanel title="บันได" icon={Ruler}><p className="text-[12px] leading-relaxed text-gray-600">วาดบันไดบนชั้นที่บันไดเริ่มขึ้น แล้วบันไดจะขึ้นไปชั้นบนถัดไป (เก็บไว้ที่ชั้นบน แสดงเป็นเส้นประบนชั้นนี้ คลิกเพื่อแก้) · วาดกรอบช่องบันได แล้วเลือกแบบ: {Object.values(STAIR_KINDS).join(" · ")} · ปลายล่างของแบบพาดตามยาว/มีชานพักลงคานชั้นล่างที่แนวเดียวกัน</p><Note>คลิกบันไดบนแปลนเพื่อแก้ขนาด ทิศ น้ำหนัก และเหล็กเสริม</Note></SidePanel>
+  ) : step === "stair" ? (          <SidePanel title="บันได" icon={Ruler}><p className="text-[12px] leading-relaxed text-gray-600">บันไดท้องเรียบ: เครื่องมือ "บันไดเส้น" บนแปลนชั้นที่มีคานรับหัวบันได — คลิกบนคานบน แล้วคลิกจุดเริ่มบันได · ความสูง ระดับต้นบันได กว้าง ลูกตั้ง ลูกนอน แก้ที่แผงนี้หลังคลิกบันได · แบบอื่น ใช้ "บันได (กรอบ)": วาดบันไดบนชั้นที่บันไดเริ่มขึ้น แล้วบันไดจะขึ้นไปชั้นบนถัดไป (เก็บไว้ที่ชั้นบน แสดงเป็นเส้นประบนชั้นนี้ คลิกเพื่อแก้) · วาดกรอบช่องบันได แล้วเลือกแบบ: {Object.values(STAIR_KINDS).join(" · ")} · ปลายล่างของแบบพาดตามยาว/มีชานพักลงคานชั้นล่างที่แนวเดียวกัน</p><Note>คลิกบันไดบนแปลนเพื่อแก้ขนาด ทิศ น้ำหนัก และเหล็กเสริม</Note></SidePanel>
   ) : step === "slab" ? (<>          <Card title="พื้น" icon={Ruler}><p className="text-[12px] text-gray-500">คลิกแผ่นพื้นเพื่อเลือกชนิด S หล่อในที่ / PS พื้นสำเร็จ (เลือกทิศวางแผ่น) / GS วางบนดิน หรือช่องเปิด · เครื่องมือ "พื้นยื่น" คลิกบนคานด้านที่จะยื่น · ค่าเริ่มต้นความหนา ปูผิว จร อยู่ในการ์ดชั้น</p></Card>
     <Card title={`ค่าเริ่มต้นแผ่นพื้น — ${fl.name}`} icon={Layers}>
           <div className="grid grid-cols-2 gap-3">
@@ -786,7 +787,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     </div>);
   const center = page ? <div className="min-h-0 flex-1 overflow-auto p-1">{page}</div>
     : step === "stair" && stair && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,1fr)_1fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>
-      <StairDetail st={stair} i={sel.i} H={fl.h} r0={an.stairs?.[sel.i]} row={designSlabs(an, fl, frame.mat).find((x) => x.kind === "ST" && x.si === sel.i)} /></div>
+      <StairDetail st={stair} i={sel.i} H={stairRiseOf(frame, cur, stair)} r0={an.stairs?.[sel.i]} row={designSlabs(an, fl, frame.mat).find((x) => x.kind === "ST" && x.si === sel.i)} /></div>
     : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,2fr)_3fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>{lineDiagram}</div>
     : step === "footing" ? view3d
     : view === "3d" ? view3d : view === "split" ? <div className="grid min-h-0 flex-1 grid-cols-2 gap-3"><div className="min-h-0">{boardEl}</div>{view3d}</div> : boardEl;

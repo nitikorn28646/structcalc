@@ -7,6 +7,16 @@ import { Field, NumberInput, Select, inputCls } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import { STAIR_KINDS, stairLoads, stairRT } from "../engine/floor.js";
 import { SLAB_BARS } from "../engine/tables.js";
+import { baseLevel, elevations } from "./StoreyTable.jsx";
+
+// the height a stair climbs (user 2026-11-19: the bottom of a ground-floor stair went down to the column base): st.rise when set (≤ the storey
+// height); else the storey height — except on the lowest floor standing above the ground: from the ground ±0.00 up to that floor
+export function stairRiseOf(frame, k, st) {
+  const H = frame.floors[k]?.h ?? 3;
+  if (st?.rise > 0.05) return Math.min(st.rise, H);
+  if (k === 0) { const z = elevations(frame)[0]; if (baseLevel(frame) < -0.01 && z > 0.05 && z < H) return z; }
+  return H;
+}
 
 const LIVE = [[300, "บ้านพักอาศัย 300"], [400, "อาคารชุด / หอพัก 400"], [500, "สำนักงาน / อาคารสาธารณะ 500"]];
 const Ok = ({ ok }) => <span className={`ml-1 rounded px-1 text-[10px] font-semibold ${ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>{ok ? "OK" : "NG"}</span>;
@@ -42,9 +52,9 @@ export function stairResize(st, B, Lr) {
   const cx = (x0 + x1) / 2, head = pos ? y1 : y0, foot = pos ? head - Lr : head + Lr;
   return { a: [r3(cx - B / 2), r3(Math.min(head, foot))], b: [r3(cx + B / 2), r3(Math.max(head, foot))] };
 }
-const FOOT = { beam: ["วางบนคานชั้นล่าง", "text-green-700"], panel: ["ไม่มีคาน → กระจายลงแผ่นพื้นชั้นล่าง", "text-[#b54708]"], ground: ["ลงดิน / ฐานราก (ไม่เข้าคาน)", "text-gray-600"], none: ["ไม่มีคานหรือพื้นรับ — น้ำหนักส่วนนี้ไม่เข้าโครงสร้าง", "text-red-600"], pending: ["ลงชั้นล่าง", "text-gray-600"] };
+const FOOT = { beam: ["วางบนคานชั้นล่าง", "text-green-700"], panel: ["ไม่มีคาน → กระจายลงแผ่นพื้นชั้นล่าง", "text-[#b54708]"], ground: ["ลงดิน (ไม่เข้าคาน)", "text-gray-600"], none: ["ไม่มีคานหรือพื้นรับ — น้ำหนักส่วนนี้ไม่เข้าโครงสร้าง", "text-red-600"], pending: ["ลงชั้นล่าง", "text-gray-600"] };
 
-export function StairInputs({ st, set, H, r0, mat, onLandingBeam }) {
+export function StairInputs({ st, set, H, r0, mat, onLandingBeam, zTop = null, Hmax = H, riseNote = "" }) {
   const [auto, setAuto] = useState(null);
   const n = (k, label, unit, step, def) => <Field label={label} unit={unit}><NumberInput value={st[k] ?? def} step={step} onChange={(v) => set({ [k]: v })} /></Field>;
   const g = stairGeom(st, H, r0);
@@ -67,7 +77,13 @@ export function StairInputs({ st, set, H, r0, mat, onLandingBeam }) {
         {r0.headOk !== null && <span className={r0.headOk ? "text-green-700" : "text-red-600"}>ปลายบน: {r0.headOk ? "วางบนคานชั้นนี้" : "ไม่มีคานรับ — วาดคานที่หัวบันได"}</span>}
         {r0.headOk !== null && r0.foot && <br />}
         {r0.foot && <span className={FOOT[r0.foot]?.[1]}>ปลายล่าง: {FOOT[r0.foot]?.[0]}</span>}</p>}
-      <Sub>รูปทรง (ขึ้นสูง {fmt(H, 2)} ม. ตามระดับชั้น)</Sub>
+      <Sub>ความสูงที่บันไดขึ้น</Sub>
+      <Field label="สูง (ต้น → หัวบันได)" unit="m"><Commit value={+H.toFixed(3)} step="0.05" onCommit={(v) => v > 0.1 && set({ rise: +Math.min(v, Hmax).toFixed(3) })} /></Field>
+      {zTop != null ? <Field label="ระดับต้นบันได" unit="m"><Commit value={+(zTop - H).toFixed(3)} step="0.05" onCommit={(z) => { const r = zTop - z; if (r > 0.1) set({ rise: +Math.min(r, Hmax).toFixed(3) }); }} /></Field> : <div />}
+      <p className="col-span-2 -mt-2 text-[11px] text-gray-500">{st.rise > 0.05
+        ? <>กำหนดเอง · หัวบันไดที่ระดับชั้นนี้{zTop != null ? ` ${zTop >= 0 ? "+" : "−"}${fmt(Math.abs(zTop), 2)}` : ""} · <button onClick={() => set({ rise: undefined })} className="font-medium text-brand-600 hover:underline">ใช้ค่าอัตโนมัติ</button></>
+        : <>อัตโนมัติ: {riseNote || "ความสูงชั้น"} · พิมพ์ความสูงหรือระดับต้นบันไดเองได้ (ไม่เกินความสูงชั้น {fmt(Hmax, 2)} ม.)</>}</p>
+      <Sub>รูปทรง (ขึ้นสูง {fmt(H, 2)} ม.)</Sub>
       {/* user 2026-11-19: type the riser OR the number of risers, the tread OR the run — the other one follows (H = storey height) */}
       {n("riser", "ลูกตั้ง", "m", "0.005", 0.17)}
       <Field label="จำนวนลูกตั้ง" unit="ขั้น"><Commit value={g.n} step="1" onCommit={(v) => { const k = Math.max(2, Math.min(Math.floor(H / 0.051), Math.round(v))); set({ riser: +(H / k).toFixed(5) }); }} /></Field>

@@ -687,3 +687,10 @@ slab moments) instead of being dropped with a warning; truly unsupported → "�
 น้ำหนัก" (riser × n, tread, run need / opening, width, 2R+T, checks, which end + foot status, from StairPanel stairGeom). Help / checklist 3.1 updated.
 cli/stair-check.mjs 17/17 (+ line stair foot on a slab: whole load in the frame, top-only, parallel head refused). Regress identical, verify20 20/20,
 report-editions ALL OK, E2E 47/47.
+STAIR RISE (2026-11-19, user: the bottom of a ground-floor stair went down to the footings — "ต้องกำหนดความสูงและระยะได้"): StairPanel
+stairRiseOf(frame, k, st) = st.rise when set (≤ storey height), else the storey height, EXCEPT the lowest floor standing above the ground
+(baseLevel < 0 and its level > 0): from ground ±0.00 to that level (user's case: base −1.50, floor +0.50 → 0.50 m, not 2.00). Panel section
+"ความสูงที่บันไดขึ้น": สูง (ต้น → หัว) | ระดับต้นบันได (commit fields, capped at the storey height) + "ใช้ค่าอัตโนมัติ"; geometry / steps / auto sizing
+use it (H prop); Frame3D Stair zb = top − rise and a straight flight is drawn with its real run (risers − 1) × tread ending at the head edge;
+report stair table column "สูง (ระดับต้น → หัว)"; plan label "ขึ้นจาก ดิน ±0.00" on the lowest floor. Engine loads unchanged (riser / tread only).
+Test project web/public/projects/_stair2.json (git-ignored). stair-check 17/17, regress identical, report-editions ALL OK, E2E 47/47.
