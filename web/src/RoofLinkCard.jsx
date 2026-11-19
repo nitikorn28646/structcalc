@@ -2,7 +2,7 @@
 // below it every roof bearing point is listed with where its load goes (column / beam / moved to the nearest column) and, for a
 // point with nothing under it, the fixes in one click: a carrier beam through it (between the nearest beams) or a column under it.
 import { useState } from "react";
-import { carrierBeam } from "./roofLink.js";
+import { carrierBeam, snapRoofToFrame } from "./roofLink.js";
 import { highlight } from "./highlight.js";
 import { elevations, levelText } from "./StoreyTable.jsx";
 
@@ -20,6 +20,12 @@ export function RoofLinkCard({ frame, roof, onFromFrame, set, setRoof = null }) 
   const addCol = (p) => setFloor({ columns: [...fl.columns.filter((c) => !near(c, p.at ?? p.p)), (p.at ?? p.p).map((v) => +(+v).toFixed(3))] });
   const show = open ?? false; // closed until asked (the header line already counts the unsupported points)
   // level check (user 2026-11-04): the wall plate should sit on the floor the roof loads go to
+  // plan offset (user 2026-11-19 "อะเสไม่วางบนเสา"): the roof drawn at the wall faces → its plates stand off the column centres in the 3D
+  const offPlan = ready ? Math.max(0, ...pts.filter((p) => p.to !== "moved").map((p) => p.snap ?? 0)) : 0;
+  const [snapMsg, setSnapMsg] = useState("");
+  const snapPlan = () => { const { patch, n, max } = snapRoofToFrame(roof, fl);
+    for (const [key, v] of Object.entries(patch)) setRoof(key, v);
+    setSnapMsg(n ? `ย้าย ${n} จุดของแปลนหลังคาเข้าศูนย์เสา/คานแล้ว (ไกลสุด ${max.toFixed(2)} ม.) — ชายคายื่นนับจากแนวใหม่` : "ไม่มีจุดที่ต้องย้าย"); };
   const topZ = elevations(frame)[k], dH = roof?.H != null && (roof.pts?.length ?? 0) >= 3 ? roof.H - topZ : 0, offLevel = link?.on && Math.abs(dH) > 0.02;
   return (
     <div className={`rounded-xl px-3 py-2 text-[12px] ring-1 ${ready && !moved.length ? "bg-[#ecfdf3] text-[#067647] ring-[#abefc6]" : "bg-[#fffaeb] text-[#b54708] ring-[#fdb022]"}`}>
@@ -31,6 +37,9 @@ export function RoofLinkCard({ frame, roof, onFromFrame, set, setRoof = null }) 
         {ready && pts.length > 0 && <button onClick={() => setOpen(!show)} className="rounded-lg bg-[#fff] px-3 py-1 font-medium ring-1 ring-current hover:bg-[#fff8eb]">{show ? "▲ ซ่อนตารางจุดถ่ายแรง" : "▼ ดูตารางจุดถ่ายแรง"}</button>}
         {offLevel && <span className="w-full rounded-md bg-[#fff] px-2 py-1 text-[#b54708] ring-1 ring-[#fdb022]">ระดับอะเส {levelText(roof.H)} {dH > 0 ? "สูงกว่า" : "ต่ำกว่า"}ระดับ {fl?.name} ({levelText(topZ)}) {Math.abs(dH).toFixed(2)} ม. — อะเสลอย{dH > 0 ? "เหนือ" : "ต่ำกว่า"}หัวเสา/คานในภาพ 3D{dH > 0 ? " (ถ้าจริงมีเสาตอม่อหลังคา ให้วางเสาชั้นบนเพิ่ม)" : ""}
           {setRoof && <button onClick={() => setRoof("H", +topZ.toFixed(2))} className="ml-2 rounded bg-[#b54708] px-2 py-0.5 font-medium text-[#fff]">ตั้งระดับอะเส = {levelText(topZ)}</button>}</span>}
+        {offPlan > 0.02 && <span className="w-full rounded-md bg-[#fff] px-2 py-1 text-[#b54708] ring-1 ring-[#fdb022]">แปลนหลังคาห่างศูนย์เสา/คานสูงสุด {offPlan.toFixed(2)} ม. (วาดที่ผิวผนัง) — แรงลงเสาถูกต้องแล้ว แต่ในภาพ 3D อะเสจะอยู่เยื้องหัวเสา
+          {setRoof && <button onClick={snapPlan} title="ย้ายมุมผนัง เสา อะเส และดั้งที่อยู่ห่างเสา/คานไม่เกิน 0.30 ม. เข้าศูนย์กลาง — ชายคายื่นจะนับจากแนวศูนย์เสา" className="ml-2 rounded bg-[#b54708] px-2 py-0.5 font-medium text-[#fff]">ย้ายแปลนหลังคาเข้าศูนย์เสา</button>}</span>}
+        {snapMsg && <span className="w-full text-[#067647]">{snapMsg}</span>}
         <button onClick={onFromFrame} className={`ml-auto rounded-lg px-3 py-1 font-medium ${ready ? "ring-1 ring-current" : "bg-brand-500 text-[#fff]"}`}>{ready ? "นำเข้าเสาใหม่จากโครงสร้าง" : "นำเข้าเสา + แปลนจากโครงสร้าง"}</button>
       </div>
       {ready && show && pts.length > 0 && <div className="mt-2 rounded-lg bg-[#fff] p-2 text-[#344054] ring-1 ring-[#eaecf0]">

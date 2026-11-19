@@ -88,3 +88,49 @@ export function roofFromFrame(frame, res) {
   return { pts: P, edges: P.map(() => ({ type: "hip" })), columns: frame.floors[top].columns.map((c) => [...c]), plates: P.map((a, i) => ({ a, b: P[(i + 1) % P.length] })),
     innerPlates: [], dang: null, supports: null, H: +Z.toFixed(2), ...(g ? { grid: { x0: g.x0 ?? 0, y0: g.y0 ?? 0, dx: g.dx, dy: g.dy, sub: g.sub ?? 1 } } : {}), linkFloor: top };
 }
+
+// Roof plan drawn at the wall faces (or by hand) a little off the structure (user 2026-11-19: "อะเสไม่วางบนเสา" in the 3D): the outline
+// corners move onto the linked floor within tol — a column centre, else the column / beam lines along X and Y (a corner with no column
+// lands on the crossing), else the nearest point of a slanted beam. Points ON the old outline (wall-plate ends, ดั้ง / columns / interior
+// plate ends on a wall) move with their edge; roof columns elsewhere go to the frame column within tol; interior plates and ดั้ง inside
+// the outline stay where they were drawn (they may be off the column lines on purpose). Returns { patch, n, max }.
+export function snapRoofToFrame(roof, floor, tol = 0.3) {
+  const cols = floor?.columns ?? [], beams = (floor?.beams ?? []).filter((b) => Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]) > 0);
+  const d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]), r3 = (q) => [+q[0].toFixed(3), +q[1].toFixed(3)];
+  const xs = [...cols.map((c) => c[0]), ...beams.filter((b) => Math.abs(b.a[0] - b.b[0]) < 1e-3).map((b) => b.a[0])];
+  const ys = [...cols.map((c) => c[1]), ...beams.filter((b) => Math.abs(b.a[1] - b.b[1]) < 1e-3).map((b) => b.a[1])];
+  const line = (list, v) => list.reduce((a, c) => (Math.abs(c - v) <= tol && (a == null || Math.abs(c - v) < Math.abs(a - v)) ? c : a), null);
+  const nearCol = (p) => cols.reduce((a, c) => (d2(c, p) <= tol && (!a || d2(c, p) < d2(a, p)) ? c : a), null);
+  const corner = (p) => {
+    let q = nearCol(p);
+    if (!q) { const qx = line(xs, p[0]), qy = line(ys, p[1]); if (qx != null || qy != null) q = [qx ?? p[0], qy ?? p[1]]; }
+    if (!q) for (const b of beams) {
+      const L2 = (b.b[0] - b.a[0]) ** 2 + (b.b[1] - b.a[1]) ** 2, t = Math.max(0, Math.min(1, ((p[0] - b.a[0]) * (b.b[0] - b.a[0]) + (p[1] - b.a[1]) * (b.b[1] - b.a[1])) / L2));
+      const c = [b.a[0] + (b.b[0] - b.a[0]) * t, b.a[1] + (b.b[1] - b.a[1]) * t];
+      if (d2(c, p) <= tol && (!q || d2(c, p) < d2(q, p))) q = c;
+    }
+    return q ? r3(q) : p;
+  };
+  const P0 = roof.pts ?? [], P1 = P0.map(corner);
+  let n = 0, max = 0;
+  const moved = (p, q) => { if (d2(p, q) > 1e-4) { n++; max = Math.max(max, d2(p, q)); } return q; };
+  const onOutline = (p) => { // same point on the moved outline, or null when p is not on the old outline
+    for (let i = 0; i < P0.length; i++) {
+      const a = P0[i], b = P0[(i + 1) % P0.length], L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2;
+      if (!(L2 > 0)) continue;
+      const t = ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / L2;
+      if (t < -1e-6 || t > 1 + 1e-6 || d2(p, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]) > 0.01) continue;
+      const A = P1[i], B = P1[(i + 1) % P1.length];
+      return r3([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]);
+    }
+    return null;
+  };
+  const pt = (p) => (p ? moved(p, onOutline(p) ?? p) : p);
+  const patch = {};
+  if (P0.length) { patch.pts = P1; P0.forEach((p, i) => moved(p, P1[i])); }
+  if (roof.columns?.length) patch.columns = roof.columns.map((c) => moved(c, onOutline(c) ?? (nearCol(c) ? r3(nearCol(c)) : c)));
+  if (roof.plates?.length) patch.plates = roof.plates.map((x) => ({ ...x, a: pt(x.a), b: pt(x.b) }));
+  if (roof.innerPlates?.length) patch.innerPlates = roof.innerPlates.map((x) => ({ ...x, a: pt(x.a), b: pt(x.b) }));
+  if (Array.isArray(roof.dang)) patch.dang = roof.dang.map(pt);
+  return { patch, n, max };
+}

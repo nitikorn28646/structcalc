@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { TYPE_COLORS } from "./FloorBoard.jsx";
 import { DEFAULT_WALL_TYPES, resolveWall, wallThick, wallsOf } from "../engine/floor.js";
 import { useHighlight } from "./highlight.js";
-import { RoofFrameMembers } from "./Roof3D.jsx";
+import { RoofFrameMembers, roofSeat } from "./Roof3D.jsx";
 import { baseLevel } from "./StoreyTable.jsx";
 import { beamPieces, edgeWidth, insetPolygon } from "./joints3d.js";
 
@@ -223,7 +223,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
               </group>
             );
           })}
-          {on.roof && roofFaces?.map((f, i) => <RoofFace key={i} f={f} dz={base0} faint={on.roofFrame && !!roofFaces.fr} />)}
+          {on.roof && roofFaces?.map((f, i) => <RoofFace key={i} f={f} dz={base0 + roofSeat(roofFaces.plates ?? roofFaces.g.pts)} faint={on.roofFrame && !!roofFaces.fr} />)}
           {on.roofFrame && roofFaces?.fr && <RoofFrameMembers g={roofFaces.g} fr={roofFaces.fr} plates={roofFaces.plates} loose={roofFaces.loose} Z0={base0} />}
         </group>
       </Bounds>
