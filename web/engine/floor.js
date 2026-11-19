@@ -626,13 +626,15 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       ? { start: sg > 0 ? [[x0, y0], [x0, y1]] : [[x1, y0], [x1, y1]], end: sg > 0 ? [[x1, y0], [x1, y1]] : [[x0, y0], [x0, y1]], sideA: [[x0, y0], [x1, y0]], sideB: [[x0, y1], [x1, y1]] }
       : { start: sg > 0 ? [[x0, y0], [x1, y0]] : [[x0, y1], [x1, y1]], end: sg > 0 ? [[x0, y1], [x1, y1]] : [[x0, y0], [x1, y0]], sideA: [[x0, y0], [x0, y1]], sideB: [[x1, y0], [x1, y1]] };
     const half = (e, k) => { const [p, q] = e, m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; return k === 0 ? [p, m] : [m, q]; };
+    let headOk = null; // the edges this floor carries: true = on a beam, false = no beam (load not taken), null = none put here
     const put = (edge, perM, where) => { // perM: { DL, SDL, LL } kg/m
       for (const [g, q] of Object.entries(perM)) {
         if (!(q > 0)) continue;
-        if (where === "below") down.push({ a: edge[0], b: edge[1], q, g, from });
+        if (where === "below") down.push({ a: edge[0], b: edge[1], q, g, from, si: i });
         else if (where === "mid" && !onBeam(edge[0], edge[1], q, g, from, true)) { warnings.push(`${from}: ชานพักไม่มีคานรับที่ระดับชานพัก (คานระดับกลางชั้นตามขอบ (${edge[0].map((v) => v.toFixed(2))})–(${edge[1].map((v) => v.toFixed(2))})) — วาดคานชานพักแล้วตั้ง "ระดับ" ของคาน`); break; }
         else if (where === "mid") continue;
-        else if (!onBeam(edge[0], edge[1], q, g, from)) { warnings.push(`${from}: ขอบ (${edge[0].map((v) => v.toFixed(2))})–(${edge[1].map((v) => v.toFixed(2))}) ไม่มีคานรับ`); break; }
+        else if (!onBeam(edge[0], edge[1], q, g, from)) { headOk = false; warnings.push(`${from}: ขอบ (${edge[0].map((v) => v.toFixed(2))})–(${edge[1].map((v) => v.toFixed(2))}) ไม่มีคานรับ`); break; }
+        else if (headOk === null) headOk = true;
       }
     };
     const scale = (o, f) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v * f]));
@@ -659,7 +661,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       if (ln) { const a = along(ln, e[0]), b = along(ln, e[1]); ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: ((flight.DL + flight.SDL + flight.LL) * B * B) / 2, mL: (flight.LL * B * B) / 2 }); }
     }
     return { i, P: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], kind: st.kind ?? "long", up: st.up ?? "+x", th, Lr, B, total, w: flight.DL + flight.SDL + flight.LL,
-      support: (st.kind ?? "long") === "long" ? (st.support === "top" || st.support === "bottom" ? st.support : "both") : null };
+      support: (st.kind ?? "long") === "long" ? (st.support === "top" || st.support === "bottom" ? st.support : "both") : null,
+      headOk, foot: down.some((d) => d.si === i) ? "pending" : null }; // foot: set by frame.js from the floor below (beam / panel / none / ground)
   });
   // a panel under a stair is its stair well: the stair replaces that slab
   for (const pn of panels) {
@@ -699,7 +702,19 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     if (pn && pn.st !== "GS") { pn.g.SP = (pn.g.SP ?? 0) + pl.P / pn.area; pn.w += pl.P / pn.area; return { i, on: "panel", panel: pn.key }; }
     warnings.push(`${from} ไม่มีคานหรือพื้นรับ`); return { i, on: null };
   });
-  for (const d of downLines) if (!onBeam(d.a, d.b, d.q, d.g, d.from)) warnings.push(`${d.from}: ปลายล่างไม่มีคานรับที่ชั้นนี้`);
+  // stair bottoms of the floor above: onto a beam here; with no beam under them, spread over the slab panel they stand on (user 2026-11-19:
+  // the load used to be dropped with only a warning) as SP (×2 for the slab moments, like walls / point loads on slabs); else lost → warned
+  const downOn = downLines.map((d) => {
+    if (onBeam(d.a, d.b, d.q, d.g, d.from)) return { si: d.si, on: "beam" };
+    const L = dist(d.a, d.b), pn = inPanel([(d.a[0] + d.b[0]) / 2, (d.a[1] + d.b[1]) / 2]);
+    if (pn && pn.st !== "GS" && !pn.open && !pn.stairWell && pn.area > 0) { pn.g.SP = (pn.g.SP ?? 0) + (d.q * L) / pn.area; pn.w += (d.q * L) / pn.area; return { si: d.si, on: "panel", panel: pn.key }; }
+    return { si: d.si, on: pn?.st === "GS" ? "ground" : "none" };
+  });
+  for (const si of [...new Set(downOn.map((x) => x.si))]) {
+    const xs = downOn.filter((x) => x.si === si), from = downLines.find((d) => d.si === si)?.from ?? "บันได";
+    if (xs.some((x) => x.on === "none")) warnings.push(`${from} (ชั้นบน): ปลายล่างไม่มีคานหรือพื้นรับที่ชั้นนี้ — น้ำหนักส่วนนี้ไม่ได้เข้าโครงสร้าง`);
+    else if (xs.some((x) => x.on === "panel")) warnings.push(`${from} (ชั้นบน): ปลายล่างไม่มีคานรับ → กระจายลงแผ่นพื้น ${xs.find((x) => x.panel)?.panel ?? ""}`);
+  }
   panels.forEach((pn, k) => pn.st !== "GS" && pn.edges.forEach((pieces, e) => {
     const p = pn.P[e], q = pn.P[(e + 1) % pn.P.length], L = dist(p, q), u = sub(q, p).map((v) => v / L);
     const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], ln = flat.find((o) => along(o, mid) !== null && Math.abs(cross(o.u, u)) < 1e-6);
@@ -839,7 +854,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   for (const sp of result.spans) groups.DL += CONC * sp.type.b * sp.type.h * sp.len;
   // the type each drawn beam ended with (fixed or chosen) — engine/beamAssign.js locks these
   const beamTypeOf = (floor.beams ?? []).map((_, i) => typeOf.get(i));
-  return { ...result, beamTypeOf, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
+  return { ...result, beamTypeOf, downOn, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
 }
 
 // largest |deflection| (m) of each element: v'' = M/EI integrated twice, matched to the nodal deflections

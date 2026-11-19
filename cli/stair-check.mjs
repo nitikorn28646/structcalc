@@ -37,4 +37,23 @@ for (const [name, st, mid, share] of cases) {
   if (!ok) bad++;
   console.log(`${ok ? "ok  " : "FAIL"} ${name}: total ${T.toFixed(0)} → beams ${got.toFixed(0)}${share ? ` (ล่าง ${sum(r.floors[0]).toFixed(0)} · บน ${sum(r.floors[1]).toFixed(0)})` : ""}${noBeam.length ? " · " + noBeam[0].slice(0, 90) : ""}${r.frame3d?.error ? " · 3D " + r.frame3d.error : ""}`);
 }
+// stairs drawn as a line (FloorBoard tool "stairLine", src/planKit.js stairFromLine): head on a beam of the floor, foot ON A SLAB of the
+// floor below (no beam there) → the foot load is spread over that slab, so the whole stair load still enters the frame (it was dropped)
+{
+  const { stairFromLine } = await import("../web/src/planKit.js");
+  const fixT = (fl) => ({ ...fl, beams: fl.beams.map((b) => ({ ...b, type: 0 })) }); // fixed types: self weight does not move
+  const sumAll = (r) => r.floors.flatMap((a) => a.lines.flatMap((l) => l.slab)).reduce((t, l) => t + ((l.wa + l.wb) / 2) * (l.b - l.a), 0);
+  const run = (stairs, gbT = 0.1) => { const gb = fixT({ ...box("GB", 1.5, gbT) }), f2 = fixT(box("ชั้น 2", 3, 0.12)); f2.stairs = stairs;
+    return analyzeFrame({ mat, beamTypes: DEFAULT_BEAM_TYPES, colTypes: DEFAULT_COLUMN_TYPES, floors: [gb, f2] }); };
+  const r0 = run([]);
+  for (const [name, extra, wantFoot] of [["line stair, foot on the slab below", {}, "panel"], ["line stair, all to the top beam", { support: "top" }, null]]) {
+    const ln = stairFromLine([0.6, 4], [0.6, 1], box("x", 3, 0).beams);
+    const st = { ...ln.stair, ...extra }, r = run([st]), s0 = r.floors[1].stairs[0], T = s0.total.DL + s0.total.SDL + s0.total.LL, got = sumAll(r) - sumAll(r0);
+    const ok = !ln.error && Math.abs(ln.L - 3) < 1e-9 && st.up === "+y" && Math.abs(got - T) < 1e-6 * T && s0.headOk === true && (s0.foot ?? null) === wantFoot;
+    if (!ok) bad++;
+    console.log(`${ok ? "ok  " : "FAIL"} ${name}: total ${T.toFixed(0)} → frame ${got.toFixed(0)} · head ${s0.headOk} · foot ${s0.foot}`);
+  }
+  const par = stairFromLine([1.5, 4], [4.5, 4], box("x", 3, 0).beams); // drawn along the beam: not a stair head
+  if (!par.error) bad++; console.log(`${par.error ? "ok  " : "FAIL"} head on a beam parallel to the run → refused (${par.error ?? "-"})`);
+}
 process.exit(bad ? 1 : 0);

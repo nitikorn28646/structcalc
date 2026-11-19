@@ -38,7 +38,7 @@ function rawTasks(step, { frame, roof, project, res, dz = null, slabsOk = null }
         T("2.5", "ไม่มีคำเตือนโครงสร้าง (มุมไม่มีเสา คานลอย …)", !has(res?.warnings), res?.warnings?.length ? `${res.warnings.length} คำเตือน: ${res.warnings[0].slice(0, 90)}${res.warnings.length > 1 ? " …" : ""} (กดเพื่อเปิดรายการ)` : "", { panel: "warn" }),
       ];
     }
-    case "stair": return [T("3.1", "วาดช่องบันไดและเลือกแบบ", fl.some((f) => has(f.stairs)) ? true : null, "วาดบนชั้นที่บันไดเริ่มขึ้น", { tool: "stair" }),
+    case "stair": return [T("3.1", "วาดช่องบันไดและเลือกแบบ", fl.some((f) => has(f.stairs)) ? true : null, "บันไดเส้น: คลิกบนคานบน → จุดเริ่มบันได · หรือ บันได (กรอบ) บนชั้นที่บันไดเริ่มขึ้น", { tool: "stairLine" }),
       T("3.2", "ขนาดบันไดผ่านเกณฑ์ (จัดอัตโนมัติได้)", fl.some((f) => has(f.stairs)) ? an.every((a) => (a.stairs ?? []).every((s) => s.ok !== false)) : null, "คลิกบันได → จัดขนาดบันไดอัตโนมัติ")];
     case "roof": {
       const on = (roof?.pts?.length ?? 0) >= 3;

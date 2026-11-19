@@ -676,3 +676,14 @@ wL/2 each end) | "top" (whole wL onto the top beam, this floor) | "bottom" (whol
 designed as a span L; an.stairs[i].support. Panel section "การฝากน้ำหนักลงคาน" (select + wL and the reaction per end per metre of width), design sheet
 table "ฝากน้ำหนักลงคาน", report stair row says which end and kg/m. Landing / side / cantilever stairs unchanged (landing keeps landingTo).
 cli/stair-check.mjs 14/14 (+4 support cases: shares 0/1, 1/0, ½/½). Regress / floor / frame / verify20 / E2E unchanged.
+STAIR BY A LINE (2026-11-19, user "สร้างที่คานบนเลย · ไม่วาดเป็นกรอบ คลิกลากความยาวเหมือนผนัง · รายการคำนวณด้วย"): FloorBoard tool "บันไดเส้น" (stairLine,
+default in step 3; "บันได (กรอบ)" kept) on the plan of the floor whose beam carries the stair head: first click must be ON a beam of this floor
+(else refused, amber message), second click = where the stair starts (ortho, typed length works); src/planKit.js stairFromLine(head, foot, beams,
+w = 1.0) → the usual rectangle {a, b, up, kind long, line: true, w} centred on the line, STORED ON THIS FLOOR (head on this floor's beam, foot to the
+floor below); a head beam parallel to the run is refused. StairPanel: "ช่องบันไดบนแปลน" กว้าง / ยาว (stairResize keeps the head edge + centre line),
+button "ให้ช่องยาวเท่าที่บันไดต้องการ", status line per end from the engine (an.stairs[i].headOk; .foot = beam | panel | ground | none set by frame.js
+from the floor below's downOn). SAFETY FIX floor.js: a stair foot with no beam under it is spread over the slab panel it stands on (pn.g.SP, ×2 for
+slab moments) instead of being dropped with a warning; truly unsupported → "น้ำหนักส่วนนี้ไม่ได้เข้าโครงสร้าง". Report: per floor "ขนาดบันไดและการถ่าย
+น้ำหนัก" (riser × n, tread, run need / opening, width, 2R+T, checks, which end + foot status, from StairPanel stairGeom). Help / checklist 3.1 updated.
+cli/stair-check.mjs 17/17 (+ line stair foot on a slab: whole load in the frame, top-only, parallel head refused). Regress identical, verify20 20/20,
+report-editions ALL OK, E2E 47/47.

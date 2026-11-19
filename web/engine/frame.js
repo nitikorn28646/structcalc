@@ -220,7 +220,10 @@ function gravity(frame, minTypes) {
     const extra = above.filter((c) => !fl.columns.some((q) => near(q, c.p))).map((c) => ({ p: c.p, P: c.Pbot, from: `เสา ${c.stack} (${floors[k + 1].name})` }));
     an[k] = analyzeFloor(fl, beamTypes, mat, extra, frame.wallTypes ?? DEFAULT_WALL_TYPES, downLines, minTypes?.[k]);
     downLines = an[k].down;
-    if (k === 0) for (const d of downLines) warnings.push(`${fl.name}: ${d.from} ปลายล่างลงฐานราก/พื้นดิน (ไม่เข้าคาน)`);
+    // where the bottom of each stair of the floor above ended up (an[k + 1].stairs[si].foot): beam / panel / ground / none — the worst piece
+    if (k + 1 < n) for (const st of an[k + 1].stairs ?? []) { const xs = (an[k].downOn ?? []).filter((x) => x.si === st.i);
+      if (xs.length) st.foot = ["none", "ground", "panel", "beam"].find((w) => xs.some((x) => x.on === w)); }
+    if (k === 0) { for (const d of downLines) warnings.push(`${fl.name}: ${d.from} ปลายล่างลงฐานราก/พื้นดิน (ไม่เข้าคาน)`); for (const st of an[0].stairs ?? []) if (st.foot === "pending") st.foot = "ground"; }
     an[k].warnings.forEach((w) => warnings.push(`${fl.name}: ${w}`));
     above = fl.columns.map((p, i) => {
       const up = above.find((c) => near(c.p, p)), R = an[k].columns[i]?.R ?? 0, Ptop = R + (up?.Pbot ?? 0);

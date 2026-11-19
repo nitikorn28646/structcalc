@@ -33,6 +33,17 @@ function Commit({ value, onCommit, step = "any" }) {
 export const STAIR_SUPPORT = [["both", "ทั้งสองปลาย (ครึ่งละ wL/2)"], ["top", "คานบนรับทั้งหมด (wL)"], ["bottom", "คานล่างรับทั้งหมด (wL)"]];
 export const stairShare = (st) => ((st.kind ?? "long") !== "long" ? null : st.support === "top" ? [0, 1] : st.support === "bottom" ? [1, 0] : [0.5, 0.5]); // [bottom, top]
 
+// resize the stair opening on plan keeping the HEAD edge (where it arrives, on this floor's beam) and the centre line: B = width, Lr = run
+export function stairResize(st, B, Lr) {
+  const x0 = Math.min(st.a[0], st.b[0]), x1 = Math.max(st.a[0], st.b[0]), y0 = Math.min(st.a[1], st.b[1]), y1 = Math.max(st.a[1], st.b[1]);
+  const ax = st.up?.[1] ?? "x", pos = st.up?.[0] !== "-", r3 = (v) => +v.toFixed(3);
+  if (ax === "x") { const cy = (y0 + y1) / 2, head = pos ? x1 : x0, foot = pos ? head - Lr : head + Lr;
+    return { a: [r3(Math.min(head, foot)), r3(cy - B / 2)], b: [r3(Math.max(head, foot)), r3(cy + B / 2)] }; }
+  const cx = (x0 + x1) / 2, head = pos ? y1 : y0, foot = pos ? head - Lr : head + Lr;
+  return { a: [r3(cx - B / 2), r3(Math.min(head, foot))], b: [r3(cx + B / 2), r3(Math.max(head, foot))] };
+}
+const FOOT = { beam: ["วางบนคานชั้นล่าง", "text-green-700"], panel: ["ไม่มีคาน → กระจายลงแผ่นพื้นชั้นล่าง", "text-[#b54708]"], ground: ["ลงดิน / ฐานราก (ไม่เข้าคาน)", "text-gray-600"], none: ["ไม่มีคานหรือพื้นรับ — น้ำหนักส่วนนี้ไม่เข้าโครงสร้าง", "text-red-600"], pending: ["ลงชั้นล่าง", "text-gray-600"] };
+
 export function StairInputs({ st, set, H, r0, mat, onLandingBeam }) {
   const [auto, setAuto] = useState(null);
   const n = (k, label, unit, step, def) => <Field label={label} unit={unit}><NumberInput value={st[k] ?? def} step={step} onChange={(v) => set({ [k]: v })} /></Field>;
@@ -48,6 +59,14 @@ export function StairInputs({ st, set, H, r0, mat, onLandingBeam }) {
         <span className="ml-2 text-[11px] text-gray-500">ลูกตั้ง / ลูกนอนจากความสูงชั้นและช่องบันได แล้วหาท้องบันไดบางสุดที่ผ่าน</span>
         {auto && <ul className="mt-1 list-disc pl-5 text-[11px] text-gray-600">{auto.map((t) => <li key={t}>{t}</li>)}</ul>}
       </div>
+      <Sub>ช่องบันไดบนแปลน (หัวบันไดอยู่กับที่)</Sub>
+      <Field label="กว้าง" unit="m"><Commit value={+(g.B || 0).toFixed(3)} step="0.05" onCommit={(v) => v >= 0.3 && set(stairResize(st, v, g.Lr))} /></Field>
+      <Field label="ยาว (แนวราบ)" unit="m"><Commit value={+(g.Lr || 0).toFixed(3)} step="0.05" onCommit={(v) => v >= 0.5 && set(stairResize(st, g.B, v))} /></Field>
+      {g.flights === 1 && Math.abs(g.Lr - g.runNeed) > 0.005 && <div className="col-span-2 -mt-1"><button onClick={() => set(stairResize(st, g.B, +g.runNeed.toFixed(3)))} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ให้ช่องยาวเท่าที่บันไดต้องการ ({fmt(g.runNeed, 2)} ม.)</button></div>}
+      {r0 && (r0.headOk !== null || r0.foot) && <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:text-gray-300 dark:ring-gray-800">
+        {r0.headOk !== null && <span className={r0.headOk ? "text-green-700" : "text-red-600"}>ปลายบน: {r0.headOk ? "วางบนคานชั้นนี้" : "ไม่มีคานรับ — วาดคานที่หัวบันได"}</span>}
+        {r0.headOk !== null && r0.foot && <br />}
+        {r0.foot && <span className={FOOT[r0.foot]?.[1]}>ปลายล่าง: {FOOT[r0.foot]?.[0]}</span>}</p>}
       <Sub>รูปทรง (ขึ้นสูง {fmt(H, 2)} ม. ตามระดับชั้น)</Sub>
       {/* user 2026-11-19: type the riser OR the number of risers, the tread OR the run — the other one follows (H = storey height) */}
       {n("riser", "ลูกตั้ง", "m", "0.005", 0.17)}

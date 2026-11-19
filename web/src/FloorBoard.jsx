@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { arcPolyline } from "../engine/arc.js";
 import { useDeclutter } from "./declutter.js";
-import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Hand, Magnet, MousePointer2, PanelTop, Redo2, Ruler, Undo2, Wand2, Copy } from "lucide-react";
+import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Hand, Magnet, MousePointer2, MoveDownRight, PanelTop, Redo2, Ruler, Undo2, Wand2, Copy } from "lucide-react";
 import { frame3dFromDxf, guessRole, parseDxf, toPlan } from "./dxfImport.js";
 import { Tip } from "@/components/ui/tooltip";
 import { useHighlight } from "./highlight.js";
@@ -12,7 +12,7 @@ import { useWallDraw } from "./wallDraw.js";
 import { TextSizeControl, useTextScale } from "./uiPrefs.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "./beamModel.js";
-import { dist, gridAxes, round3, segCross, segDist } from "./planKit.js";
+import { dist, gridAxes, round3, segCross, segDist, stairFromLine } from "./planKit.js";
 import { findOverlaps, GROUPS, STAIR_KINDS, stairRT, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
 
 // type colours (user 2026-11-03: different types had the same colour — 8 colours repeated, two blues alike): 12 distinct hues,
@@ -27,7 +27,8 @@ const TOOLS = {
     ["erase", "ลบ", Eraser, "คลิกเสา คาน หรือพื้นยื่นที่จะลบ"]],
   slab: [SEL, ["cant", "พื้นยื่น", PanelTop, "คลิกบนคานด้านที่จะยื่น → สร้างพื้นยื่นตลอดคานเส้นนั้น (แก้ความยาวยื่นได้ทางซ้าย)"], ["erase", "ลบ", Eraser, "คลิกพื้นยื่นที่จะลบ"]],
   wall: [SEL, ["wall", "ผนัง", Ruler, "คลิกต้น → ปลาย ต่อเนื่องได้ · วางบนคาน = ลงคาน · วางกลางพื้น = กระจายลงแผ่นพื้น · วาดซ้อนได้"], ["erase", "ลบ", Eraser, "คลิกผนังที่จะลบ"]],
-  stair: [SEL, ["stair", "บันได", Footprints, "คลิกมุมหนึ่ง → มุมตรงข้ามของช่องบันได (ดูดเข้าเสา/คาน) · เลือกแบบ ทิศขึ้น ที่แผงซ้าย"], ["erase", "ลบ", Eraser, "คลิกบันไดที่จะลบ"]],
+  stair: [SEL, ["stairLine", "บันไดเส้น", MoveDownRight, "บันไดท้องเรียบ: บนแปลนชั้นที่มีคานรับหัวบันได — คลิกบนคานบน (หัวบันได) → คลิกจุดเริ่มบันได (ล็อคแนว X/Y · พิมพ์ความยาว + Enter ได้) · กว้าง ลูกตั้ง ลูกนอน แก้ที่แผงขวา"],
+    ["stair", "บันได (กรอบ)", Footprints, "คลิกมุมหนึ่ง → มุมตรงข้ามของช่องบันได (ดูดเข้าเสา/คาน) · เลือกแบบ ทิศขึ้น ที่แผงซ้าย"], ["erase", "ลบ", Eraser, "คลิกบันไดที่จะลบ"]],
   other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["area", "เพิ่มบนพื้น", PanelTop, "คลิกแผ่นพื้นเพื่อเพิ่มน้ำหนักต่อพื้นที่จากคลัง เช่น ห้องน้ำ / ฝ้า"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
   result: [SEL], cols: [SEL], grid: [SEL], assign: [["select", "เลือก", MousePointer2, "Load Cases: คลิกคาน / เสา / แผ่นพื้น · Ctrl หรือ Shift + คลิก = เพิ่ม · ลากกรอบ (ซ้าย→ขวา ทั้งชิ้น · ขวา→ซ้าย แตะ) · Ctrl+A ทั้งหมด · Esc ล้าง · แล้วกด Assign ทางขวา"]],
 };
@@ -50,6 +51,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const [wallDraw, setWallDraw] = useWallDraw();
   const [box, setBox] = useState(null), [multi, setMulti] = useState([]), [menu, setMenu] = useState(null), hl = useHighlight(), [tScale] = useTextScale();
   const [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null), [moveMsg, setMoveMsg] = useState("");
+  const [msgWarn, setMsgWarn] = useState(false);
+  const flash = (msg, warn = false) => { setMsgWarn(warn); setMoveMsg(msg); setTimeout(() => setMoveMsg((m) => (m === msg ? "" : m)), 6000); };
   useEffect(() => { setToolState(tools[1]?.[0] ?? "select"); setStart(null); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
   const setTool = (t) => { setToolState(t); setStart(null); setTyped(""); };
   // checklist bar → pick the tool of a task (when this board offers it)
@@ -111,7 +114,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     const pn = an?.panels.find((p) => inside(p.P, raw));
     return pn ? { kind: "panel", key: pn.key } : null;
   };
-  const lineTool = tool === "beam" || tool === "wall" || tool === "line" || tool === "stair";
+  const lineTool = tool === "beam" || tool === "wall" || tool === "line" || tool === "stair" || tool === "stairLine";
   const place = (p) => {
     if (tool === "column") { if (!cols.some((c) => dist(c, p) < 0.05)) commit({ columns: [...cols, p] }); return; }
     if (tool === "point") { const it = libItem?.kind === "point" ? libItem : null; commit({ pointLoads: [...pointLoads, { p, P: it?.v ?? 500, name: it?.name ?? "" }] }); setSel({ kind: "point", i: pointLoads.length }); return; }
@@ -119,8 +122,15 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       if (pn && it) { const o = floor.panels?.[pn.key] ?? {}; commit({ panels: { ...floor.panels, [pn.key]: { ...o, extra: (o.extra ?? 0) + it.v, extraItems: [...(o.extraItems ?? []), { name: it.name, v: it.v }] } } }); }
       return; }
     if (!lineTool) return;
-    if (!start) { setStart(p); return; }
+    if (!start) {
+      // stair by a line (user 2026-11-19 "สร้างที่คานบนเลย"): the first click is the head of the stair, on a beam of THIS floor
+      if (tool === "stairLine" && !beams.some((b) => segDist(p, b.a, b.b).d < 0.03)) { flash("คลิกจุดแรกบนคานที่รับหัวบันได (คานของชั้นนี้)", true); return; }
+      setStart(p); return;
+    }
     if (dist(start, p) < 0.1) return;
+    if (tool === "stairLine") { const ns = stairFromLine(start, p, beams); if (ns.error) { flash(ns.error, true); return; }
+      commit({ stairs: [...stairs, ns.stair] }); setSel({ kind: "stair", i: stairs.length }); setStart(null);
+      flash(`บันได ${stairs.length + 1}: ยาว ${ns.L.toFixed(2)} ม. กว้าง ${ns.stair.w.toFixed(2)} ม. — หัวบันไดบนคานชั้นนี้ ต้นบันไดลงชั้นล่าง · แก้ขนาดที่แผงขวา`); return; }
     if (tool === "stair") {
       if (Math.abs(p[0] - start[0]) < 0.3 || Math.abs(p[1] - start[1]) < 0.3) return;
       const up = Math.abs(p[0] - start[0]) >= Math.abs(p[1] - start[1]) ? "+x" : "+y";
@@ -158,7 +168,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const moveSel = (to, copy) => {
     const items = selList().filter((m) => m && m.i >= 0 && ITEM[m.kind]).map((m) => ({ kind: m.kind, i: m.i, obj: listOf(m.kind)[m.i] }));
     const msg = onMoveTo?.(items, to, copy) ?? ""; setMenu(null); if (!copy) { setMulti([]); setSel(null); }
-    setMoveMsg(msg); if (msg) setTimeout(() => setMoveMsg((m) => (m === msg ? "" : m)), 6000);
+    setMsgWarn(false); setMoveMsg(msg); if (msg) setTimeout(() => setMoveMsg((m) => (m === msg ? "" : m)), 6000);
   };
   // give the selected beams one type (or auto) — user 2026-11-19: "อยากเลือกเองว่าคานไหนเป็นเบอร์นี้"
   const selBeams = () => selList().filter((m) => m?.kind === "beam" && m.i >= 0).map((m) => m.i);
@@ -166,7 +176,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     const idx = selBeams(); if (!idx.length) return;
     onAssignType?.(idx, ti); setMenu(null);
     const msg = `คาน ${idx.length} ตัว → ${ti == null ? "อัตโนมัติ" : types[ti]?.name ?? ""}`;
-    setMoveMsg(msg); setTimeout(() => setMoveMsg((m) => (m === msg ? "" : m)), 6000);
+    setMsgWarn(false); setMoveMsg(msg); setTimeout(() => setMoveMsg((m) => (m === msg ? "" : m)), 6000);
   };
   const delItems = (list) => {
     const patch = {};
@@ -343,7 +353,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             </select>
             {wallDraw.auto === false && <><input type="number" min={0.1} max={20} step={0.05} value={wallDraw.h} onChange={(e) => { const v = Number(e.target.value); if (v > 0) setWallDraw({ h: v }); }} className="h-7 w-16 rounded-md border border-gray-300 bg-white px-1 text-right text-[12px] dark:bg-gray-900" />ม.</>}
           </span>)}
-        {moveMsg && <span className="rounded-md bg-green-50 px-2 py-0.5 text-[12px] text-green-700 ring-1 ring-green-200">{moveMsg}</span>}
+        {moveMsg && <span className={`rounded-md px-2 py-0.5 text-[12px] ring-1 ${msgWarn ? "bg-amber-50 text-[#b54708] ring-amber-200" : "bg-green-50 text-green-700 ring-green-200"}`}>{moveMsg}</span>}
         <TextSizeControl />
         {onDxf && <button onClick={onDxf} className={`${btn} text-gray-600 ring-gray-300`}><Download className="h-3.5 w-3.5" />DXF</button>}
         {modeBar && <div className="ml-auto">{modeBar}</div>}
@@ -519,7 +529,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               </g>
             );
           })}
-          {from && cur?.p && (tool === "stair" ? <rect x={Math.min(from[0], cur.p[0])} y={-Math.max(from[1], cur.p[1])} width={Math.abs(cur.p[0] - from[0])} height={Math.abs(cur.p[1] - from[1])} fill="none" stroke={ST_C} strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />
+          {from && cur?.p && tool === "stairLine" && (() => { const r = stairFromLine(from, cur.p, beams); const q = r.stair; return q ? <rect x={Math.min(q.a[0], q.b[0])} y={-Math.max(q.a[1], q.b[1])} width={Math.abs(q.b[0] - q.a[0])} height={Math.abs(q.b[1] - q.a[1])} fill={ST_C} fillOpacity={0.08} stroke={r.error ? "#f04438" : ST_C} strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} /> : null; })()}
+          {from && cur?.p && tool !== "stairLine" && (tool === "stair" ? <rect x={Math.min(from[0], cur.p[0])} y={-Math.max(from[1], cur.p[1])} width={Math.abs(cur.p[0] - from[0])} height={Math.abs(cur.p[1] - from[1])} fill="none" stroke={ST_C} strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />
             : <line x1={from[0]} y1={-from[1]} x2={cur.p[0]} y2={-cur.p[1]} stroke={tool === "wall" ? WALL_C : tool === "line" ? SP_C : "#465fff"} strokeWidth={4 * k} opacity={0.5} />)}
           {cur && (
             <g pointerEvents="none">

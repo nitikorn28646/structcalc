@@ -18,6 +18,7 @@ import { designSlabs } from "../engine/slabDesign.js";
 import { analyzeFrame } from "../engine/frame.js";
 import { arcGeom } from "../engine/arc.js";
 import { CantileverDetail, ColumnChart, FrameIso, LineDiagram, SlabStrip } from "./ReportDiagrams.jsx";
+import { STAIR_SUPPORT, stairGeom } from "./StairPanel.jsx";
 import { BeamTypeSheet, ColumnLevelSheet, FootingSheet } from "./CheckSheets.jsx";
 
 const ksc = "กก./ซม.²";
@@ -201,6 +202,15 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                   ...(f.lineLoads ?? []).map((l, i) => [l.name || `น้ำหนักเส้น ${i + 1}`, `ยาว ${fmt(Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]), 2)} ม.`, `${fmt(l.q, 0)} กก./ม.`, ({ cant: "ปลายพื้นยื่น → คานริม", beam: "คาน", panel: "แผ่นพื้น" })[an.lineLoads[i]?.on] ?? "-"]),
                   ...(f.pointLoads ?? []).map((q, i) => [q.name || `น้ำหนักจุด ${i + 1}`, `(${fmt(q.p[0], 2)}, ${fmt(q.p[1], 2)})`, `${fmt(q.P, 0)} กก.`, ({ beam: "คาน", panel: "แผ่นพื้น" })[an.pointLoads[i]?.on] ?? "-"]),
                 ]} /></>)}
+              {o("floors.other") && an.stairs.length > 0 && (<><Sub>ขนาดบันไดและการถ่ายน้ำหนัก</Sub>
+                {/* user 2026-11-19: riser / number of risers / tread / run in the book; checks from StairPanel stairGeom (same as the panel) */}
+                <Table head={["บันได", "ลูกตั้ง × จำนวน", "ลูกนอน", "ยาวแนวราบ ต้องการ / ช่อง (ม.)", "กว้าง (ม.)", "2R + T (ม.)", "ตรวจขนาด", "ปลายที่รับน้ำหนัก"]} rows={an.stairs.map((s0, i) => {
+                  const raw = f.stairs?.[i] ?? {}, g = stairGeom(raw, f.h, s0), bad = g.checks.filter(([, ok]) => !ok).map(([t]) => t);
+                  const sup = s0.kind === "long" ? STAIR_SUPPORT.find(([k]) => k === (s0.support ?? "both"))[1] : s0.kind === "landing" ? "ต้นบันได + ชานพัก" : s0.kind === "cant" ? "คานด้านข้าง" : "สองข้าง";
+                  const foot = { panel: " · ปลายล่างลงแผ่นพื้น", ground: " · ปลายล่างลงดิน", none: " · ปลายล่างไม่มีที่รับ" }[s0.foot] ?? "", head = s0.headOk === false ? " · ปลายบนไม่มีคาน" : "";
+                  return [`บันได ${i + 1}`, `${fmt(g.Ra, 3)} × ${g.n}`, fmt(g.T, 3), `${fmt(g.runNeed, 2)} / ${fmt(g.Lr, 2)}`, fmt(g.B, 2), fmt(g.comfort, 3), bad.length ? `ไม่ผ่าน: ${bad.join(", ")}` : "ผ่านทุกข้อ", sup + head + foot];
+                })} />
+                <Note>ลูกตั้งจริง = ความสูงชั้น ÷ จำนวนลูกตั้ง · ยาวแนวราบ = ลูกนอน × (ลูกตั้งต่อช่วง − 1) · เกณฑ์: ลูกตั้ง ≤ 0.20 ม. ลูกนอน ≥ 0.22 ม. กว้าง ≥ 0.80 ม. 2R + T = 0.60–0.65 ม. · ท้องบันไดออกแบบเป็นช่วงพาดเต็มช่อง (ตาราง "ออกแบบพื้นและบันได")</Note></>)}
               {o("floors.slabs") && slabs.length > 0 && (<><Sub>ออกแบบพื้นและบันได (โมดูลพื้น WSD)</Sub>
                 <Table head={["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "M สูงสุด (กก.-ม./ม.)", "เหล็กเสริม", "ผล"]}
                   rows={slabs.map((x) => [x.name, x.way ?? ({ C: "พื้นยื่น", ST: "บันได", PS: "PS", GS: "GS" })[x.kind] ?? x.kind, x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-",
