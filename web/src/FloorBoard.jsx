@@ -30,13 +30,14 @@ const TOOLS = {
   other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["area", "เพิ่มบนพื้น", PanelTop, "คลิกแผ่นพื้นเพื่อเพิ่มน้ำหนักต่อพื้นที่จากคลัง เช่น ห้องน้ำ / ฝ้า"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
   result: [SEL], cols: [SEL], grid: [SEL], assign: [["select", "เลือก", MousePointer2, "Load Cases: คลิกคาน / เสา / แผ่นพื้น · Ctrl หรือ Shift + คลิก = เพิ่ม · ลากกรอบ (ซ้าย→ขวา ทั้งชิ้น · ขวา→ซ้าย แตะ) · Ctrl+A ทั้งหมด · Esc ล้าง · แล้วกด Assign ทางขวา"]],
 };
-const BOXABLE = { assign: ["beam", "column", "panel", "cant"], frame: ["column", "beam", "cant", "panel"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
+// result steps (analysis / design): beams only, to give several a type at once — nothing is deleted there
+const BOXABLE = { assign: ["beam", "column", "panel", "cant"], frame: ["column", "beam", "cant", "panel"], result: ["beam"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
 // polygon corners: vertices where the outline turns (a column / beam end on an edge adds a straight-through vertex)
 export const corners = (P) => P.filter((q, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length], u = [q[0] - a[0], q[1] - a[1]], v = [b[0] - q[0], b[1] - q[1]], L = Math.hypot(...u) * Math.hypot(...v); return L > 0 && Math.abs(u[0] * v[1] - u[1] * v[0]) / L > 0.05; }); // turns of more than ~3°
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null, stairsAbove = null, aboveName = "", belowName = "", onStairUp = null, onPickAbove = null, onMoveTo = null, moveFloors = [] }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null, stairsAbove = null, aboveName = "", belowName = "", onStairUp = null, onPickAbove = null, onMoveTo = null, moveFloors = [], onAssignType = null }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -153,6 +154,14 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     const msg = onMoveTo?.(items, to, copy) ?? ""; setMenu(null); if (!copy) { setMulti([]); setSel(null); }
     setMoveMsg(msg); if (msg) setTimeout(() => setMoveMsg((m) => (m === msg ? "" : m)), 6000);
   };
+  // give the selected beams one type (or auto) — user 2026-11-19: "อยากเลือกเองว่าคานไหนเป็นเบอร์นี้"
+  const selBeams = () => selList().filter((m) => m?.kind === "beam" && m.i >= 0).map((m) => m.i);
+  const assignSel = (ti) => {
+    const idx = selBeams(); if (!idx.length) return;
+    onAssignType?.(idx, ti); setMenu(null);
+    const msg = `คาน ${idx.length} ตัว → ${ti == null ? "อัตโนมัติ" : types[ti]?.name ?? ""}`;
+    setMoveMsg(msg); setTimeout(() => setMoveMsg((m) => (m === msg ? "" : m)), 6000);
+  };
   const delItems = (list) => {
     const patch = {};
     if (step === "assign") return; // the Load Cases page never deletes members
@@ -238,7 +247,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
       if (e.key === "Escape") { if (!start && !typed && tool !== "select" && tools.some((x) => x[0] === "select")) setTool("select"); setStart(null); setTyped(""); setMulti([]); setMenu(null); } // Esc: end the line being drawn, a second Esc (or nothing drawn) = back to the select tool
       else if ((e.ctrlKey || e.metaKey) && (e.code === "KeyA" || e.key.toLowerCase() === "a") && BOXABLE[step]) { e.preventDefault(); setTool("select"); setMulti(BOXABLE[step].flatMap((kind) => listOf(kind).map((_, i) => ({ kind, i })))); }
-      else if ((e.key === "Delete" || (e.key === "Backspace" && !typed)) && (multi.length || sel)) { e.preventDefault(); delItems(multi.length ? multi : [sel]); }
+      else if ((e.key === "Delete" || (e.key === "Backspace" && !typed)) && (multi.length || sel) && step !== "result") { e.preventDefault(); delItems(multi.length ? multi : [sel]); }
       else if ((tool === "column" || (lineTool && tool !== "stair")) && /^[0-9.]$/.test(e.key)) setTyped((t) => t + e.key);
       else if (typed && e.key === "Backspace") setTyped((t) => t.slice(0, -1));
       else if (e.key === "Enter" && typed) { const p = typedPoint(); setTyped(""); if (p) place(p); }
@@ -265,7 +274,12 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       {menu && <div className="fixed z-50 min-w-[170px] rounded-lg border border-gray-200 bg-white p-1 text-[13px] shadow-lg" style={{ left: menu.x, top: menu.y }} onPointerLeave={() => setMenu(null)}>
-        <button onClick={() => { delItems(multi.length ? multi : [sel]); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-red-600 hover:bg-red-50">ลบที่เลือก ({multi.length || 1})</button>
+        {step !== "result" && <button onClick={() => { delItems(multi.length ? multi : [sel]); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-red-600 hover:bg-red-50">ลบที่เลือก ({multi.length || 1})</button>}
+        {onAssignType && selBeams().length > 0 && <div className="max-h-[240px] overflow-auto">
+          <p className="mt-1 border-t border-gray-100 px-3 pt-1.5 text-[11px] text-gray-500">ใช้ type กับคานที่เลือก ({selBeams().length})</p>
+          {types.map((t, ti) => <button key={`t${ti}`} onClick={() => assignSel(ti)} className="block w-full rounded-md px-3 py-1 text-left text-gray-700 hover:bg-gray-50">{t.name} <span className="text-[11px] text-gray-400">{Math.round(t.b * 100)}×{Math.round(t.h * 100)}{t.manual ? " · สร้างเอง" : ""}</span></button>)}
+          <button onClick={() => assignSel(null)} className="block w-full rounded-md px-3 py-1 text-left text-gray-500 hover:bg-gray-50">อัตโนมัติ (โปรแกรมเลือก)</button>
+        </div>}
         {onMoveTo && moveFloors.length > 0 && step !== "assign" && <>
           <p className="mt-1 border-t border-gray-100 px-3 pt-1.5 text-[11px] text-gray-500">ย้ายไปชั้น</p>
           {moveFloors.map((f) => <button key={`m${f.i}`} onClick={() => moveSel(f.i, false)} className="block w-full rounded-md px-3 py-1 text-left text-gray-700 hover:bg-gray-50">→ {f.name}</button>)}
@@ -304,6 +318,12 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
             <option value="">ย้าย / คัดลอกที่เลือก ({multi.length || 1}) ไปชั้น…</option>
             {moveFloors.map((f) => <option key={`m${f.i}`} value={`m:${f.i}`}>ย้ายไป {f.name}</option>)}
             {moveFloors.map((f) => <option key={`c${f.i}`} value={`c:${f.i}`}>คัดลอกไป {f.name}</option>)}
+          </select>)}
+        {onAssignType && selBeams().length > 0 && (
+          <select id="sc-assign-type" value="" onChange={(e) => { if (e.target.value !== "") assignSel(e.target.value === "auto" ? null : +e.target.value); }} title="กำหนด type ให้คานที่เลือก — เลือกหลายตัว: ลากกรอบ หรือ Ctrl + คลิก (Shift + ลาก = เลื่อนแปลน)" className="h-7 rounded-md border border-brand-300 bg-brand-50 px-1.5 text-[12px] text-brand-600">
+            <option value="">ใช้ type กับคานที่เลือก ({selBeams().length})…</option>
+            {types.map((t, ti) => <option key={ti} value={ti}>{t.name} · {Math.round(t.b * 100)}×{Math.round(t.h * 100)}{t.manual ? " (สร้างเอง)" : ""}</option>)}
+            <option value="auto">อัตโนมัติ (โปรแกรมเลือก)</option>
           </select>)}
         {moveMsg && <span className="rounded-md bg-green-50 px-2 py-0.5 text-[12px] text-green-700 ring-1 ring-green-200">{moveMsg}</span>}
         <TextSizeControl />
@@ -497,7 +517,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
           <ol className="mt-1 list-decimal space-y-0.5 pl-5"><li>วางเสา: เครื่องมือ <b>① เสา</b> แล้วคลิกจุดตัดกริด {gridOn ? <>หรือปุ่ม <b>เสาทุกโหนด</b> ด้านบน</> : null}</li>
             <li>วางคาน: เครื่องมือ <b>② คาน</b> คลิกเสาต้น → เสาปลาย (ต่อเนื่องได้) {gridOn ? <>หรือปุ่ม <b>คานตามกริด</b></> : null}</li>
             <li>คลิกช่องพื้นที่คานล้อมรอบ เพื่อกำหนดชนิดและความหนา · มีชั้นล่างแล้ว? ปุ่ม <b>คัดลอกชั้นล่าง</b></li></ol></div>}
-        <div className="pointer-events-none absolute left-3 top-2 z-[1] rounded-lg bg-white/90 px-2 py-1 text-[12px] text-gray-600 shadow-theme-xs">{info[3]}</div>
+        <div className="pointer-events-none absolute left-3 top-2 z-[1] rounded-lg bg-white/90 px-2 py-1 text-[12px] text-gray-600 shadow-theme-xs">{step === "result" && info === SEL ? "คลิกคานเพื่อดูผลและแก้ type · ลากกรอบที่ว่าง / Ctrl + คลิก = เลือกหลายคาน แล้ว \"ใช้ type กับคานที่เลือก\" (คลิกขวา หรือแถบด้านบน) · Shift+ลาก = เลื่อนแปลน · ล้อเมาส์ซูม" : info[3]}</div>
         {cur?.p && <div className="pointer-events-none absolute right-3 top-2 rounded-lg bg-white/90 px-2 py-1 text-[12px] tabular-nums text-gray-600 shadow-theme-xs">X {fmt(cur.p[0], 2)} · Y {fmt(cur.p[1], 2)}</div>}
       </div>
       </div>

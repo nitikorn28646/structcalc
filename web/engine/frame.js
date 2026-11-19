@@ -2,7 +2,7 @@
 // a column with nothing under it becomes a point load on the beams of the floor below. Columns are checked with engine/column.js.
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
 import { borePileRebar } from "./borePile.js";
-import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, checkSpan, cutoffs, robustSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
+import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, autoOrder, checkSpan, cutoffs, robustSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
 import { BARS, allowableFs } from "./tables.js";
 import { frame3dModel, columnPatternSets } from "./frame3d.js";
 import { storeyStability, columnSlender } from "./colStability.js";
@@ -376,7 +376,7 @@ export function analyzeFrame(frame) {
           for (const [key, v] of [["Mpos", c.Mpos], ["Mneg", c.Mneg], ["V", c.Vd ?? c.V], ["Mt", c.T]]) if (v > sp.envF[key] + 1e-6) { sp.envF[key] = v; sp.gov[key] = cb.name; }
         }
       }
-      const order = beamTypes.map((t, i) => ({ t, i })).sort((a, b) => tWeight(a.t) - tWeight(b.t));
+      const order = autoOrder(beamTypes, tWeight); // hand-made types (t.manual) only where the user put them
       frame.floors[k].beams.forEach((b, m) => {
         if (b.type != null) return;
         const sps = an.spans.filter((sp) => (sp.members ?? [sp.member]).includes(m));
@@ -409,6 +409,17 @@ export function analyzeFrame(frame) {
       sp.ok = sp.check.ok;
     }
     an.ok = an.spans.every((x) => x.ok) && !an.lines.some((l) => l.error);
+    // a beam with a type fixed by hand / locked that fails: the lightest type passing all its spans with these forces (offered as a one-click
+    // change, never applied by itself — user 2026-11-19; the forces carry the current type's self weight, the next analysis confirms it)
+    an.suggest = {};
+    { const k = g.an.indexOf(an), byW = beamTypes.map((t, i) => ({ t, i })).sort((x, y) => tWeight(x.t) - tWeight(y.t) || x.i - y.i);
+      (frame.floors[k]?.beams ?? []).forEach((b, m) => {
+        if (b.type == null) return;
+        const sps = an.spans.filter((sp) => (sp.members ?? [sp.member]).includes(m));
+        if (!sps.length || sps.every((sp) => sp.ok)) return;
+        const pick = byW.find(({ t }) => sps.every((sp) => checkEnv(t, sp, mat).ok));
+        if (pick && pick.i !== b.type) an.suggest[m] = pick.i;
+      }); }
     const near = an.spans.filter((x) => x.nearLimit); if (near.length) g.warnings.push(`${frame.floors[g.an.indexOf(an)]?.name ?? ""}: ช่วงคานผ่านแบบเฉียดขีดจำกัด (ห่างไม่ถึง 1 ส่วนในล้าน) ${near.length} ช่วง — ${near.slice(0, 6).map((x) => `${x.id} ${x.typeName ?? ""}`).join(", ")}${near.length > 6 ? " …" : ""}: ผลอาจพลิกได้จากการปัดเศษของเครื่องคำนวณ ควรใช้ type ที่ใหญ่ขึ้นหนึ่งขั้น`);
   }
   // columns, frame.colMethod:

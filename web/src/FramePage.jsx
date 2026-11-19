@@ -17,6 +17,7 @@ import { BrickWall, Building2, Columns3, Grid3x3, Layers, Plus, Ruler, Trash2, T
 import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import { beamCost, generateBeamTypes, pruneUnusedTypes } from "../engine/beamTypes.js";
+import { assignBeams, beamCounts, beamMode, deleteBeamType, finalizeGenerated, lockBeams, nextTypeName, renumberTypes, unlockBeams } from "../engine/beamAssign.js";
 import { generateColumnTypes } from "../engine/columnTypes.js";
 import { findOverlaps, mergeOverlaps } from "../engine/floor.js";
 import { locateWarning } from "./warnLocate.js";
@@ -108,8 +109,12 @@ function AutoBeamTypes({ frame, set, res }) {
         setMsg({ ok: true, text: `เพิ่มเป็น ${nNow + 1} type แล้วไม่ได้ type ใหม่ที่ถูกกว่า — งานนี้ใช้หน้าตัดที่ต่างกันจริง ${nNow} แบบตามลำดับออกแบบ (20×40 → 20×50 …, DB12 → DB16) จึงคง ${nNow} type เดิมไว้` });
         return;
       }
-      set("beamTypes", g.beamTypes); set("floors", g.floors); set("beamAutoK", n);
-      setMsg({ ok: g.ok === g.n, text: `ได้ ${n} type${n < k ? ` (ขอ ${k} กลุ่ม — กลุ่มที่ได้หน้าตัดเดียวกันรวมกัน และ type ที่ไม่มีคานใช้ถูกตัดออก)` : ""} · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()})` });
+      // then every beam is LOCKED to its type (user 2026-11-19: editing B5 must not move its beams to B6) and beams the user set by hand keep theirs
+      const fz = finalizeGenerated(frame, g), nOkF = fz.res.floors.flatMap((a) => a.spans).filter((x) => x.ok).length;
+      set("beamTypes", fz.beamTypes); set("floors", fz.floors); set("beamAutoK", n);
+      const kept = beamCounts(frame).hand;
+      if (kept) { setMsg({ ok: nOkF === g.n, text: `ได้ ${fz.beamTypes.length} type · คานที่กำหนดเอง ${kept} ตัวคงเดิม · คานผ่าน ${nOkF}/${g.n} · ทุกคานล็อค type แล้ว` }); return; }
+      setMsg({ ok: g.ok === g.n, text: `ได้ ${n} type${n < k ? ` (ขอ ${k} กลุ่ม — กลุ่มที่ได้หน้าตัดเดียวกันรวมกัน และ type ที่ไม่มีคานใช้ถูกตัดออก)` : ""} · คานผ่าน ${g.ok}/${g.n} · ค่าคาน ≈ ${Math.round(g.cost).toLocaleString()} บาท (เดิม ${Math.round(cost).toLocaleString()}) · ทุกคานล็อค type แล้ว (แก้เหล็กได้โดยคานไม่ย้าย type)` });
     } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(false); }
   }, 30); };
   // compare type counts (user 2026-11-05: "6 and 14 types both gave 4 types with different bars — how do I choose?"): the number asked is only
@@ -125,7 +130,7 @@ function AutoBeamTypes({ frame, set, res }) {
       } catch { /* a failed k is skipped */ }
       setScan({ rows: [...rows], k, done: k >= 10 }); if (k < 10) step(k + 1); }, 20);
     step(1); };
-  const apply = (r) => { const pr = pruneUnusedTypes({ ...frame, beamTypes: r.g.beamTypes, floors: r.g.floors }); set("beamTypes", pr.beamTypes); set("floors", pr.floors); set("beamAutoK", pr.beamTypes.length); setMsg({ ok: r.ok === r.total, text: `ใช้ ${pr.beamTypes.length} type (จากการขอ ${(r.ks ?? [r.k]).join(", ")}) · ค่าคาน ≈ ${Math.round(r.cost).toLocaleString()} บาท` }); };
+  const apply = (r) => { const pr0 = pruneUnusedTypes({ ...frame, beamTypes: r.g.beamTypes, floors: r.g.floors }), pr = finalizeGenerated(frame, { ...r.g, beamTypes: pr0.beamTypes, floors: pr0.floors }); set("beamTypes", pr.beamTypes); set("floors", pr.floors); set("beamAutoK", pr.beamTypes.length); setMsg({ ok: r.ok === r.total, text: `ใช้ ${pr.beamTypes.length} type (จากการขอ ${(r.ks ?? [r.k]).join(", ")}) · ค่าคาน ≈ ${Math.round(r.cost).toLocaleString()} บาท` }); };
   const okRows = (scan?.rows ?? []).filter((r) => r.ok === r.total), cheapest = okRows.reduce((a, r) => (!a || r.cost < a.cost ? r : a), null);
   const fewest = okRows.filter((r) => cheapest && r.cost <= cheapest.cost * 1.03).reduce((a, r) => (!a || r.n < a.n || (r.n === a.n && r.cost < a.cost) ? r : a), null); // within 3 % of the cheapest, fewest types
   return (
@@ -142,6 +147,14 @@ function AutoBeamTypes({ frame, set, res }) {
         <span className="text-[12px] text-gray-500">ค่าคานตอนนี้ ≈ {Math.round(cost).toLocaleString()} บาท</span>
       </div>
       <p className="mt-1.5 text-[11px] text-gray-500">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ถูกที่สุดที่ผ่าน (กว้าง 0.20 / 0.30 ม. ลึก 0.30–0.80 ม. ทีละ 10 ซม. เหล็ก ≤ 2 ชั้น) เรียงตามราคาแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดถูกที่สุดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2, … เรียงตามขนาดคาน (ตัด type ที่ไม่มีคานใช้) · คานยื่นใช้ type ที่เหล็กหัวเสาพอ ชื่อ B1A (เหล็กบนยาวตลอด) · แทนที่ type คานทั้งหมดและตั้งทุกคานเป็นอัตโนมัติ (ย้อนกลับได้ Ctrl+Z) · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p>
+      {(() => { const c = beamCounts(frame); return (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-2 py-1.5 text-[12px] text-gray-600 dark:bg-white/[0.03]">
+          <span title="ล็อค = type ที่ได้จากการจัดอัตโนมัติ ตรึงไว้ แก้เหล็กของ type แล้วคานไม่ย้ายไป type อื่น · กำหนดเอง = เลือกเองที่คาน · อัตโนมัติ = โปรแกรมเลือกใหม่ทุกครั้งที่คำนวณ">คาน: ล็อค {c.lock} · กำหนดเอง {c.hand} · อัตโนมัติ {c.auto}</span>
+          {c.auto > 0 && <button onClick={() => { const L = lockBeams(frame, res); set("floors", L.floors); setMsg({ ok: true, text: `ล็อค type คาน ${L.n} ตัวตามที่เป็นอยู่ — แก้เหล็กของ type ใดก็ได้ คานยังอยู่ type เดิม (ไม่ผ่านจะขึ้นแดงพร้อม type ที่ผ่าน)` }); }} className="rounded-md px-2 py-0.5 font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ล็อค type ทุกคานตามที่เป็นอยู่</button>}
+          {c.lock > 0 && <button onClick={() => { const U = unlockBeams(frame); set("floors", U.floors); setMsg({ ok: true, text: `ปลดล็อค ${U.n} คาน — โปรแกรมจะเลือก type ที่เบาที่สุดที่ผ่านให้ใหม่ทุกครั้ง (คานที่กำหนดเองคงเดิม)` }); }} className="rounded-md px-2 py-0.5 font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">ปลดล็อค ให้โปรแกรมเลือกใหม่</button>}
+          {c.hand > 0 && <button onClick={() => { const fl2 = frame.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map(({ autoLock, ...b }) => ({ ...b, type: null })) })); set("floors", fl2); setMsg({ ok: true, text: `ทุกคาน (${c.hand + c.lock + c.auto}) กลับเป็นอัตโนมัติ — กดจัด type อีกครั้งเพื่อจัดใหม่ทั้งหมด (ย้อนกลับได้ Ctrl+Z)` }); }} title="คานที่กำหนดเองจะถูกเก็บไว้ตอนจัด type อัตโนมัติ — กดปุ่มนี้ก่อนถ้าต้องการจัดใหม่ทั้งหมด" className="rounded-md px-2 py-0.5 font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">ให้ทุกคานเป็นอัตโนมัติ</button>}
+          <span className="text-[11px] text-gray-400">กำหนด type ให้หลายคาน: ลากกรอบ / Ctrl + คลิกคานบนแปลน แล้วเลือก "ใช้ type กับคานที่เลือก"</span>
+        </div>); })()}
       {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
       {scan?.rows.length > 0 && (<div className="mt-2 overflow-x-auto"><table className="w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">
         <th className="py-1 pr-2">ขอ</th><th className="pr-2">ได้ (type)</th><th className="pr-2">ขนาด</th><th className="pr-2 text-right">ช่วงบน 20×40</th><th className="pr-2 text-right">ผ่าน</th><th className="pr-2 text-right">ค่าคาน ≈ บาท</th><th></th></tr></thead>
@@ -181,16 +194,9 @@ function AutoColTypes({ frame, set, res }) {
   );
 }
 
-// delete beam type i (user 2026-11-05): beams fixed to it go back to auto, later indices shift down, and names of the form B<n> are
-// renumbered in order (B1, B2, …) so no number is skipped; custom names stay
-export function deleteBeamType(frame, i) {
-  const left = frame.beamTypes.filter((_, j) => j !== i);
-  let n = 0; const beamTypes = left.map((t) => (/^B\d+$/.test(t.name ?? "") ? { ...t, name: `B${++n}` } : (n++, t)));
-  const floors = frame.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map((b) => (b.type == null ? b : b.type === i ? { ...b, type: null } : b.type > i ? { ...b, type: b.type - 1 } : b)) }));
-  return { beamTypes, floors };
-}
+// deleteBeamType: engine/beamAssign.js (names of the other types no longer shift)
 
-function TypeTable({ types, setTypes, an, delType, res }) {
+function TypeTable({ types, setTypes, an, delType, res, cur = 0, frame = null, onRenumber = null }) {
   const set = (i, k, v) => setTypes(types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const used = (i) => an?.spans.filter((s) => s.typeIdx === i) ?? [];
   const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] tabular-nums";
@@ -201,24 +207,28 @@ function TypeTable({ types, setTypes, an, delType, res }) {
     <div className="overflow-auto text-[12px]">
       <table className="w-full border-collapse">
         <thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">
-          {["Type", "b (ม.)", "h (ม.)", "บน ตลอด", "บน เสริม L/4", "ล่าง ตลอด", "ล่าง เสริม 3L/5", "ปลอก", "ชุด", "@หัวเสา", "@กลาง", "ใช้", ""].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}
+          {["Type", "โปรแกรมเลือก", "b (ม.)", "h (ม.)", "บน ตลอด", "บน เสริม L/4", "ล่าง ตลอด", "ล่าง เสริม 3L/5", "ปลอก", "ชุด", "@หัวเสา", "@กลาง", "ใช้", "", ""].map((h, j) => <th key={j} className="px-1 py-1 font-medium">{h}</th>)}
         </tr></thead>
         <tbody>{types.map((t, i) => (
           <tr key={i} className="border-b border-gray-100">
             <td className="px-1"><span className="mr-1 inline-block h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }} />
               <input defaultValue={t.name} key={t.name} onBlur={(e) => set(i, "name", e.target.value.trim() || t.name)} className={`${cell} !w-12 font-semibold`} />{t.big && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700" title="คานใหญ่พิเศษ: เกินกรอบปกติ (กว้าง 0.30 / ลึก 0.80 ม.) ใช้เฉพาะช่วงที่หน้าตัดปกติรับไม่ได้">ใหญ่พิเศษ</span>}</td>
+            <td className="px-1 text-center" title="ติ๊ก = โปรแกรมเลือก type นี้ให้คานอัตโนมัติได้ · ไม่ติ๊ก = ใช้เฉพาะคานที่คุณกำหนดเอง (type ที่สร้างเองเริ่มแบบไม่ติ๊ก)"><input type="checkbox" checked={!t.manual} onChange={(e) => set(i, "manual", !e.target.checked || undefined)} /></td>
             <td className="px-1 w-16">{num(i, "b", 0.05)}</td><td className="px-1 w-16">{num(i, "h", 0.05)}</td>
             <td className="px-1">{bars(i, "top")}</td><td className="px-1">{bars(i, "topX")}</td><td className="px-1">{bars(i, "bot")}</td><td className="px-1">{bars(i, "botX")}</td>
             <td className="px-1 w-20"><select value={t.st} onChange={(e) => set(i, "st", e.target.value)} className={cell}>{["RB 6", "RB 9", "DB 10", "DB 12"].map((s) => <option key={s}>{s}</option>)}</select></td>
             <td className="px-1 w-14"><select value={t.stSets ?? 1} onChange={(e) => set(i, "stSets", Number(e.target.value))} className={cell} title="จำนวนชุดปลอก (2 = ปลอก 2 ชุดซ้อน)"><option value={1}>1</option><option value={2}>2</option></select></td>
             <td className="px-1 w-16">{num(i, "sSup", 0.025)}</td><td className="px-1 w-16">{num(i, "sMid", 0.025)}</td>
             <td className="px-1 text-gray-500" title="จำนวนช่วงทุกชั้น (ในวงเล็บ = ชั้นที่เลือกอยู่)">{res ? res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0) : used(i).length} ช่วง{res && <span className="text-gray-400"> ({used(i).length})</span>}</td>
+            <td><button onPointerEnter={() => frame && highlight({ floor: cur, segs: (frame.floors[cur]?.beams ?? []).filter((_, m) => (an?.beamTypeOf?.[m] ?? frame.floors[cur].beams[m].type) === i).map((b) => [b.a, b.b]) })} onPointerLeave={() => highlight(null)} className="mr-1 text-[11px] text-brand-600 hover:underline" title="ชี้เพื่อดูคานชั้นนี้ที่ใช้ type นี้บนแปลน">ดูคาน</button></td>
             <td><button onClick={() => delType(i)} disabled={types.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></td>
           </tr>))}</tbody>
       </table>
-      <button onClick={() => setTypes([...types, { ...types[types.length - 1], name: `B${types.length + 1}` }])} className="mt-2 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่ม type</button>
+      {onRenumber && <button onClick={onRenumber} title="เรียง type ตามขนาด (b × h) แล้วตั้งชื่อ B1, B2 … ใหม่ตามลำดับ — คานยังใช้หน้าตัดเดิมทุกตัว (ชื่อที่ตั้งเองไม่เปลี่ยน)" className="mr-2 mt-2 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50">เรียงชื่อใหม่ตามขนาด</button>}
+      <button onClick={() => setTypes([...types, { ...types[types.length - 1], name: nextTypeName(types), manual: true, auto: undefined, big: undefined }])} className="mt-2 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่ม type</button>
       <p className="mt-2 text-[11px] text-gray-400">ใส่เหล็กแบบ 2-DB16 · เว้นว่าง = ไม่มี · "ตลอด" = เหล็กวิ่งตลอดคาน, เสริม L/4 = เหล็กบนเพิ่มที่หัวเสา, เสริม 3L/5 = เหล็กล่างเพิ่มกลางคาน ·
-        type ที่ "อัตโนมัติ" เลือกตัวเบาที่สุดที่ผ่าน (หน้าตัดเล็กก่อน แล้วเหล็กน้อยก่อน) · คานที่วาดเป็นเส้นเดียวใช้ type เดียวทุกช่วง</p>
+        คาน "อัตโนมัติ" ได้ type ที่เบาที่สุดที่ผ่าน (เฉพาะ type ที่ติ๊ก "โปรแกรมเลือก") · คานที่ล็อค / กำหนดเอง ไม่ย้าย type เอง ไม่ผ่านจะขึ้นแดงพร้อม type ที่ผ่าน ·
+        type ที่เพิ่มเองไม่ถูกเลือกอัตโนมัติ — ใช้กับคานที่เลือกบนแปลน · ลบ type แล้วชื่อ type อื่นไม่เปลี่ยน · คานที่วาดเป็นเส้นเดียวใช้ type เดียวทุกช่วง</p>
     </div>
   );
 }
@@ -365,6 +375,11 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const [lineId, setLineId] = useState(null);
   const bigLine = an.lines.filter((l) => l.res).reduce((a, l) => { const m = Math.max(...an.spans.filter((s) => s.line === l.id).map((s) => Math.max(s.Mpos, s.Mneg)), 0); return !a || m > a.m ? { l, m } : a; }, null)?.l;
   const showLine = line ?? an.lines.find((l) => l.id === lineId && l.res) ?? bigLine;
+  // type of one drawn beam: what it is now and how it got it (auto / locked / set by hand) + a type that passes when it fails
+  const beamTypeNote = (i) => {
+    const b = fl.beams[i], mode = beamMode(b), now = types[an.beamTypeOf?.[i] ?? b.type], sug = an.suggest?.[i];
+    return { mode, now, sug, text: mode === "auto" ? `อัตโนมัติ — ตอนนี้ได้ ${now?.name ?? "-"} (เปลี่ยนเองได้ทุกครั้งที่คำนวณใหม่)` : mode === "lock" ? "ล็อคจากการจัด type อัตโนมัติ — แก้เหล็กของ type นี้ คานยังเป็น type นี้" : "กำหนดเอง" };
+  };
   const setBeam = (patch) => setFloor({ beams: fl.beams.map((b, i) => (i === sel.i ? { ...b, ...patch } : b)) });
   const wall = sel?.kind === "wall" ? wallsOf(fl)[sel.i] : null, cant = sel?.kind === "cant" ? fl.cants?.[sel.i] : null;
   const setWall = (patch) => setFloor({ walls: wallsOf(fl).map((w, i) => (i === sel.i ? { ...w, ...patch } : w)) });
@@ -424,7 +439,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const above = frame.floors[cur + 1], below = frame.floors[cur - 1];
   // stairs: drawn on the floor they start from, stored on the floor above (the floor they reach) — the board shows both
   const stairUp = above ? (ns) => { const n = (above.stairs ?? []).length; set("floors", frame.floors.map((f, i) => (i === cur + 1 ? { ...f, stairs: [...(f.stairs ?? []), ns] } : f))); set("cur", cur + 1); setSel({ kind: "stair", i: n }); } : null;
-  const boardEl = (<FloorBoard onMoveTo={moveTo} moveFloors={moveFloors} stairsAbove={above?.stairs ?? []} aboveName={above?.name ?? ""} belowName={below?.name ?? "ฐานราก"} onStairUp={stairUp} onPickAbove={(i) => { set("cur", cur + 1); setSel({ kind: "stair", i }); }} floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
+  const boardEl = (<FloorBoard onMoveTo={moveTo} moveFloors={moveFloors} onAssignType={boardStep === "frame" || boardStep === "result" ? (idx, ti) => setFloor({ beams: assignBeams({ floors: [fl] }, 0, idx, ti)[0].beams }) : null} stairsAbove={above?.stairs ?? []} aboveName={above?.name ?? ""} belowName={below?.name ?? "ฐานราก"} onStairUp={stairUp} onPickAbove={(i) => { set("cur", cur + 1); setSel({ kind: "stair", i }); }} floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   // click a beam / column in 3D = select it (its floor becomes the current one) — user 2026-11-04
   const pick3d = (h) => { if (h.floor !== cur) set("cur", h.floor); setSel({ kind: h.kind, i: h.i }); };
@@ -449,7 +464,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </Card>
       </div>
     </div>
-  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} project={project} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} cur={cur} frame={frame} onRenumber={() => { const r = renumberTypes(frame); set("beamTypes", r.beamTypes); set("floors", r.floors); }} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} project={project} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
     : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} delType={(i) => { const r = deleteColType(frame, i); set("colTypes", r.colTypes); set("colPick", r.colPick); }} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (() => {
@@ -614,7 +629,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               <button onClick={() => { setFloor({ cants: fl.cants.filter((_, i) => i !== sel.i) }); setSel(null); }} className="col-span-2 text-left text-[12px] text-red-600">ลบพื้นยื่นนี้</button>
             </div>)}
             {beam && (<div className="grid grid-cols-2 gap-3">
-              <Field label="Type"><Select value={beam.type ?? ""} onChange={(v) => setBeam({ type: v === "" ? null : Number(v) })} options={[["", "อัตโนมัติ"], ...types.map((t, i) => [i, t.name])]} /></Field>
+              <Field label="Type"><Select value={beam.type ?? ""} onChange={(v) => setBeam({ type: v === "" ? null : Number(v), autoLock: undefined })} options={[["", "อัตโนมัติ (โปรแกรมเลือก)"], ...types.map((t, i) => [i, `${t.name} · ${Math.round(t.b * 100)}×${Math.round(t.h * 100)}${t.manual ? " (สร้างเอง)" : ""}`])]} /></Field>
+              {(() => { const n = beamTypeNote(sel.i); return <p className="col-span-2 -mt-2 text-[11px] text-gray-500">{n.text}{n.sug != null && types[n.sug] && <> · <span className="font-medium text-red-600">ไม่ผ่าน — {types[n.sug].name} ผ่าน (ประมาณจากแรงตอนนี้)</span> <button onClick={() => setBeam({ type: n.sug, autoLock: undefined })} className="ml-1 rounded bg-brand-500 px-1.5 py-0.5 font-medium text-[#fff]">ใช้ {types[n.sug].name}</button></>}</p>; })()}
               <Field label={beam.arc?.s ? "ยาวตามส่วนโค้ง" : "ยาว"} unit="m"><div className="flex h-11 items-center text-sm tabular-nums">{fmt(arcGeom(beam.a, beam.b, beam.arc?.s)?.L ?? Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1]), 2)}</div></Field>
               <Field label="ระดับคาน (ม. จากพื้นชั้นล่าง)">
                 <NumberInput value={beam.lvl ?? ""} step="0.05" onChange={(v) => setBeam({ lvl: v > 0 ? v : undefined })} /></Field>

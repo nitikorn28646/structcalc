@@ -320,7 +320,12 @@ export function typeCostM(t, P = BEAM_PRICE) {
 }
 // mat.beamPick "steel" (default, user 2026-11-06: "more steel before a bigger beam"): the smaller concrete section first (b·h), then the
 // cheaper — a 20×40 with more bars is taken before a 20×50 with fewer; "cost" = cheapest per metre (2026-11-05)
-const typeWeightOf = (mat) => (mat?.beamPick === "cost" ? (t) => typeCostM(t) : (t) => Math.round(t.b * t.h * 1e4) * 1e6 + typeCostM(t));
+// types the automatic choice may use, lightest first (a list of only hand-made types still works: then all of them)
+export function autoOrder(types, weight) {
+  const all = types.map((t, i) => ({ t, i })), auto = all.filter((o) => !o.t.manual);
+  return (auto.length ? auto : all).sort((x, y) => weight(x.t) - weight(y.t) || x.i - y.i);
+}
+export const typeWeightOf = (mat) => (mat?.beamPick === "cost" ? (t) => typeCostM(t) : (t) => Math.round(t.b * t.h * 1e4) * 1e6 + typeCostM(t));
 // numerical robustness (user 2026-11-05): node and the browser differ in the last bits of pow / trig (different libm), which could flip a
 // choice sitting exactly on a limit. Type CHOICES are therefore made with the full-precision forces × (1 + 1e-9) — only types that pass with
 // that margin are chosen (never less safe); the reported pass / fail is always the plain full-precision check. Nothing is rounded.
@@ -717,7 +722,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   }
   // types: fixed per drawn beam, or auto (lightest passing); iterate because self weight and stiffness depend on the choice
   const typeWeight = typeWeightOf(mat);
-  const order = types.map((t, i) => ({ t, i })).sort((x, y) => typeWeight(x.t) - typeWeight(y.t) || x.i - y.i);
+  // auto choice: every type except those made by hand for chosen beams (t.manual, user 2026-11-19: "อยากเลือกเองว่าคานไหนเป็นเบอร์นี้")
+  const order = autoOrder(types, typeWeight);
   const typeOf = new Map(); // drawn beam index → type index in use
   (floor.beams ?? []).forEach((b, i) => typeOf.set(i, b.type ?? minTypes?.[i] ?? order[0]?.i ?? 0));
   const allowed = (i, t) => minTypes?.[i] == null || typeWeight(t) >= typeWeight(types[minTypes[i]]) - 1e-9;
@@ -824,7 +830,9 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     for (const e of ln.extra ?? []) groups[e.g ?? "SP"] += e.P;
   }
   for (const sp of result.spans) groups.DL += CONC * sp.type.b * sp.type.h * sp.len;
-  return { ...result, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
+  // the type each drawn beam ended with (fixed or chosen) — engine/beamAssign.js locks these
+  const beamTypeOf = (floor.beams ?? []).map((_, i) => typeOf.get(i));
+  return { ...result, beamTypeOf, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
 }
 
 // largest |deflection| (m) of each element: v'' = M/EI integrated twice, matched to the nodal deflections
