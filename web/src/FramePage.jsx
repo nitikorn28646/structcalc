@@ -38,6 +38,7 @@ import { LateralChoice, LateralPanel } from "./LateralPanel.jsx";
 import { FootingTypes } from "./FootingTypes.jsx";
 import { BeamTypeFigures, ColumnTypeFigures } from "./DesignFigures.jsx";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
+import WallTypesPanel from "./WallTypesPanel.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
@@ -679,33 +680,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             </div>)}
           </Card>
   ) : step === "loads" && sub === "cases" ? (<LoadCases frame={frame} fl={fl} an={an} cur={cur} setFloor={setFloor} multi={multiSel} setPickSet={setPickSet} armed={armed} setArmed={setArmed} pickRef={pickRef} onLateral={() => setSubState("lateral")} />
-  ) : step === "loads" && sub === "wall" ? (          <Card title="ชนิดผนัง (วัสดุ + ฉาบ)" icon={Ruler}>
-            <div className="space-y-2 text-[12px]">
-              {wallTypes.map((t, i) => { const put = (p) => set("wallTypes", wallTypes.map((x, j) => (j === i ? (() => { const n = { ...x, ...p }; return { ...n, w: Math.round(wallTypeW(n)) }; })() : x)));
-                const cell = "h-7 w-full min-w-0 rounded border border-gray-300 bg-transparent px-1 text-right tabular-nums text-[12px] text-gray-800 dark:text-gray-200";
-                return (
-                <div key={t.id} className="rounded-lg border border-gray-200 p-2">
-                  {/* narrow side panel: label above each input, two columns, nothing squeezed (user 2026-11-03: fields overlapped) */}
-                  <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                    <input defaultValue={t.name} key={t.name} title={t.name} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className="h-7 min-w-[10rem] flex-1 rounded border border-gray-300 bg-transparent px-2 font-medium" />
-                    <b className="ml-auto shrink-0 whitespace-nowrap tabular-nums text-[#b54708]">{fmt(t.w, 0)} กก./ม.²</b>
-                    <button disabled={wallTypes.length < 2} onClick={() => set("wallTypes", wallTypes.filter((_, j) => j !== i))} className="shrink-0 text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] text-gray-500">
-                    <label className="col-span-2 block min-w-0">เนื้อผนัง
-                      <select value={t.core ?? ""} onChange={(e) => put(e.target.value ? { core: e.target.value, t: t.t ?? 0.1, plaster: t.plaster ?? 1.5, sides: t.sides ?? 2 } : { core: undefined })} className="mt-0.5 h-7 w-full min-w-0 rounded border border-gray-300 bg-transparent px-1 text-[12px] text-gray-800 dark:text-gray-200">
-                        <option value="">กำหนดเอง (กก./ม.²)</option>{Object.entries(WALL_MATERIALS).map(([k, [n, d]]) => <option key={k} value={k}>{n}{d ? ` ${d}` : ""}</option>)}</select></label>
-                    {t.core ? (t.core === "gypsum" ? <label className="col-span-2 block min-w-0">น้ำหนักทั้งผนัง (กก./ม.²)<input type="number" step="5" value={t.dry ?? 30} onChange={(e) => put({ dry: Number(e.target.value) })} className={`${cell} mt-0.5`} /></label>
-                      : <><label className="block min-w-0">หนาเนื้อผนัง (ซม.)<input type="number" step="0.5" value={+((t.t ?? 0.1) * 100).toFixed(1)} onChange={(e) => put({ t: Number(e.target.value) / 100 })} className={`${cell} mt-0.5`} /></label>
-                        <label className="block min-w-0">ฉาบหนา (ซม.)<input type="number" step="0.5" value={t.plaster ?? 1.5} onChange={(e) => put({ plaster: Number(e.target.value) })} className={`${cell} mt-0.5`} /></label>
-                        <label className="col-span-2 block min-w-0">ฉาบกี่ด้าน<select value={t.sides ?? 2} onChange={(e) => put({ sides: Number(e.target.value) })} className="mt-0.5 h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] text-gray-800 dark:text-gray-200"><option value={2}>2 ด้าน</option><option value={1}>1 ด้าน</option><option value={0}>ไม่ฉาบ</option></select></label></>)
-                      : <label className="col-span-2 block min-w-0">น้ำหนักผนัง (กก./ม.²)<input type="number" defaultValue={t.w} key={t.w} onBlur={(e) => set("wallTypes", wallTypes.map((x, j) => (j === i ? { ...x, w: Number(e.target.value) || x.w } : x)))} className={`${cell} mt-0.5`} /></label>}
-                  </div>
-                </div>); })}
-              <button onClick={() => set("wallTypes", [...wallTypes, { id: `w${Date.now()}`, name: "อิฐมอญครึ่งแผ่น ฉาบ 2 ด้าน", core: "brick", t: 0.1, plaster: 1.5, sides: 2, w: Math.round(wallTypeW({ core: "brick", t: 0.1, plaster: 1.5, sides: 2 })) }])} className="text-brand-500">+ เพิ่มชนิดผนัง</button>
-              <p className="text-gray-400">กก./ม.² = ความหนาแน่นเนื้อผนัง × หนา + ฉาบ 2,000 กก./ม.³ × หนา × ด้าน · น้ำหนักต่อเมตร = กก./ม.² × สูง (สุทธิใต้คาน) − ประตู/หน้าต่าง · ติ๊กหลายคานในตาราง "ผนัง / น้ำหนักบนคาน" ด้านล่างเพื่อใส่ทีเดียว</p>
-            </div>
-          </Card>
+  ) : step === "loads" && sub === "wall" ? (<WallTypesPanel wallTypes={wallTypes} setWallTypes={(v) => set("wallTypes", v)} frame={frame} />
   ) : step === "loads" && sub === "other" ? (<>
           <Card title="คลังน้ำหนัก (เลือกแล้ววาดบนแปลน)" icon={Ruler}>
             <div className="space-y-1 text-[12px]">

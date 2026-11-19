@@ -649,3 +649,8 @@ WALL TO DRAW (2026-11-19, user "อยากเลือกชนิดผนั
 type (with kg/m²) + height อัตโนมัติ (clear height under the beam above, hAuto) | กำหนดเอง (number, hAuto false); every wall drawn takes it; kept per
 browser in localStorage structcalc.wallDraw (unknown type id → first type). Each wall can still be changed in the inspector. Browser check:
 gypsum 2.50 → W21 · 75 kg/m; E2E 47/47.
+WALL TYPE PANEL (2026-11-19, user "หน้าต่างนี้ออกแบบได้ห่วยมาก"): src/WallTypesPanel.jsx replaces the tall per-type form — one compact row per type
+(● = the type the wall tool draws, name + "n เส้น" in use over all floors, build-up in words + total thickness, kg/m²), click → settings open
+under the row (one at a time: name, material with density, thickness / plaster / sides in one row, the weight worked out in one line,
+"ใช้ลากผนัง", delete disabled while walls use the type). src/wallDraw.js useWallDraw() = the wall-to-draw choice shared by the panel and the
+FloorBoard toolbar (localStorage structcalc.wallDraw + window event). Weights unchanged (floor.js wallTypeW). E2E 47/47.

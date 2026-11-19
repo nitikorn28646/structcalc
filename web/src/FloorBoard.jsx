@@ -8,6 +8,7 @@ import { CircleDot, Columns3, Download, Eraser, FileUp, Footprints, Grid3x3, Han
 import { frame3dFromDxf, guessRole, parseDxf, toPlan } from "./dxfImport.js";
 import { Tip } from "@/components/ui/tooltip";
 import { useHighlight } from "./highlight.js";
+import { useWallDraw } from "./wallDraw.js";
 import { TextSizeControl, useTextScale } from "./uiPrefs.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "./beamModel.js";
@@ -45,9 +46,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   const [start, setStart] = useState(null), [cur, setCur] = useState(null), [drag, setDrag] = useState(null), [hist, setHist] = useState({ undo: [], redo: [] });
   // box selection (select tool, drag on empty space): left → right = window (fully inside), right → left = crossing (touching);
   // Delete removes everything selected in one undo step; Shift / middle-drag pans
-  // wall to draw: type + height picked before drawing, remembered in this browser (structcalc.wallDraw)
-  const [wallDraw, setWallDrawS] = useState(() => { try { return { auto: true, h: 3, ...JSON.parse(localStorage.getItem("structcalc.wallDraw") || "{}") }; } catch { return { auto: true, h: 3 }; } });
-  const setWallDraw = (p) => setWallDrawS((w) => { const n = { ...w, ...p }; try { localStorage.setItem("structcalc.wallDraw", JSON.stringify(n)); } catch { /* ignore */ } return n; });
+  // wall to draw: type + height picked before drawing, shared with the wall-type panel (src/wallDraw.js, kept per browser)
+  const [wallDraw, setWallDraw] = useWallDraw();
   const [box, setBox] = useState(null), [multi, setMulti] = useState([]), [menu, setMenu] = useState(null), hl = useHighlight(), [tScale] = useTextScale();
   const [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null), [moveMsg, setMoveMsg] = useState("");
   useEffect(() => { setToolState(tools[1]?.[0] ?? "select"); setStart(null); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
