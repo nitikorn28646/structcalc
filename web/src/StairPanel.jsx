@@ -3,7 +3,7 @@
 // slab (diff-tested slab engine via slabDesign) and a dimensioned side section of the stair.
 import { useState } from "react";
 import { autoStair } from "../engine/slabDesign.js";
-import { Field, NumberInput, Select } from "./ui.jsx";
+import { Field, NumberInput, Select, inputCls } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import { STAIR_KINDS, stairLoads, stairRT } from "../engine/floor.js";
 import { SLAB_BARS } from "../engine/tables.js";
@@ -23,6 +23,16 @@ export function stairGeom(st, H, r0) {
       ["2R + T = 0.60–0.65 ม.", 2 * Ra + T >= 0.6 - 1e-9 && 2 * Ra + T <= 0.65 + 1e-9, fmt(2 * Ra + T, 3)], ["ช่องบันไดยาวพอ", Lr - land >= runNeed - 0.01, `${fmt(runNeed, 2)} / ${fmt(Lr - land, 2)}`]] };
 }
 
+// a number that is applied when the field is left or Enter is pressed (steps / run length: typing "12" must not apply "1" first)
+function Commit({ value, onCommit, step = "any" }) {
+  return <input type="number" step={step} defaultValue={value} key={value} className={inputCls}
+    onBlur={(e) => { const v = Number(e.target.value); if (e.target.value !== "" && Number.isFinite(v) && v !== value) onCommit(v); else e.target.value = value; }}
+    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />;
+}
+// where a "long" stair hands its load (floor.js analyzeFloor: st.support) — the whole wL goes to one end, or wL/2 to each
+export const STAIR_SUPPORT = [["both", "ทั้งสองปลาย (ครึ่งละ wL/2)"], ["top", "คานบนรับทั้งหมด (wL)"], ["bottom", "คานล่างรับทั้งหมด (wL)"]];
+export const stairShare = (st) => ((st.kind ?? "long") !== "long" ? null : st.support === "top" ? [0, 1] : st.support === "bottom" ? [1, 0] : [0.5, 0.5]); // [bottom, top]
+
 export function StairInputs({ st, set, H, r0, mat, onLandingBeam }) {
   const [auto, setAuto] = useState(null);
   const n = (k, label, unit, step, def) => <Field label={label} unit={unit}><NumberInput value={st[k] ?? def} step={step} onChange={(v) => set({ [k]: v })} /></Field>;
@@ -39,12 +49,25 @@ export function StairInputs({ st, set, H, r0, mat, onLandingBeam }) {
         {auto && <ul className="mt-1 list-disc pl-5 text-[11px] text-gray-600">{auto.map((t) => <li key={t}>{t}</li>)}</ul>}
       </div>
       <Sub>รูปทรง (ขึ้นสูง {fmt(H, 2)} ม. ตามระดับชั้น)</Sub>
-      {n("riser", "ลูกตั้ง (ออกแบบ)", "m", "0.005", 0.17)}{n("tread", "ลูกนอน", "m", "0.005", 0.25)}
+      {/* user 2026-11-19: type the riser OR the number of risers, the tread OR the run — the other one follows (H = storey height) */}
+      {n("riser", "ลูกตั้ง", "m", "0.005", 0.17)}
+      <Field label="จำนวนลูกตั้ง" unit="ขั้น"><Commit value={g.n} step="1" onCommit={(v) => { const k = Math.max(2, Math.min(Math.floor(H / 0.051), Math.round(v))); set({ riser: +(H / k).toFixed(5) }); }} /></Field>
+      {n("tread", "ลูกนอน", "m", "0.005", 0.25)}
+      <Field label={g.flights > 1 ? "ยาวแนวราบ ต่อช่วงบันได" : "ยาวแนวราบ"} unit="m"><Commit value={+g.runNeed.toFixed(3)} step="0.05" onCommit={(L) => { if (g.perFlight > 1 && L > 0) set({ tread: +Math.max(0.101, L / (g.perFlight - 1)).toFixed(4) }); }} /></Field>
+      <p className="col-span-2 -mt-2 text-[11px] text-gray-500">ใส่ช่องไหนก็ได้ อีกช่องคำนวณให้: ลูกตั้ง = ความสูงชั้น ÷ จำนวนลูกตั้ง · ยาวแนวราบ = ลูกนอน × {g.perFlight - 1} ({g.perFlight} ลูกตั้ง{g.flights > 1 ? " ต่อช่วง" : ""}, ขั้นบนสุดคือพื้นชั้นบน)</p>
       {n("t", "ท้องบันไดหนา", "m", "0.01", 0.12)}
       {st.kind === "landing" ? n("landingL", "ชานพักยาว", "m", "0.1", 1.2) : <div />}
       {st.kind === "landing" && onLandingBeam && <div className="col-span-2"><button onClick={onLandingBeam} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-left text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">+ สร้างคานชานพักที่ระดับ {fmt(H / 2, 2)} ม. (ขอบชานพัก ต่อถึงเสาที่ใกล้สุด)</button></div>}
       {st.kind === "landing" && <div className="col-span-2"><Field label="คานรับชานพัก"><Select value={st.landingTo ?? ""} onChange={(v) => set({ landingTo: v || undefined })} options={[["", "อัตโนมัติ — คานชานพัก (ระดับกลางชั้น) ถ้าวาดไว้ ไม่มีก็ฝากคานชั้นล่าง"], ["mid", "คานชานพักระดับกลางชั้น"], ["below", "ฝากคานชั้นล่าง"], ["this", "ฝากคานชั้นนี้"]]} /></Field></div>}
       <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] tabular-nums text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:text-gray-300 dark:ring-gray-800">{g.n} ลูกตั้ง × {fmt(g.Ra, 3)} ม. · {g.flights} ช่วงบันได ช่วงละ {g.perFlight} ขั้น · ต้องการยาว {fmt(g.runNeed, 2)} ม. (ช่องที่วาด {fmt(g.runAvail, 2)} ม.)</p>
+      {(st.kind ?? "long") === "long" && (() => { const sh = stairShare(st), wL = (r0?.w ?? 0) * (r0?.Lr ?? 0); return (<>
+        <Sub>การฝากน้ำหนักลงคาน</Sub>
+        <div className="col-span-2"><Field label="ปลายที่รับน้ำหนักบันได"><Select value={st.support ?? "both"} onChange={(v) => set({ support: v === "both" ? undefined : v })} options={STAIR_SUPPORT} /></Field></div>
+        {r0 && <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] tabular-nums text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:text-gray-300 dark:ring-gray-800">
+          wL = {fmt(r0.w, 0)} × {fmt(r0.Lr, 2)} = {fmt(wL, 0)} กก./ม. (ต่อความกว้างบันได 1 ม.)<br />
+          คานบน (ชั้นนี้) <b>{fmt(wL * sh[1], 0)}</b> · คานล่าง (ชั้นล่าง) <b>{fmt(wL * sh[0], 0)}</b> กก./ม.</p>}
+        {st.support && <p className="col-span-2 -mt-2 text-[11px] text-gray-500">น้ำหนักรวมเท่าเดิม ไปลงคานปลายเดียว · ท้องบันไดยังออกแบบเป็นช่วงพาด L (ไม่เปลี่ยนผลท้องบันได)</p>}
+      </>); })()}
       <Sub>น้ำหนักบรรทุก</Sub>
       <Field label="ประเภทการใช้งาน"><Select value={LIVE.some(([v]) => v === (st.live ?? 300)) ? st.live ?? 300 : ""} onChange={(v) => v && set({ live: Number(v) })} options={[...LIVE, ["", "กำหนดเอง"]]} /></Field>
       {n("live", "น้ำหนักจร", "kg/m²", "50", 300)}{n("finish", "ปูผิว + ราวจับ", "kg/m²", "10", 100)}
@@ -86,6 +109,13 @@ export function StairDetail({ st, i, H, r0, row }) {
         <p className="mb-1 mt-3 font-semibold">น้ำหนักบนช่วงบันได (ต่อ ม.² ตามแนวราบ)</p>
         <table className="w-full tabular-nums"><tbody>{loads.map(([t, v]) => <tr key={t} className="border-b border-[#f2f4f7]"><td className="py-0.5">{t}</td><td className="text-right">{fmt(v, 0)} กก./ม.²</td></tr>)}
           <tr className="font-semibold"><td className="py-0.5">รวม</td><td className="text-right">{fmt(L.flight.DL + L.flight.SDL + L.flight.LL, 0)} กก./ม.²</td></tr></tbody></table>
+        {stairShare(st) && r0 && (() => { const sh = stairShare(st), wL = r0.w * r0.Lr; return (<>
+          <p className="mb-1 mt-3 font-semibold">ฝากน้ำหนักลงคาน (ต่อความกว้าง 1 ม.)</p>
+          <table className="w-full tabular-nums"><tbody>
+            <tr className="border-b border-[#f2f4f7]"><td className="py-0.5">คานบน (ปลายบันได)</td><td className="text-right">{fmt(wL * sh[1], 0)} กก./ม.</td></tr>
+            <tr className="border-b border-[#f2f4f7]"><td className="py-0.5">คานล่าง (ต้นบันได)</td><td className="text-right">{fmt(wL * sh[0], 0)} กก./ม.</td></tr>
+            <tr className="font-semibold"><td className="py-0.5">{STAIR_SUPPORT.find(([k]) => k === (st.support ?? "both"))[1].replace(/ \(.*\)$/, "")}</td><td className="text-right">wL = {fmt(wL, 0)} กก./ม.</td></tr>
+          </tbody></table></>); })()}
       </div>
       <div>
         <p className="mb-1 font-semibold">ออกแบบท้องบันได (WSD)</p>

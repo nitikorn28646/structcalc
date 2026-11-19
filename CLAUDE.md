@@ -669,3 +669,10 @@ headings / buttons, StoreyTable (rows in a List, "+ เพิ่มชั้น"
 DelButton. Fix on the way: StoreyTable setH renames the "+x.xx" names of every level above (roof stayed "+6.60" at 6.70). Header delete checked
 (wall 20 → 19 → Ctrl+Z 20). Not converted yet: roof page settings panel (RoofPage), main-area pages (step 0 criteria, step 7 type cards, step 9).
 E2E 47/47, regress identical.
+STAIR INPUTS + SUPPORT (2026-11-19, user: "ช่องป้อน ลูกตั้ง ลูกนอน จำนวนขั้น หรือความยาว · เลือกฝากน้ำหนักข้างบน / ข้างล่าง / ทั้งสอง"; user chose "the whole
+load to that end"): StairPanel geometry = ลูกตั้ง | จำนวนลูกตั้ง (riser = H / n, n clamped 2…H/0.051) · ลูกนอน | ยาวแนวราบ (tread = run / (risers per
+flight − 1), ≥ 0.101) — steps / run are commit-on-blur fields (Commit) so typing "12" never applies "1". floor.js long stair st.support "both" (default,
+wL/2 each end) | "top" (whole wL onto the top beam, this floor) | "bottom" (whole wL onto the bottom beam, floor below); total unchanged, waist still
+designed as a span L; an.stairs[i].support. Panel section "การฝากน้ำหนักลงคาน" (select + wL and the reaction per end per metre of width), design sheet
+table "ฝากน้ำหนักลงคาน", report stair row says which end and kg/m. Landing / side / cantilever stairs unchanged (landing keeps landingTo).
+cli/stair-check.mjs 14/14 (+4 support cases: shares 0/1, 1/0, ½/½). Regress / floor / frame / verify20 / E2E unchanged.

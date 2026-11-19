@@ -479,7 +479,8 @@ export function spanReasons(c) {
 // extra: point loads [{ p: [x,y], P, from }] from columns of the floor above that stand on a beam here
 // floor.panels[key] = { kind: S | PS | GS, dir: x | y (PS), t, finish, live, open }; floor.walls = [{ a, b, kind, h, open %, layers }];
 // floor.cants = [{ a, b (on a beam), L, side ±1, t, finish, live }] cantilever slabs
-// floor.stairs = [{ a, b (plan rectangle corners), up: +x|-x|+y|-y, kind, t, riser, tread, finish, live, landingL, landingTo: this|below, side ±1 (cant) }]
+// floor.stairs = [{ a, b (plan rectangle corners), up: +x|-x|+y|-y, kind, t, riser, tread, finish, live, landingL, landingTo: this|below, side ±1 (cant),
+//   support: both|top|bottom (long kind: where the stair load goes) }]
 // floor.lineLoads = [{ a, b, q kg/m, name, g: SDL | WALL | LL (Load Cases page; none = SP) }] railings, walls typed as kg/m etc.; floor.pointLoads = [{ p, P kg, name }]; panels[key].extra kg/m² (SDL)
 // downLines: line loads handed down by the floor above (stair bottoms) → [{ a, b, q, g, from }]
 // minTypes: { drawnBeamIndex: typeIdx } lightest type allowed (set by the 3D-frame envelope of analyzeFrame)
@@ -647,12 +648,18 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       const midThere = lines.some((o) => o.lvl && along(o, E.end[0]) !== null && along(o, E.end[1]) !== null);
       put(E.end, Rfar, st.landingTo === "this" ? "this" : st.landingTo === "below" ? "below" : st.landingTo === "mid" || midThere ? "mid" : "below");
       total.DL = flight.DL * Lf * B + landing.DL * Ll * B; total.SDL = flight.SDL * Lr * B; total.LL = flight.LL * Lr * B;
-    } else { put(E.start, scale(flight, Lr / 2), "below"); put(E.end, scale(flight, Lr / 2), "this"); } // long: simple span along the run
+    } else { // long: simple span along the run — st.support (user 2026-11-19): "both" = wL/2 to each end (default); "top" / "bottom" = the WHOLE
+      // stair load wL onto that end's beam (the other end sends nothing into the frame; the total is kept; the waist is still designed as a span L)
+      const sup = st.support === "top" || st.support === "bottom" ? st.support : "both";
+      if (sup !== "top") put(E.start, scale(flight, sup === "bottom" ? Lr : Lr / 2), "below");
+      if (sup !== "bottom") put(E.end, scale(flight, sup === "top" ? Lr : Lr / 2), "this");
+    }
     if (st.kind === "cant") { // the supporting beam also takes the torque wB²/2 per metre
       const e = st.side === -1 ? E.sideA : E.sideB, ln = flat.find((o) => along(o, e[0]) !== null && along(o, e[1]) !== null);
       if (ln) { const a = along(ln, e[0]), b = along(ln, e[1]); ln.torsion.push({ a: Math.min(a, b), b: Math.max(a, b), m: ((flight.DL + flight.SDL + flight.LL) * B * B) / 2, mL: (flight.LL * B * B) / 2 }); }
     }
-    return { i, P: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], kind: st.kind ?? "long", up: st.up ?? "+x", th, Lr, B, total, w: flight.DL + flight.SDL + flight.LL };
+    return { i, P: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], kind: st.kind ?? "long", up: st.up ?? "+x", th, Lr, B, total, w: flight.DL + flight.SDL + flight.LL,
+      support: (st.kind ?? "long") === "long" ? (st.support === "top" || st.support === "bottom" ? st.support : "both") : null };
   });
   // a panel under a stair is its stair well: the stair replaces that slab
   for (const pn of panels) {
