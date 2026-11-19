@@ -65,21 +65,44 @@ function Sloped({ C, t, color }) {
   return <mesh geometry={geo}><meshStandardMaterial color={color} side={THREE.DoubleSide} /><Edges color="#667085" /></mesh>;
 }
 
-// stair flights and landing from the plan rectangle, bottom level zb, top level zt
-function Stair({ st, zb, zt, color }) {
+// stair flights and landing from the plan rectangle, bottom level zb, top level zt (user 2026-11-18: "3D บันได ทำให้สมจริง"):
+// real steps — risers / treads from the stair's own riser, tread and waist thickness (raw = floor.stairs[i]), a waist slab under
+// them (thickness t square to the pitch), the landing slab for "landing" (U: first flight up one half of the width, landing across the
+// far end, second flight back up the other half)
+// one flight: stepped profile in its own plane (s along the run 0…run, height 0…rise), extruded across the width w
+function flightGeo(run, rise, n, t) {
+  const T = run / n, R = rise / n, th = Math.atan2(rise, run), off = t / Math.cos(th), sh = new THREE.Shape();
+  sh.moveTo(0, -off); sh.lineTo(0, R);
+  for (let k = 1; k < n; k++) { sh.lineTo(k * T, k * R); sh.lineTo(k * T, (k + 1) * R); }
+  sh.lineTo(run, rise); sh.lineTo(run, rise - off); sh.closePath(); // soffit parallel to the pitch line
+  return sh;
+}
+function Flight({ origin, u, v, run, rise, n, t, w, color }) {
+  const geo = useMemo(() => {
+    const g = new THREE.ExtrudeGeometry(flightGeo(run, rise, n, t), { depth: w, bevelEnabled: false });
+    const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(...u), new THREE.Vector3(0, 1, 0), new THREE.Vector3(...v)).setPosition(...origin);
+    g.applyMatrix4(m); g.computeVertexNormals(); return g;
+  }, [origin, u, v, run, rise, n, t, w]);
+  return <mesh geometry={geo}><meshStandardMaterial color={color} side={THREE.DoubleSide} /><Edges color="#667085" threshold={20} /></mesh>;
+}
+export function Stair({ st, raw = {}, zb, zt, color }) {
   const [x0, y0] = st.P[0], [x1, y1] = st.P[2], ax = st.up?.[1] ?? "x", sg = st.up?.[0] === "-" ? -1 : 1;
-  // local frame: s along the run (0 at the start edge), r across (0..B)
-  const pt = (s, r, z) => (ax === "x" ? [sg > 0 ? x0 + s : x1 - s, y0 + r, z] : [x0 + r, sg > 0 ? y0 + s : y1 - s, z]);
-  const L = st.Lr, B = st.B, t = 0.15;
+  const R0 = raw.riser > 0.05 ? raw.riser : 0.17, t = raw.t > 0.05 ? raw.t : 0.12, L = st.Lr, B = st.B, H = zt - zb;
+  // world vectors (three.js: x, height, −y): u = up the run, v = across (r grows with plan y for runs along x, with plan x for runs along y)
+  const U = ax === "x" ? [sg, 0, 0] : [0, 0, -sg], V = ax === "x" ? [0, 0, -1] : [1, 0, 0];
+  const at = (s, r, z) => { const px = ax === "x" ? (sg > 0 ? x0 + s : x1 - s) : x0 + r, py = ax === "x" ? y0 + r : sg > 0 ? y0 + s : y1 - s; return [px, z, -py]; };
+  const steps = (rise) => Math.max(2, Math.round(rise / R0));
   if (st.kind === "landing") {
-    const Ll = Math.min(st.landingL ?? 1.2, L), Lf = L - Ll, zm = (zb + zt) / 2;
-    return (<>
-      <Sloped C={[pt(0, 0, zb), pt(Lf, 0, zm), pt(Lf, B / 2, zm), pt(0, B / 2, zb)]} t={t} color={color} />
-      <Sloped C={[pt(Lf, 0, zm), pt(L, 0, zm), pt(L, B, zm), pt(Lf, B, zm)]} t={t} color={color} />
-      <Sloped C={[pt(Lf, B / 2, zm), pt(0, B / 2, zt), pt(0, B, zt), pt(Lf, B, zm)]} t={t} color={color} />
-    </>);
+    const Ll = Math.min(raw.landingL ?? st.landingL ?? 1.2, L * 0.6), Lf = L - Ll, zm = zb + H / 2, n1 = steps(H / 2);
+    // landing slab across the far end (top at zm), first flight on r 0…B/2, second flight back on r B/2…B (its run points back)
+    const lc = at(Lf + Ll / 2, B / 2, zm - t / 2);
+    return (<group>
+      <Flight origin={at(0, 0, zb)} u={U} v={V} run={Lf} rise={H / 2} n={n1} t={t} w={B / 2} color={color} />
+      <Flight origin={at(Lf, B, zm)} u={U.map((x) => -x)} v={V.map((x) => -x)} run={Lf} rise={H / 2} n={n1} t={t} w={B / 2} color={color} />
+      <mesh position={lc}><boxGeometry args={ax === "x" ? [Ll, t, B] : [B, t, Ll]} /><meshStandardMaterial color={color} /><Edges color="#667085" /></mesh>
+    </group>);
   }
-  return <Sloped C={[pt(0, 0, zb), pt(L, 0, zt), pt(L, B, zt), pt(0, B, zb)]} t={t} color={color} />;
+  return <Flight origin={at(0, 0, zb)} u={U} v={V} run={L} rise={H} n={steps(H)} t={t} w={B} color={color} />;
 }
 
 // steel roof planes from the roof module (loaded on demand: the skeleton is a wasm module)
@@ -196,7 +219,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                   if (x < L - 0.01) parts.push([x, L, 0, H]);
                   return <group key={`w${i}`}>{(w0.gable ? [[0, L, 0, w.h]] : parts).map(([a, b, z, h], j) => <Box key={j} p={P(a)} q={P(b)} w={th} z0={Zk + z} h={h} color={col} opacity={0.6} />)}</group>;
                 })}
-                {on.stair && an?.stairs.map((st, i) => <Stair key={`s${i}`} st={st} zb={zb} zt={Zk} color="#7fc8c0" />)}
+                {on.stair && an?.stairs.map((st, i) => <Stair key={`s${i}`} st={st} raw={fl.stairs?.[st.i] ?? {}} zb={zb} zt={Zk} color="#cfd4dc" />)}
               </group>
             );
           })}
