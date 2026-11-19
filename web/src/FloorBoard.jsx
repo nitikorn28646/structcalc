@@ -30,13 +30,13 @@ const TOOLS = {
   other: [SEL, ["line", "ราว/น้ำหนักเส้น", Ruler, "คลิกต้น → ปลาย เช่น ราวกันตกที่ปลายพื้นยื่น หรือผนังเตี้ย"], ["point", "น้ำหนักจุด", CircleDot, "คลิกวางน้ำหนักจุด เช่น แท็งก์น้ำ"], ["area", "เพิ่มบนพื้น", PanelTop, "คลิกแผ่นพื้นเพื่อเพิ่มน้ำหนักต่อพื้นที่จากคลัง เช่น ห้องน้ำ / ฝ้า"], ["erase", "ลบ", Eraser, "คลิกน้ำหนักที่จะลบ"]],
   result: [SEL], cols: [SEL], grid: [SEL], assign: [["select", "เลือก", MousePointer2, "Load Cases: คลิกคาน / เสา / แผ่นพื้น · Ctrl หรือ Shift + คลิก = เพิ่ม · ลากกรอบ (ซ้าย→ขวา ทั้งชิ้น · ขวา→ซ้าย แตะ) · Ctrl+A ทั้งหมด · Esc ล้าง · แล้วกด Assign ทางขวา"]],
 };
-const BOXABLE = { assign: ["beam", "column", "panel", "cant"], frame: ["column", "beam", "cant"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
+const BOXABLE = { assign: ["beam", "column", "panel", "cant"], frame: ["column", "beam", "cant", "panel"], wall: ["wall"], other: ["lineLoad", "point"], stair: ["stair"], slab: ["cant"] };
 // polygon corners: vertices where the outline turns (a column / beam end on an edge adds a straight-through vertex)
 export const corners = (P) => P.filter((q, i) => { const a = P[(i + P.length - 1) % P.length], b = P[(i + 1) % P.length], u = [q[0] - a[0], q[1] - a[1]], v = [b[0] - q[0], b[1] - q[1]], L = Math.hypot(...u) * Math.hypot(...v); return L > 0 && Math.abs(u[0] * v[1] - u[1] * v[0]) / L > 0.05; }); // turns of more than ~3°
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null, stairsAbove = null, aboveName = "", belowName = "", onStairUp = null, onPickAbove = null }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null, stairsAbove = null, aboveName = "", belowName = "", onStairUp = null, onPickAbove = null, onMoveTo = null, moveFloors = [] }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -45,7 +45,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
   // box selection (select tool, drag on empty space): left → right = window (fully inside), right → left = crossing (touching);
   // Delete removes everything selected in one undo step; Shift / middle-drag pans
   const [box, setBox] = useState(null), [multi, setMulti] = useState([]), [menu, setMenu] = useState(null), hl = useHighlight(), [tScale] = useTextScale();
-  const [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null);
+  const [typed, setTyped] = useState(""), lastRaw = useRef(null), [imp, setImp] = useState(null), [moveMsg, setMoveMsg] = useState("");
   useEffect(() => { setToolState(tools[1]?.[0] ?? "select"); setStart(null); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
   const setTool = (t) => { setToolState(t); setStart(null); setTyped(""); };
   // checklist bar → pick the tool of a task (when this board offers it)
@@ -146,6 +146,13 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     const got = BOXABLE[step].flatMap((kind) => listOf(kind).map((o, i) => (hits(ITEM[kind][1](o)) ? { kind, i } : null)).filter(Boolean));
     setMulti(got); setSel(got.length === 1 ? got[0] : null);
   };
+  // move / copy the selection to another floor (FramePage moveTo); a single panel picked by click carries its key → index
+  const selList = () => (multi.length ? multi : sel ? [sel.kind === "panel" && sel.i == null ? { kind: "panel", i: (an?.panels ?? []).findIndex((p) => p.key === sel.key) } : sel] : []);
+  const moveSel = (to, copy) => {
+    const items = selList().filter((m) => m && m.i >= 0 && ITEM[m.kind]).map((m) => ({ kind: m.kind, i: m.i, obj: listOf(m.kind)[m.i] }));
+    const msg = onMoveTo?.(items, to, copy) ?? ""; setMenu(null); if (!copy) { setMulti([]); setSel(null); }
+    setMoveMsg(msg); if (msg) setTimeout(() => setMoveMsg((m) => (m === msg ? "" : m)), 6000);
+  };
   const delItems = (list) => {
     const patch = {};
     if (step === "assign") return; // the Load Cases page never deletes members
@@ -166,6 +173,10 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
           if (m) { setMulti((cur) => (e.ctrlKey || e.metaKey || e.shiftKey ? (cur.some((x) => x.kind === m.kind && x.i === m.i) ? cur.filter((x) => !(x.kind === m.kind && x.i === m.i)) : [...cur, m]) : [m])); setSel(null); return; }
           if (e.shiftKey) { setDrag({ pan: true, sx: e.clientX, sy: e.clientY, vb }); return; }
           setMulti([]); setDrag({ box: true }); setBox({ p0: raw, p1: raw }); return;
+        }
+        if (h && (e.ctrlKey || e.metaKey) && BOXABLE[step]) { // Ctrl + click: add to / take from the selection (move to another floor, delete …)
+          const m = h.kind === "panel" ? { kind: "panel", i: (an?.panels ?? []).findIndex((p) => p.key === h.key) } : h;
+          if (BOXABLE[step].includes(m.kind) && m.i >= 0) { const base = multi.length ? multi : sel ? selList() : []; setMulti(base.some((x) => x.kind === m.kind && x.i === m.i) ? base.filter((x) => !(x.kind === m.kind && x.i === m.i)) : [...base, m]); setSel(null); return; }
         }
         setSel(h);
         if (h?.kind === "column" && step === "frame") { setDrag({ col: h.i, from: cols[h.i] }); return; }
@@ -255,6 +266,12 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
     <div className="flex h-full min-h-0 flex-col gap-2">
       {menu && <div className="fixed z-50 min-w-[170px] rounded-lg border border-gray-200 bg-white p-1 text-[13px] shadow-lg" style={{ left: menu.x, top: menu.y }} onPointerLeave={() => setMenu(null)}>
         <button onClick={() => { delItems(multi.length ? multi : [sel]); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-red-600 hover:bg-red-50">ลบที่เลือก ({multi.length || 1})</button>
+        {onMoveTo && moveFloors.length > 0 && step !== "assign" && <>
+          <p className="mt-1 border-t border-gray-100 px-3 pt-1.5 text-[11px] text-gray-500">ย้ายไปชั้น</p>
+          {moveFloors.map((f) => <button key={`m${f.i}`} onClick={() => moveSel(f.i, false)} className="block w-full rounded-md px-3 py-1 text-left text-gray-700 hover:bg-gray-50">→ {f.name}</button>)}
+          <p className="mt-1 border-t border-gray-100 px-3 pt-1.5 text-[11px] text-gray-500">คัดลอกไปชั้น</p>
+          {moveFloors.map((f) => <button key={`c${f.i}`} onClick={() => moveSel(f.i, true)} className="block w-full rounded-md px-3 py-1 text-left text-gray-700 hover:bg-gray-50">⧉ {f.name}</button>)}
+        </>}
         <button onClick={() => { setMulti([]); setSel(null); setMenu(null); }} className="block w-full rounded-md px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50">ยกเลิกการเลือก</button>
       </div>}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -282,6 +299,13 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
           }} /></label>}
         {onCopyBelow && <><button onClick={() => onCopyBelow(true)} title="แทนเสาและคานชั้นนี้ด้วยของชั้นล่าง (ย้อนกลับได้ Ctrl+Z)" className={`${btn} text-gray-600 ring-gray-300`}><Copy className="h-3.5 w-3.5" />คัดลอกชั้นล่าง</button>
           <button onClick={() => onCopyBelow(false)} title="วางเสาตรงเสาชั้นล่างทุกต้น ลบคานชั้นนี้ (เช่น ชั้นอะเส / ชั้นที่มีแต่เสา)" className={`${btn} text-gray-600 ring-gray-300`}>เฉพาะเสา</button></>}
+        {onMoveTo && moveFloors.length > 0 && step !== "assign" && (multi.length > 0 || sel) && (
+          <select id="sc-move-sel" value="" onChange={(e) => { const [m, i] = e.target.value.split(":"); if (m) moveSel(+i, m === "c"); }} title="ย้าย / คัดลอกสิ่งที่เลือกไปชั้นอื่น (ตำแหน่งเดิมบนแปลน) — เลือกหลายชิ้น: ลากกรอบ หรือ Ctrl + คลิก" className="h-7 rounded-md border border-brand-300 bg-brand-50 px-1.5 text-[12px] text-brand-600">
+            <option value="">ย้าย / คัดลอกที่เลือก ({multi.length || 1}) ไปชั้น…</option>
+            {moveFloors.map((f) => <option key={`m${f.i}`} value={`m:${f.i}`}>ย้ายไป {f.name}</option>)}
+            {moveFloors.map((f) => <option key={`c${f.i}`} value={`c:${f.i}`}>คัดลอกไป {f.name}</option>)}
+          </select>)}
+        {moveMsg && <span className="rounded-md bg-green-50 px-2 py-0.5 text-[12px] text-green-700 ring-1 ring-green-200">{moveMsg}</span>}
         <TextSizeControl />
         {onDxf && <button onClick={onDxf} className={`${btn} text-gray-600 ring-gray-300`}><Download className="h-3.5 w-3.5" />DXF</button>}
         {modeBar && <div className="ml-auto">{modeBar}</div>}

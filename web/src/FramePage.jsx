@@ -291,6 +291,50 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const cur = Math.min(frame.cur ?? 0, frame.floors.length - 1), fl = frame.floors[cur], types = frame.beamTypes, cTypes = frame.colTypes;
   const res = useMemo(() => resIn ?? analyzeFrame(frame), [resIn, frame]), an = res.floors[cur];
   const setFloor = (patch) => set("floors", frame.floors.map((f, i) => (i === cur ? { ...f, ...patch } : f)));
+  // move / copy what is selected on this floor to another floor (user 2026-11-19: "เขียนคานผิดชั้น อยากย้ายคานหรือพื้นไปชั้นอื่น").
+  // items = [{ kind, i, obj }] from the board. Same plan position on the other floor; nothing that is already there is doubled
+  // (columns / beams at the same place, ≤ 1 cm). A slab panel takes its settings (kind, direction, thickness, loads) along and gets the
+  // beams of its edges on the other floor where they are missing; moved away, it is left as an opening on this floor (the beams stay
+  // unless they were selected too). One step of the project undo (Ctrl+Z).
+  const moveTo = (items, to, copy) => {
+    if (to === cur || !frame.floors[to] || !items.length) return "";
+    const src = frame.floors[cur], dst = frame.floors[to], E = 0.01, same = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= E;
+    const onSeg = (p, a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-9) return same(p, a); const t = ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / (L * L); const d = Math.abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) / L; return d <= E && t >= -E / L && t <= 1 + E / L; };
+    const of = (k) => items.filter((x) => x.kind === k && x.obj);
+    const cp = (o) => JSON.parse(JSON.stringify(o));
+    const d = { columns: [...(dst.columns ?? [])], beams: [...(dst.beams ?? [])], walls: [...wallsOf(dst)], cants: [...(dst.cants ?? [])], stairs: [...(dst.stairs ?? [])], lineLoads: [...(dst.lineLoads ?? [])], pointLoads: [...(dst.pointLoads ?? [])], panels: { ...(dst.panels ?? {}) } };
+    const n = {};
+    const add = (k, label) => { n[label] = (n[label] ?? 0) + 1; return k; };
+    for (const { obj } of of("column")) if (!d.columns.some((c) => same(c, obj))) { d.columns.push([...obj]); add(0, "เสา"); }
+    const hasBeam = (a, b) => d.beams.some((x) => (same(x.a, a) && same(x.b, b)) || (same(x.a, b) && same(x.b, a)) || (!x.arc && onSeg(a, x.a, x.b) && onSeg(b, x.a, x.b)));
+    for (const { obj } of of("beam")) {
+      if (hasBeam(obj.a, obj.b)) continue;
+      const { wall, ...b } = cp(obj); d.beams.push(b); add(0, "คาน");
+      if (wall?.h > 0 && !src.walls) d.walls.push({ a: [...obj.a], b: [...obj.b], kind: wall.kind ?? "brick", h: wall.h, open: 0, layers: 1 }); // old files: the wall stored on the beam goes along
+    }
+    for (const { obj } of of("panel")) { // a slab panel: its edges as beams where missing + its settings
+      const P = obj.P ?? []; P.forEach((a, k) => { const b = P[(k + 1) % P.length]; if (!hasBeam(a, b)) d.beams.push({ a: [...a], b: [...b], type: null }); });
+      d.panels[obj.key] = { ...(src.panels?.[obj.key] ?? {}), kind: obj.st, ...(obj.dir ? { dir: obj.dir } : {}), t: obj.t, finish: obj.finish, live: obj.live, ...(obj.extraSDL ? { extra: obj.extraSDL } : {}), open: !!obj.open };
+      add(0, "พื้น");
+    }
+    for (const [kind, key, label] of [["wall", "walls", "ผนัง"], ["cant", "cants", "พื้นยื่น"], ["stair", "stairs", "บันได"], ["lineLoad", "lineLoads", "น้ำหนักเส้น"], ["point", "pointLoads", "น้ำหนักจุด"]])
+      for (const { obj } of of(kind)) { d[key].push(cp(obj)); add(0, label); }
+    const floors = frame.floors.map((f, i) => {
+      if (i === to) return { ...f, ...d };
+      if (i !== cur || copy) return f;
+      const gone = (kind) => new Set(of(kind).map((x) => x.i)), keep = (list, kind) => (list ?? []).filter((_, j) => !gone(kind).has(j));
+      const beams = keep(f.beams, "beam"), panels = { ...(f.panels ?? {}) };
+      for (const { obj } of of("panel")) { // the panel still closed by beams on this floor → an opening here; its beams gone too → no panel left, drop its settings
+        const P = obj.P ?? [], closed = P.every((a, k) => { const b2 = P[(k + 1) % P.length]; return beams.some((x) => !x.arc && onSeg(a, x.a, x.b) && onSeg(b2, x.a, x.b)); });
+        if (closed) panels[obj.key] = { ...(panels[obj.key] ?? {}), open: true }; else delete panels[obj.key];
+      }
+      return { ...f, columns: keep(f.columns, "column"), beams, walls: keep(wallsOf(f), "wall"), cants: keep(f.cants, "cant"), stairs: keep(f.stairs, "stair"), lineLoads: keep(f.lineLoads, "lineLoad"), pointLoads: keep(f.pointLoads, "point"), panels };
+    });
+    set("floors", floors);
+    const what = Object.entries(n).map(([k, v]) => `${k} ${v}`).join(" · ");
+    return what ? `${copy ? "คัดลอก" : "ย้าย"}ไป ${dst.name} แล้ว: ${what}${copy ? "" : " (กด Ctrl+Z เพื่อย้อน)"}` : `${dst.name} มีของตำแหน่งเดียวกันอยู่แล้ว — ไม่ได้เพิ่มอะไร`;
+  };
+  const moveFloors = frame.floors.map((f, i) => ({ i, name: f.name })).filter((x) => x.i !== cur);
   // one structural grid for the whole building (as on the drawings): a grid edit applies to every floor
   const setGrid = (g) => set("floors", frame.floors.map((f) => ({ ...f, grid: g })));
   // copy the floor below (columns and beams) — most floors repeat the one under them
@@ -380,7 +424,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const above = frame.floors[cur + 1], below = frame.floors[cur - 1];
   // stairs: drawn on the floor they start from, stored on the floor above (the floor they reach) — the board shows both
   const stairUp = above ? (ns) => { const n = (above.stairs ?? []).length; set("floors", frame.floors.map((f, i) => (i === cur + 1 ? { ...f, stairs: [...(f.stairs ?? []), ns] } : f))); set("cur", cur + 1); setSel({ kind: "stair", i: n }); } : null;
-  const boardEl = (<FloorBoard stairsAbove={above?.stairs ?? []} aboveName={above?.name ?? ""} belowName={below?.name ?? "ฐานราก"} onStairUp={stairUp} onPickAbove={(i) => { set("cur", cur + 1); setSel({ kind: "stair", i }); }} floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
+  const boardEl = (<FloorBoard onMoveTo={moveTo} moveFloors={moveFloors} stairsAbove={above?.stairs ?? []} aboveName={above?.name ?? ""} belowName={below?.name ?? "ฐานราก"} onStairUp={stairUp} onPickAbove={(i) => { set("cur", cur + 1); setSel({ kind: "stair", i }); }} floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   // click a beam / column in 3D = select it (its floor becomes the current one) — user 2026-11-04
   const pick3d = (h) => { if (h.floor !== cur) set("cur", h.floor); setSel({ kind: h.kind, i: h.i }); };
