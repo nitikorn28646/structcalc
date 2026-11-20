@@ -367,14 +367,27 @@ export function vAtD(sp, h, mat) {
 }
 
 // WSD checks of one span with one beam type (mid-span sagging + support hogging), like the beam module
+// can the top bars of type t be anchored by a standard 90° hook in the column at a step joint j {along, perp (m)}? (ACI 318-11 12.5.2/12.5.3a)
+export function hookFit(t, mat, j) {
+  const bars = [parseBars(t.top), parseBars(t.topX)].filter(Boolean), db = Math.max(0, ...bars.map((b) => BARS[b.bar]?.d ?? 0)); // cm
+  if (!(j.along > 0) || !db) return { ok: false, avail: 0, ldh: null, db };
+  const fc = mat.fcBeam ?? mat.fcPrime, fy = mat.fy ?? 4000, side = ((j.perp ?? j.along) - t.b) / 2 + (mat.cover ?? 3) / 100 >= 0.065;
+  const ldh = Math.max((0.075 * fy * db) / Math.sqrt(fc) * (side ? 0.7 : 1), 8 * db, 15), avail = j.along * 100 - 5;
+  return { ok: ldh <= avail + 1e-9, ldh: +ldh.toFixed(1), avail: +avail.toFixed(1), db, side };
+}
 // a type with the depth lost at a level step (m): the inscribed rectangle b × (h − cut) used for every check of that span
 export const cutType = (t, cut) => (cut > 0 && t ? { ...t, h: Math.max(0.1, +(t.h - cut).toFixed(4)), hCut: cut } : t);
 export function checkSpan(t, sp, mat) {
   // levels (2026-11-20): a step joint at a supported end → that support checked again with h − dz (the bars running through the joint
   // sit at the lower beam's top level); mid-span keeps the full depth (M+ of the cut run set to 0). Both runs must pass.
-  if (sp.hCutSup > 0) { const s0 = { ...sp, hCutSup: 0 }, full = checkSpan(t, s0, mat), cr = checkSpan(cutType(t, sp.hCutSup), { ...s0, Mpos: 0 }, mat);
-    if (full.error || cr.error) return full.error ? full : cr;
-    return { ...full, sup: cr.sup, step: { cut: sp.hCutSup, sup: cr.sup, mid: cr.mid, ok: cr.ok, util: cr.util }, ok: full.ok && cr.ok, util: Math.max(full.util, cr.util) }; }
+  // At a column big enough for the higher beam's top bars to be hooked in (ACI 318-11 12.5: ldh = 0.075·fy·db/√f'c ≥ 8db ≥ 15 cm,
+  // × 0.7 with side cover ≥ 6.5 cm (12.5.3a), within the column depth along the beam − 5 cm cover beyond the hook) the face keeps the full depth.
+  if (sp.stepSup?.length) { const hk = sp.stepSup.map((j) => hookFit(t, mat, j)), need = sp.stepSup.filter((_, i) => !hk[i].ok);
+    const s0 = { ...sp, stepSup: null }, full = checkSpan(t, s0, mat);
+    if (!need.length || full.error) return { ...full, stepHook: hk };
+    const cut = Math.max(...need.map((j) => j.dz)), cr = checkSpan(cutType(t, cut), { ...s0, Mpos: 0 }, mat);
+    if (cr.error) return cr;
+    return { ...full, sup: cr.sup, stepHook: hk, step: { cut, sup: cr.sup, mid: cr.mid, ok: cr.ok, util: cr.util }, ok: full.ok && cr.ok, util: Math.max(full.util, cr.util) }; }
   if (sp.hCut > 0) t = cutType(t, sp.hCut); // levels: step beam (notch) / step joint inside the span → inscribed rectangle b × (h − dz)
   if (sp.Vx && !sp.vDone) sp = { ...sp, Vface: sp.V, V: vAtD(sp, t.h, mat) }; // the frame envelope passes vDone (already at d)
   // a candidate depth that makes the span deep (L < 4h) must use the largest shear even when V came "at d" for another depth (audit F2;
@@ -492,7 +505,7 @@ export function spanReasons(c) {
 // floor.lineLoads = [{ a, b, q kg/m, name, g: SDL | WALL | LL (Load Cases page; none = SP) }] railings, walls typed as kg/m etc.; floor.pointLoads = [{ p, P kg, name }]; panels[key].extra kg/m² (SDL)
 // downLines: line loads handed down by the floor above (stair bottoms) → [{ a, b, q, g, from }]
 // minTypes: { drawnBeamIndex: typeIdx } lightest type allowed (set by the 3D-frame envelope of analyzeFrame)
-export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = [], minTypes = null) {
+export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = [], minTypes = null, colSize = null) {
   const warnings = [], cols = floor.columns ?? [];
   // beams inside the storey (beam.lvl = height above the floor below, m — e.g. a stair landing beam at mid level, user 2026-11-04):
   // their own lines, never merged / crossed / resting with the floor beams, no slab panels; supported by this floor's columns
@@ -602,7 +615,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       const a = ps[k], b = ps[k + 1], za = topOf(a.i), zb = topOf(b.i);
       if (Math.abs(a.t1 - b.t0) > TOL || Math.abs(za - zb) <= 0.005) continue;
       ln.steps.push({ t: b.t0, p: [ln.A[0] + ln.u[0] * b.t0, ln.A[1] + ln.u[1] * b.t0], dz: +Math.abs(za - zb).toFixed(3), hi: za > zb ? a.i : b.i, lo: za > zb ? b.i : a.i,
-        col: ln.cols.some((c) => Math.abs(c.t - b.t0) < TOL) });
+        col: ln.cols.some((c) => Math.abs(c.t - b.t0) < TOL), ...(() => { const cs = colSize?.([ln.A[0] + ln.u[0] * b.t0, ln.A[1] + ln.u[1] * b.t0]); if (!cs) return {};
+          const alongX = Math.abs(ln.u[0]) >= Math.abs(ln.u[1]); return { colAlong: alongX ? cs.Bx : cs.By, colPerp: alongX ? cs.By : cs.Bx }; })() });
     }
   }
   for (const ln of lines) { ln.slab = []; ln.torsion = []; }
@@ -1055,7 +1069,7 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
       // the span where its beam is the higher one → the support check only (mid-span keeps the full depth)
       const cutIn = (x0, x1) => { const ms = ln.parts.filter((p) => Math.min(p.t1, x1) - Math.max(p.t0, x0) > 1e-6).map((p) => p.i), js = (ln.steps ?? []).filter((j) => ms.includes(j.hi));
         return { all: Math.max(0, ...ms.map((i) => lvB[i]?.step ?? 0), ...js.filter((j) => j.t > x0 + 1e-6 && j.t < x1 - 1e-6).map((j) => j.dz)),
-          sup: Math.max(0, ...js.filter((j) => Math.abs(j.t - x0) < 1e-3 || Math.abs(j.t - x1) < 1e-3).map((j) => j.dz)) }; };
+          sup: js.filter((j) => Math.abs(j.t - x0) < 1e-3 || Math.abs(j.t - x1) < 1e-3).map((j) => ({ dz: j.dz, along: j.colAlong ?? null, perp: j.colPerp ?? null, p: j.p })) }; };
       const cutAtEl = (k) => { const a = [...supK].reverse().find((q) => q <= k) ?? 0, b = supK.find((q) => q > k) ?? x.length - 1; return cutIn(x[a], x[b]).all; };
       const Ec = EcOf(mat), EI = x.slice(1).map((v, k) => { const m = (v + x[k]) / 2, pt = ln.parts.find((p) => m >= p.t0 - 1e-6 && m <= p.t1 + 1e-6), t = cutType(types[typeOf.get(pt?.i)] ?? types[0], cutAtEl(k)); return (Ec * 0.5 * t.b * t.h ** 3) / 12; });
       const res = solveBeam({ x, sup, EI, loads });
@@ -1131,8 +1145,8 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
         const mid = (x[i0] + x[i1]) / 2, member = ln.parts.find((p) => mid >= p.t0 - 1e-6 && mid <= p.t1 + 1e-6)?.i ?? ln.members[0];
         // every drawn beam lying on this span (a span over a missing column covers two or more drawn beams; all get its type)
         const members = ln.parts.filter((p) => Math.min(p.t1, x[i1]) - Math.max(p.t0, x[i0]) > 1e-6).map((p) => p.i);
-        const { all: hCut, sup: hCutSup } = cutIn(x[i0], x[i1]);
-        spans.push({ id: `${ln.id + 1}-${spans.filter((s) => s.line === ln.id).length + 1}`, line: ln.id, member, members: members.length ? members : [member], x0: x[i0], x1: x[i1], len: x[i1] - x[i0], kind, ...(hCut > 0 ? { hCut } : {}), ...(hCutSup > 0 ? { hCutSup } : {}),
+        const { all: hCut, sup: stepSup } = cutIn(x[i0], x[i1]);
+        spans.push({ id: `${ln.id + 1}-${spans.filter((s) => s.line === ln.id).length + 1}`, line: ln.id, member, members: members.length ? members : [member], x0: x[i0], x1: x[i1], len: x[i1] - x[i0], kind, ...(hCut > 0 ? { hCut } : {}), ...(stepSup.length ? { stepSup } : {}),
           ...(cant ? { fixedAt: sup[i0] ? "start" : sup[i1] ? "end" : null } : {}),
           a: [ln.A[0] + ln.u[0] * x[i0], ln.A[1] + ln.u[1] * x[i0]], b: [ln.A[0] + ln.u[0] * x[i1], ln.A[1] + ln.u[1] * x[i1]],
           Mpos: Math.max(0, ...env.slice(i0, i1).map((e) => e.Mmax)), Mneg: Math.max(0, -env[i0].ML, -env[i1 - 1].MR, ...(cant ? env.slice(i0, i1).map((e) => -e.Mmin) : [])),

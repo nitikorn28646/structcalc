@@ -36,7 +36,11 @@ const j0 = an.levels.steps.find((j) => j.p[0] === 0 && j.p[1] === 1.5);
 ok("step joint at (0, 1.5), higher = the room beam", j0 && j0.dz === 0.1 && j0.hi === bi(f2, [0, 1.5], [0, 5.5]) && j0.col && j0.ok);
 const spStep = an.spans.find((s) => s.members.includes(bi(f2, [0, 1.5], [4, 1.5]))), spHi = an.spans.find((s) => s.members.includes(bi(f2, [0, 1.5], [0, 5.5])));
 ok("step beam span checked with h − 0.10 (whole span)", spStep.hCut === 0.1);
-ok("higher beam span: support checked with h − 0.10", spHi.hCutSup === 0.1 && !spHi.hCut && spHi.check.step?.cut === 0.1);
+ok("higher beam span, 20 cm column: hook does not fit → support checked with h − 0.10", spHi.stepSup?.length && !spHi.hCut && spHi.check.step?.cut === 0.1 && spHi.check.stepHook?.[0]?.ok === false, JSON.stringify(spHi.check.stepHook));
+// a 40 × 40 column: the higher beam's DB16 top bars hook in it (ldh 0.7 × 0.075·4000·1.6/√240 = 21.7 ≤ 35 cm) → full depth kept
+const big = [{ name: "C40", levels: [0, 1, 2].map(() => ({ level: "-", Bx: 40, By: 40, n: 8, mainBar: "DB 16", tieBar: "RB 9", s: 0.15 })) }];
+const rB = analyzeFrame({ ...porch(), colTypes: big }), spB = rB.floors[1].spans.find((s) => s.members.includes(bi(f2, [0, 1.5], [0, 5.5])));
+ok("higher beam span, 40 cm column: hooked → full depth", spB.check.stepHook?.[0]?.ok === true && !spB.check.step, JSON.stringify(spB.check.stepHook));
 const t5 = DEFAULT_BEAM_TYPES[4], full = checkSpan(t5, { ...spStep, hCut: 0 }, mat), cut = checkSpan(cutType(t5, 0.1), { ...spStep, hCut: 0 }, mat), used = checkSpan(t5, spStep, mat);
 ok("cut check = check with the type 10 cm shallower", Math.abs(used.util - cut.util) < 1e-12 && cut.util >= full.util - 1e-12, `util full ${full.util.toFixed(3)} · cut ${cut.util.toFixed(3)}`);
 const rz = (r) => r.frame3d.base.reduce((s, b) => s + b.R[2], 0);

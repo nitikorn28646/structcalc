@@ -729,3 +729,10 @@ teal ◆ at joints (red = depth not enough). 3D frame: same nodes (≤ 15 cm off
 cli/levels-check.mjs 16/16 (in the gate). No levels → results identical (regress, E2E 47/47). User's file, porch −0.10, auto types: 37/39 (the two 4.8 m
 spans at the joints need a type deeper than B5 20×60 once 10 cm is lost). NEXT P2: drawings (step-beam section with notch + U-bar, joint elevation:
 through bars / hooks, table of joints) in step 7, DXF with the beam sheets, report section with the references; Frame3D drawn at the levels.
+LEVELS fix (2026-11-20, user "ทำไมขึ้นมาเต็มเลย" + "ภาพ 3D ทำไมไม่ลดลง"): step joint at a column → floor.js hookFit(t, mat, j): the higher beam's top bars
+hooked in the column (ACI 318-11 12.5.2: ldh = 0.075·fy·db/√f'c ≥ 8db ≥ 15 cm, × 0.7 when side cover ≥ 6.5 cm (12.5.3a); available = column depth
+along the beam − 5 cm) → full depth at that face; else the h − dz support run (span.stepSup [{dz, along, perp}], c.stepHook, c.step). Column size
+= analyzeFloor colSize(p) from frame.js (picked / first column type at that floor, like the self weight). User's file (30×30 ตอม่อ): joints keep the
+full depth; with the porch + top porch at −0.10 and locked types 36/39 (3 step beams: RB6 @0.15 > d/2 at h − 0.10, and the 1.5 m porch side beam
+under the 4.8 m span's M−), auto types 37/39. Frame3D: lowered beams at their top, step beam = full width to the low slab + upstand (b − notch) on
+the high side, slabs at their level. levels-check 18/18, E2E 47/47.

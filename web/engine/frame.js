@@ -218,7 +218,9 @@ function gravity(frame, minTypes) {
     if (frame.roofLink?.on && frame.roofLink.floor === k) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — แก้: ขั้น 4 / 5 การ์ด "หลังคา → เสา" → ตารางจุดถ่ายแรง กด "เพิ่มคานรับ" หรือ "เพิ่มเสา" (หรือวาดคาน / เสาผ่านจุดนั้นในขั้น 2)`);
     // columns of the floor above with no column right under them stand on this floor's beams
     const extra = above.filter((c) => !fl.columns.some((q) => near(q, c.p))).map((c) => ({ p: c.p, P: c.Pbot, from: `เสา ${c.stack} (${floors[k + 1].name})` }));
-    an[k] = analyzeFloor(fl, beamTypes, mat, extra, frame.wallTypes ?? DEFAULT_WALL_TYPES, downLines, minTypes?.[k]);
+    // column size under a point of this floor (step joints: can the beam bars be hooked in it?) — the picked type, else the first (as the self weight)
+    const colSize = (p) => { const t = colTypes[frame.colPick?.[stackKey(p)] ?? 0] ?? colTypes[0], lv = t?.levels?.[Math.min(k, (t?.levels?.length ?? 1) - 1)]; return lv ? { Bx: lv.Bx / 100, By: lv.By / 100 } : null; };
+    an[k] = analyzeFloor(fl, beamTypes, mat, extra, frame.wallTypes ?? DEFAULT_WALL_TYPES, downLines, minTypes?.[k], colSize);
     downLines = an[k].down;
     // where the bottom of each stair of the floor above ended up (an[k + 1].stairs[si].foot): beam / panel / ground / none — the worst piece
     if (k + 1 < n) for (const st of an[k + 1].stairs ?? []) { const xs = (an[k].downOn ?? []).filter((x) => x.si === st.i);

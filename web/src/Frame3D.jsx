@@ -197,12 +197,20 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                   const color = sp && !sp.ok ? "#f04438" : byType ? TYPE_COLORS[ti % TYPE_COLORS.length] : CONC;
                   const pick = onPick ? () => onPick({ floor: k, kind: "beam", i }) : undefined, isSel = selected?.floor === k && selected?.kind === "beam" && selected?.i === i;
                   const zt = b.lvl > 0 ? zb + b.lvl : Zk; // a beam inside the storey (stair landing beam) at its own level
-                  if (pieces[i] && !(b.lvl > 0)) return pieces[i].map(([p, q], j) => <Box key={`b${i}-${j}`} p={p} q={q} w={t.b} z0={Zk - t.h} h={t.h} color={isSel ? "#f79009" : color} edges="#475467" onClick={pick} />);
+                  // levels (2026-11-20): a lowered beam sits at its top level; a step beam (คานบ่า) = full width up to the low slab + the upstand on the high side
+                  const lv = b.lvl > 0 ? null : an?.levels?.beams?.[i], dzT = lv?.top ?? 0, st = lv?.step ?? 0;
+                  if (pieces[i] && !(b.lvl > 0)) return pieces[i].flatMap(([p, q], j) => {
+                    const c = isSel ? "#f79009" : color;
+                    if (!(st > 0)) return [<Box key={`b${i}-${j}`} p={p} q={q} w={t.b} z0={Zk + dzT - t.h} h={t.h} color={c} edges="#475467" onClick={pick} />];
+                    const wl = Math.min(lv.notchW ?? t.b / 2, t.b - 0.02), sg = lv.sides?.[0]?.dz === dzT ? 1 : -1, n = [-lv.u[1] * sg * (wl / 2), lv.u[0] * sg * (wl / 2)]; // high side = the side sampled at +(−u_y, u_x) when it is the top
+                    return [<Box key={`b${i}-${j}`} p={p} q={q} w={t.b} z0={Zk + dzT - t.h} h={t.h - st} color={c} edges="#475467" onClick={pick} />,
+                      <Box key={`u${i}-${j}`} p={[p[0] + n[0], p[1] + n[1]]} q={[q[0] + n[0], q[1] + n[1]]} w={t.b - wl} z0={Zk + dzT - st} h={st} color={c} edges="#475467" onClick={pick} />];
+                  });
                   const pts = arcPolyline(b.a, b.b, b.arc?.s, 12);
                   return pts.slice(1).map((q, j) => <Box key={`b${i}-${j}`} p={pts[j]} q={q} w={t.b} z0={zt - t.h} h={t.h} color={isSel ? "#f79009" : color} edges="#475467" onClick={pick} />);
                 })}
                 {on.slab && an?.panels.filter((p) => !p.open && !p.stairWell).map((p) => (
-                  <Prism key={p.key} P={insetPolygon(p.P, p.P.map((q, j) => edgeWidth(bw, q, p.P[(j + 1) % p.P.length]) / 2))} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />
+                  <Prism key={p.key} P={insetPolygon(p.P, p.P.map((q, j) => edgeWidth(bw, q, p.P[(j + 1) % p.P.length]) / 2))} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk + (p.dz ?? 0) - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />
                 ))}
                 {on.cant && an?.cants.map((c, i) => { // starts at the face of its beam
                   const w = edgeWidth(bw, c.P[0], c.P[1]) / 2, d = [c.P[3][0] - c.P[0][0], c.P[3][1] - c.P[0][1]], L = Math.hypot(...d) || 1, s0 = [(d[0] / L) * w, (d[1] / L) * w];
