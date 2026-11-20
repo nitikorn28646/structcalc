@@ -827,3 +827,6 @@ the support is checked at h − Δ — that top steel must really sit at the low
 check.step.sup), AsLo (lower beam's through top bars), nAdd / addBar (fewest bars of the higher beam's top size ADDED through the joint, ≥ ld each
 side), AsThrough ≥ reqAs. Joint detail draws the added bars + label, table column "เหล็กบนผ่านรอยต่อ", DXF table, check-sheet row, report note.
 levels-check 24/24.
+Non-contact lap at step joints (2026-11-20 review): the bars at the lower level (lower beam's top + added) overlap the higher beam's top bars Δ higher
+→ into the higher beam 1.3·ld (class B, 12.15.1), Δ ≤ 15 cm and ≤ lap/5 (12.14.2.3) — else lapOk false, joint NG + warning (frame.js uses
+levelJoints). Rows carry lapLo / lapAdd / lapOk; detail dims "ทาบ ≥ 1.3ld"; report / DXF / check sheet texts updated. levels-check 26/26.

@@ -86,5 +86,9 @@ ok("same model without the type change: no depth joint on y = 0", !analyzeFrame(
   const okAll = rws.every((r) => r.AsThrough >= r.reqAs - 1e-9 && (r.nAdd === 0 || r.AsThrough - BARS_A(r) < r.reqAs - 1e-9));
   ok("through bars (lower beam top + added bars) ≥ As required at h − Δ, fewest added bars", rws.length > 0 && okAll, rws.map((r) => `${r.reqAs.toFixed(2)}→${r.lo?.top}${r.addBar ? " + " + r.addBar : ""}`).join(" · ")); }
 
+{ const rws = levelJoints(porch(), r1).filter((r) => r.needCut);
+  ok("non-contact lap: into the higher beam 1.3·ld, Δ 0.10 ≤ 15 cm and ≤ lap/5 → lapOk", rws.every((r) => Math.abs(r.lapLo - 1.3 * Math.max(r.ld, 0.3)) < 1e-9 && r.lapOk));
+  const rBig = analyzeFrame(porch(-0.2)), rwB = levelJoints(porch(-0.2), rBig).filter((r) => r.needCut);
+  ok("Δ 0.20 > 15 cm → lap not allowed: joint NG + warning", rwB.length > 0 && rwB.every((r) => !r.lapOk && !r.ok) && rBig.warnings.some((w) => w.includes("12.14.2.3")), rwB[0]?.mode); }
 console.log(bad ? `levels-check: ${bad} FAIL` : "levels-check: all ok");
 process.exit(bad ? 1 : 0);
