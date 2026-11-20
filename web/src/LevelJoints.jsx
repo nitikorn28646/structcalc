@@ -9,13 +9,15 @@ export function LevelJointTable({ rows, small = false }) {
   const c = small ? "px-1 py-0.5" : "px-2 py-1";
   return (
     <table className="w-full text-[12px] tabular-nums">
-      <thead><tr className="border-b border-gray-200 text-left text-gray-500">{["ชั้น / แนว", "ตำแหน่ง", "ต่าง", "คานตัวสูง", "คานตัวต่ำ", "เสา", "ldh ต้อง / มี", "การตรวจ", "ผล"].map((h) => <th key={h} className={c}>{h}</th>)}</tr></thead>
+      <thead><tr className="border-b border-gray-200 text-left text-gray-500">{["ชั้น / แนว", "ตำแหน่ง", "ต่าง", "คานตัวสูง", "คานตัวต่ำ", "เสา", "ldh ต้อง / มี", "การตรวจ", "เหล็กบนผ่านรอยต่อ", "ผล"].map((h) => <th key={h} className={c}>{h}</th>)}</tr></thead>
       <tbody>{rows.map((r, i) => (
         <tr key={i} className="border-b border-gray-100">
           <td className={c}>{r.floorName} / {r.line + 1}</td><td className={c}>({fmt(r.p[0], 2)}, {fmt(r.p[1], 2)})</td><td className={c}>{fmt(r.dz * 100, 0)} ซม.</td>
           <td className={c}>{r.hi?.name} {fmt((r.hi?.b ?? 0) * 100, 0)}×{fmt((r.hi?.h ?? 0) * 100, 0)}</td><td className={c}>{r.lo?.name} {fmt((r.lo?.b ?? 0) * 100, 0)}×{fmt((r.lo?.h ?? 0) * 100, 0)}</td>
           <td className={c}>{r.along ? `${fmt(r.along * 100, 0)} ซม.` : "-"}</td><td className={c}>{r.hook?.ldh ? `${fmt(r.hook.ldh, 1)} / ${fmt(r.hook.avail, 1)} ซม.` : "-"}</td>
-          <td className={c}>{r.mode}</td><td className={`${c} font-semibold ${r.ok ? "text-green-600" : "text-red-600"}`}>{r.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
+          <td className={c}>{r.mode}</td>
+          <td className={c}>{r.needCut ? `${r.lo?.name} ${r.lo?.top}${r.addBar ? ` + ${r.addBar}` : ""} · ${fmt(r.AsThrough, 2)} ≥ ${fmt(r.reqAs, 2)} ซม.²` : "-"}</td>
+          <td className={`${c} font-semibold ${r.ok ? "text-green-600" : "text-red-600"}`}>{r.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
         </tr>))}</tbody>
     </table>
   );

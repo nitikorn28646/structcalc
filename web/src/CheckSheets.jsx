@@ -45,6 +45,7 @@ function stepRows(t, g, c, mat, b, fcp) {
     checks.push([`ldh ≤ ความลึกเสาตามแนวคาน − 5 ซม. (ACI 318-11 12.5)`, h.ldh, h.avail, "ซม.", h.ok, null]); });
   const st = c.step;
   if (st) { eqs.push(["ความลึกที่หัวเสา (รอยต่อต่างระดับ)", "h′ = h − Δ (เหล็กบนผ่านรอยต่อที่ระดับคานตัวต่ำ)", `${num(t.h * 100, 0)} − ${num(st.cut * 100, 0)}`, num(t.h * 100 - st.cut * 100, 0), "ซม."]);
+    eqs.push(["เหล็กบนที่ต้องผ่านรอยต่อ (ระดับคานตัวต่ำ)", "As ผ่าน ≥ As ต้องการที่ h − Δ (เหล็กคานตัวต่ำ + ตัวเสริมผ่านรอยต่อ, ยาว ≥ ld ทั้งสองข้าง)", "ดูตารางคานต่างระดับ", num(st.sup?.reqBot ?? 0, 2), "ซม.²"]);
     checks.push(["หัวเสาผ่านทั้งความลึกเต็ม และ h − Δ", c.supFull ? (c.supFull.ok === false ? "ไม่ผ่าน" : "ผ่าน") : "-", st.ok ? "ผ่าน" : "ไม่ผ่าน", "", (c.supFull?.ok !== false) && st.ok, null]); }
   return { info, eqs, checks };
 }

@@ -822,3 +822,8 @@ UI: LevelJoints.jsx DepthJointTable / DepthDetail, LevelJointsCard shows both (s
 DXF PACKING (user "จัดหน้าอย่าให้เปลืองแผ่น"): beamSheetsDxf puts level-step details, depth details and their tables (cut into sheet-sized
 pieces) as panels in the same packed rows as the beam sections and widenings — no separate joint sheets (_big 6 → 4 sheets, _levels 3 → 2).
 levels-check 23/23.
+STEP JOINT WITHOUT A BIGGER COLUMN (2026-11-20, user "เพิ่มขนาดเสาตามใจไม่ได้"): when the higher beam's top bars cannot be hooked (ldh > column − 5 cm)
+the support is checked at h − Δ — that top steel must really sit at the lower level: levelJoints adds needCut, reqAs (As required at h − Δ, from
+check.step.sup), AsLo (lower beam's through top bars), nAdd / addBar (fewest bars of the higher beam's top size ADDED through the joint, ≥ ld each
+side), AsThrough ≥ reqAs. Joint detail draws the added bars + label, table column "เหล็กบนผ่านรอยต่อ", DXF table, check-sheet row, report note.
+levels-check 24/24.

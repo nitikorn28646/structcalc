@@ -5,6 +5,8 @@ import { analyzeFrame } from "../web/engine/frame.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, checkSpan, cutType } from "../web/engine/floor.js";
 import { levelJoints, jointGroups, jointDetailModel, depthJoints, depthGroups, depthDetailModel } from "../web/engine/levelDetail.js";
 import { DEFAULT_LATERAL } from "../web/engine/lateral.js";
+import { BARS } from "../web/engine/tables.js";
+const BARS_A = (r) => BARS[r.addBar.split("-")[1]].A;
 const mat = { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 };
 const Bm = (a, b, x = {}) => ({ a, b, type: 4, ...x }); // fixed type B5 20×50 → self weight independent of the levels
 const xs = [0, 4, 8], ys = [0, 1.5, 5.5];
@@ -78,6 +80,11 @@ ok("wind on: the deep bottom bars must develop fy (12.11.2) — hook does not fi
 const dm = depthGroups(rD.depthJoints).map((g) => depthDetailModel(g, mat));
 ok("depth detail drawings finite", dm.length > 0 && dm.every(finite));
 ok("same model without the type change: no depth joint on y = 0", !analyzeFrame(model()).depthJoints.some((r) => r.floor === 1 && Math.abs(r.p[1]) < 1e-6 && Math.abs(r.p[0] - 4) < 1e-6));
+
+// E: column too small for the hook (user "เพิ่มขนาดเสาตามใจไม่ได้"): bars through the joint at the lower level ≥ As required at h − Δ
+{ const rws = levelJoints(porch().floors ? porch() : porch(), r1).filter((r) => r.needCut);
+  const okAll = rws.every((r) => r.AsThrough >= r.reqAs - 1e-9 && (r.nAdd === 0 || r.AsThrough - BARS_A(r) < r.reqAs - 1e-9));
+  ok("through bars (lower beam top + added bars) ≥ As required at h − Δ, fewest added bars", rws.length > 0 && okAll, rws.map((r) => `${r.reqAs.toFixed(2)}→${r.lo?.top}${r.addBar ? " + " + r.addBar : ""}`).join(" · ")); }
 
 console.log(bad ? `levels-check: ${bad} FAIL` : "levels-check: all ok");
 process.exit(bad ? 1 : 0);

@@ -25,7 +25,16 @@ export function levelJoints(frame, res) {
       const hook = j.col && along ? hookFit(hi, mat, { along, perp }) : { ok: false, ldh: null, avail: 0 };
       const loBar = barOf(lo, ["top"]), ld = loBar ? devLength(BARS[loBar.bar].d, mat, true) : 0.3;
       const sps = an.spans.filter((s) => s.members.includes(j.hi) && (Math.hypot(s.a[0] - j.p[0], s.a[1] - j.p[1]) < 0.01 || Math.hypot(s.b[0] - j.p[0], s.b[1] - j.p[1]) < 0.01));
+      // bars THROUGH the joint at the lower level (user 2026-11-20: "เพิ่มขนาดเสาตามใจไม่ได้"): when the higher beam's top bars cannot be hooked
+      // in the column, its support was checked at h − Δ with its own top steel — that steel must really be there at the lower level: the
+      // lower beam's top bars run through ≥ ld into the higher beam, and short bars of the higher beam's size are ADDED through the joint
+      // (≥ ld each side) until As(through) ≥ As required at h − Δ. No column change needed.
+      const needCut = !j.col || !hook.ok, hiB = barOf(hi, ["top", "topX"]), loTop = parseBars(lo.top);
+      const reqAs = needCut ? Math.max(0, ...sps.map((s) => +((s.check?.step?.sup ?? s.check?.sup)?.reqBot)).filter(Number.isFinite)) : 0, AsLo = loTop ? loTop.n * BARS[loTop.bar].A : 0;
+      const nAdd = needCut && hiB ? Math.max(0, Math.ceil((reqAs - AsLo) / BARS[hiB.bar].A - 1e-9)) : 0, AsThrough = AsLo + (hiB ? nAdd * BARS[hiB.bar].A : 0);
+      const ldAdd = hiB ? devLength(BARS[hiB.bar].d, mat, true) : 0.3;
       out.push({ floor: k, floorName: frame.floors[k].name, line: j.line, p: j.p, dz: j.dz, col: j.col, ok: j.ok && sps.every((s) => s.ok), depthOk: j.ok,
+        needCut, reqAs, AsLo, nAdd, addBar: nAdd ? `${nAdd}-${hiB.bar}` : null, AsThrough, ldAdd,
         hi, lo, hiTop: an.levels.beams[j.hi]?.top ?? 0, loTop: an.levels.beams[j.lo]?.top ?? 0, along, perp, hook, ld, loBar, hiBar: barOf(hi, ["top", "topX"]),
         spans: sps.map((s) => s.id), mode: !j.col ? "กลางแนวคาน — ตรวจทั้งช่วงด้วย h − Δ" : hook.ok ? "งอขอในเสาได้ — ใช้ความลึกเต็ม" : "งอขอในเสาไม่พอ — ตรวจที่หัวเสาด้วย h − Δ" });
     }
@@ -49,7 +58,8 @@ export function jointDetailModel(r, mat = {}, o = {}) {
   const dimV = (x, y1, y2, label) => { line(x, y1, x, y2, "C-DIM"); for (const y of [y1, y2]) { line(x - 0.03, y, x + 0.03, y, "C-DIM"); line(x - 0.012, y - 0.012, x + 0.012, y + 0.012, "C-DIM"); }
     text(x - 0.015, (y1 + y2) / 2, TH * 0.9, label, "C-DIM", 1, 1, 90); };
   // leader: a dot on the bar, straight up / down to the text level, then the underline the text sits on (no slanted lines crossing)
-  const leader = (bx, by, ty, s, ha = 0, s2 = "") => { const w = Math.max(String(s).length, String(s2).length * 0.9) * TH * 0.52 + 0.03, ex = ha === 0 ? bx + w : bx - w;
+  let maxX = -Infinity; // right end of the leader texts (box)
+  const leader = (bx, by, ty, s, ha = 0, s2 = "") => { const w = Math.max(String(s).length, String(s2).length * 0.9) * TH * 0.52 + 0.03, ex = ha === 0 ? bx + w : bx - w; maxX = Math.max(maxX, ex);
     P.push({ t: "disk", x: bx, y: by, r: 0.008, layer: "C-TEXT" }); poly([[bx, by], [bx, ty], [ex, ty]], "C-TEXT");
     text(ha === 0 ? bx + 0.015 : bx - 0.015, ty + 0.012, TH, s, "C-TEXT", ha, 1); if (s2) text(ha === 0 ? bx + 0.015 : bx - 0.015, ty - 0.015, TH * 0.82, s2, "C-DIM", ha, 3); };
 
@@ -71,6 +81,7 @@ export function jointDetailModel(r, mat = {}, o = {}) {
   bar([[-Lb + 0.05, -cv], [xh, -cv], [xh, -cv - tail]], dbH, "C-BAR");
   const ld = Math.max(r.ld ?? 0.3, 0.3), yl = -dz - cv;
   bar([[c + Lb - 0.05, yl], [-Math.min(ld, Lb - 0.1), yl]], dbL, "C-BAR-EXTRA");
+  if (r.addBar) { const la = Math.min(Math.max(r.ldAdd ?? 0.3, 0.3), Lb - 0.12); bar([[-la, yl - 0.022], [c + la, yl - 0.022]], dbH, "C-BAR-EXTRA"); } // bars added through the joint
   if (same) bar([[-Lb + 0.05, botH + cv], [c + Lb - 0.05, botH + cv]], dbH, "C-BAR");
   else {
     bar([[-Lb + 0.05, botH + cv], [c - 0.05, botH + cv], [c - 0.05, botH + cv + Math.max(12 * dbH, 0.1)]], dbH, "C-BAR");
@@ -85,14 +96,15 @@ export function jointDetailModel(r, mat = {}, o = {}) {
   // labels
   const nH = (b) => (b ? `${b.n}-${b.bar} มม.` : "เหล็กบน");
   leader(-0.85, -cv, yHi + 0.12, `เหล็กบน ${r.hi?.name ?? ""} ${nH(parseBars(r.hi?.top))}`, 0, "งอขอ 90° ฝังในเสา ≥ ldh (ACI 318-11 12.5)");
-  leader(c + 0.85, yl, yHi + 0.12, `เหล็กบน ${r.lo?.name ?? ""} ${nH(parseBars(r.lo?.top))}`, 0, "วิ่งผ่านเสาเข้าคานตัวสูง ≥ ld (12.12.1)");
+  leader(c + 0.85, yl, yHi + 0.12, r.addBar ? `เหล็กบน ${r.lo?.name ?? ""} ${nH(parseBars(r.lo?.top))} + ${r.addBar} มม. ผ่านรอยต่อ` : `เหล็กบน ${r.lo?.name ?? ""} ${nH(parseBars(r.lo?.top))}`, 0,
+    r.addBar ? `ตัวเสริมยาว ≥ ld ${cm(Math.max(r.ldAdd ?? 0.3, 0.3))} ซม. แต่ละข้าง · As ผ่าน ${(r.AsThrough ?? 0).toFixed(2)} ≥ ${(r.reqAs ?? 0).toFixed(2)} ซม.²` : "วิ่งผ่านเสาเข้าคานตัวสูง ≥ ld (12.12.1)");
   leader(c + Lb - 0.12, botL + cv, Math.min(yLo, botH - 0.3) - 0.3, "เหล็กล่างเข้าเสา ≥ 15 ซม.", 0, same ? "ต่อเนื่องผ่านเสา (12.11.1)" : "งอขอขึ้นในเสา (12.11.1)");
   text(-Math.min(Math.max(r.ld ?? 0.3, 0.3), Lb - 0.1) - 0.05, botH - 0.035, TH, `${r.hi?.name ?? ""} ${cm(r.hi?.b ?? 0.2)}×${cm(h1)} หลังคาน ${r.hiTop > 0 ? "+" : ""}${f2(r.hiTop)}`, "C-TEXT", 2, 3); // ends left of the ld extension line
   text(c + 0.05, botL - 0.035, TH, `${r.lo?.name ?? ""} ${cm(r.lo?.b ?? 0.2)}×${cm(h2)} หลังคาน ${r.loTop > 0 ? "+" : ""}${f2(r.loTop)}`, "C-TEXT", 0, 3);
   const title = o.title ?? "รายละเอียดคานต่างระดับที่หัวเสา", yT = Math.min(yLo, botH - 0.3) - 0.55;
   text(c / 2, yT, TH * 1.4, title, "C-TITLE", 1, 0);
   text(c / 2, yT - 0.12, TH * 0.9, `${o.sub ?? ""}มาตราส่วน ${o.scale ?? "1:25"}`, "C-TEXT", 1, 0); // drawn at true size on the 1:25 sheet (user 2026-11-20)
-  return { items: P, box: [-Lb - 0.45, yT - 0.2, c + Lb + 0.75, yHi + 0.3] };
+  return { items: P, box: [-Lb - 0.45, yT - 0.2, Math.max(c + Lb + 0.75, maxX + 0.05), yHi + 0.3] };
 }
 
 // ── Beams of different depth meeting at a column with their TOPS level (user 2026-11-20: "คานคนละ type หลังคานเท่ากัน ท้องคานต่างระดับ") ──
