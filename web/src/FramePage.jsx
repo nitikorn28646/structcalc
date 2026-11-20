@@ -810,7 +810,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-1.5 text-[13px] font-semibold text-gray-800 dark:border-gray-700 dark:text-gray-100">⚠ คำเตือน ({res.warnings.length})
                   <span className="text-[11px] font-normal text-gray-400">ชี้ = กระพริบบนแปลน · คลิก = ค้างไว้</span>
                   <button onClick={() => { setDrawer(null); setPinW(null); highlight(null); }} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">ปิด ✕</button></div>
-                <div className="min-h-0 flex-1 overflow-auto p-2">{warnList}</div>
+                <div className="min-h-0 flex-1 overflow-auto p-2">{warnList}
+                  {(res.notes ?? []).length > 0 && <div className="mt-2 border-t border-gray-200 pt-1.5 dark:border-gray-700"><p className="mb-0.5 text-[11px] font-semibold text-gray-500">หมายเหตุ ({res.notes.length}) — ตรวจแล้วไม่เป็นปัญหา แต่ต้องทำตามในแบบ</p>
+                    {res.notes.map((w) => { const at = locateWarning(w, frame, res); return <p key={w} onMouseEnter={() => at && highlight(at)} onMouseLeave={() => highlight(pinW ? locateWarning(pinW, frame, res) : null)} className={`rounded px-1 py-0.5 text-[12px] text-gray-600 dark:text-gray-300 ${at ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5" : ""}`}>{at?.p || at?.segs?.length ? "⌖ " : ""}{w}</p>; })}</div>}
+                </div>
               </div>)}
           </div>
         </section>
@@ -870,7 +873,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
         <span className={nColNG ? "font-semibold text-red-600" : "text-green-600"}>เสา {res.columns.length - nColNG}/{res.columns.length} ผ่าน</span>
         <span>ฐานราก {res.footings.filter((f) => f.ok).length}/{res.footings.length}</span>
         <span>แรงที่ฐานรวม {fmt(res.footings.reduce((a, f) => a + f.P, 0) / 1000, 1)} ตัน</span>
-        <button onClick={() => setDrawer("warn")} className={res.warnings.length ? "text-red-600" : "text-gray-400"}>⚠ {res.warnings.length} คำเตือน</button>
+        <button onClick={() => setDrawer("warn")} className={res.warnings.length ? "text-red-600" : "text-gray-400"}>⚠ {res.warnings.length} คำเตือน{(res.notes ?? []).length ? ` · ${res.notes.length} หมายเหตุ` : ""}</button>
         <span className="ml-auto text-gray-400">{fl.name} · {an.panels.length} แผ่นพื้น · {an.spans.length} ช่วงคาน</span>
       </div>
     </main>

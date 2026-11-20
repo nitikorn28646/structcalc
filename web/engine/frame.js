@@ -522,8 +522,29 @@ export function analyzeFrame(frame) {
   }
   if (clash.length) g.warnings.push(`ฐานรากซ้อน/ชิดกันเกินไป ${clash.length} คู่ (ระยะห่างน้อยกว่า ${gapMin.toFixed(2)} ม.): ${clash.slice(0, 3).join(" · ")}${clash.length > 3 ? " …" : ""} — ใช้ฐานรากร่วม หรือปรับขนาด / ตำแหน่งฐาน`);
   const lateral = lat && f3?.combos ? lateralChecks(frame, lat, f3) : null;
+  // "beam end lifted" (floor.js, continuous model: pinned joints) checked in the 3D frame (user 2026-11-20): when every column under that
+  // point is still in compression in the monolithic frame (D + L), the end is not pulled up for real — the warning becomes a note (anchor
+  // the short span's top bars into the column); still in tension → the warning stays. Continuous mode: one gravity 3D solve just for this.
+  const notes = [];
+  const upl = g.an.flatMap((an, k) => (an.lines ?? []).flatMap((ln) => (ln.uplift ?? []).map((u) => ({ k, ln, u }))));
+  if (upl.length) {
+    let m3 = f3;
+    if (!m3) { try { m3 = frame3dModel(frame, { floors: g.an, columns: g.cols }, {}); if (m3.error) m3 = null; } catch { m3 = null; } }
+    if (m3) for (const { k, ln, u } of upl) {
+      const at = (q) => Math.hypot(q[0] - u.p[0], q[1] - u.p[1]) < 0.01, cs = g.cols.filter((c) => c.floor <= k && at(frame.floors[c.floor].columns[c.i]));
+      const ns = cs.map((c) => m3.columns.find((x) => x.floor === c.floor && x.ci === c.i)?.N).filter(Number.isFinite);
+      if (!cs.some((c) => c.floor === k) || ns.length !== cs.length || !(Math.min(...ns) > 10)) continue;
+      const xy = `(${u.p[0].toFixed(2)}, ${u.p[1].toFixed(2)})`, head = `${frame.floors[k].name}: แนวคาน ${ln.id + 1} ที่ ${xy}: ปลายคานถูกยก`;
+      const i = g.warnings.findIndex((w) => w.startsWith(head)); if (i < 0) continue;
+      g.warnings.splice(i, 1); u.real = false; u.N3 = Math.min(...ns);
+      const fw = g.an[k].warnings, j = fw.findIndex((w) => w.startsWith(`แนวคาน ${ln.id + 1} ที่ ${xy}: ปลายคานถูกยก`));
+      const note = `แนวคาน ${ln.id + 1} ที่ ${xy}: แบบคานต่อเนื่อง (จุดต่อเป็นหมุด) ให้ปลายคานยก ${Math.round(-u.R).toLocaleString()} กก. แต่ในโครง 3 มิติ เสาตรงนี้ยังรับแรงอัด ${Math.round(u.N3).toLocaleString()} กก. — ไม่ถอนจริง · ให้เหล็กบนของช่วงสั้นต่อเนื่องจากช่วงยาวและงอขอยึดเข้าเสา`;
+      if (j >= 0) fw[j] = `หมายเหตุ: ${note}`; // the floor's list (report appendix) says it as a note too
+      notes.push(`${frame.floors[k].name}: ${note}`);
+    }
+  }
   // a type whose bars cannot be read would be checked with no steel at all: say so instead of a silent NG
   for (const t of beamTypes) for (const k of ["top", "bot", "topX", "botX"]) if (t[k] && !parseBars(t[k])) g.warnings.push(`Type คาน ${t.name}: อ่านเหล็ก "${t[k]}" ไม่ได้ (ใช้รูปแบบ เช่น 2-DB12, 3-RB9) — คิดเป็นไม่มีเหล็ก`);
-  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, stability: stability ? { storeys: stability.storeys } : null, analysis: f3 ? "envelope" : "continuous", warnings: [...new Set(g.warnings)],
+  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, stability: stability ? { storeys: stability.storeys } : null, analysis: f3 ? "envelope" : "continuous", notes, warnings: [...new Set(g.warnings)],
     ok: g.an.every((a) => a.ok) && stacks.every((s) => s.ok) && footings.every((f) => f.ok) && (!lateral || lateral.ok) };
 }

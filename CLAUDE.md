@@ -708,3 +708,9 @@ side / cant stairs not drawn. ST-n numbered over the project (stairTag). src/sta
 StairDetail (step 3) shows the sections + "ส่งออก DXF แบบขยายบันได" (beamDetailDxf.js stairSheetsDxf: all stairs, same A3 frame / R2010 writer,
 sections centred on the sheet, at 1:25 usually one per sheet; donuts = LWPOLYLINE const width, dashes as pieces). Report: figures after the
 stair size table. ezdxf audit 0 errors. Not done: plan of the stair (แปลนบันได) with numbered steps.
+UPLIFT CHECKED IN 3D (2026-11-20, user's project: porch 1.5 m spans next to 4.8 m gave "ปลายคานถูกยก" in the continuous model): frame.js after the
+analysis — each floor.js uplift point (ln.uplift) is checked in the 3D frame (the envelope f3, or one gravity frame3dModel solve in "continuous"
+mode, only when uplift points exist): every column under the point in compression (N > 10 kg, D + L) → the warning is removed and becomes a
+note (res.notes; the floor's an.warnings entry → "หมายเหตุ: …" so the report appendix says the same): "ไม่ถอนจริง · ให้เหล็กบนของช่วงสั้น
+ต่อเนื่องและงอขอยึดเข้าเสา"; still in tension → the warning stays (Yasothon (3.50, 7.90) stays, 3 others → notes). Warnings panel lists the notes
+under the warnings (grey, locatable), status bar "· n หมายเหตุ". Column loads unchanged (max of continuous / simple). E2E 47/47, regress identical.
