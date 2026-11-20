@@ -749,3 +749,7 @@ column (hooked up when the bottoms differ, else straight through), stirrups, h /
 figures), LEVEL_REFS text. DXF: beamSheetsDxf(..., extra {joints, groups with model}) adds sheet(s) "แบบขยายคาน — คานต่างระดับ" (details packed,
 table of every joint + references; overflow to "(ต่อ)" sheets). Report: beams chapter Sub "คานต่างระดับ (พื้นลดระดับ)" (method + refs + table +
 ≤ 4 detail figures). No notch-beam section (user dropped notch beams). levels-check 18/18, report-editions ALL OK, E2E 47/47, ezdxf 0 errors.
+2026-11-20 (user's AutoCAD screenshot): Thai in the R2010 DXF shows correctly in AutoCAD (AngsanaUPC) — open item closed. Beam section notes:
+leaders crossed (the extra bar's note pointed at the inner bar from a row below the corner bar's) → beamDetailDxf section + Details BeamDetail
+order each face "extras first" on the OUTER row (above the top face / below the bottom face) so the inner leader climbs over the corner bar.
+Joint detail label "มาตราส่วน 1:25" (drawn at true size on the 1:25 sheet; was 1:20).
