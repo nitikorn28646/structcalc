@@ -771,3 +771,16 @@ bars' grade (stair DB main → RB 9 temp at 0.0018 instead of 0.0025). slabDesig
 set has As ≥ ρ·b·t by its own grade (SR24 0.0025 · SD30 0.0020 · SD40 0.0018), row.minFix + texts rewritten, report note. User's file: two-way
 slabs RB 9 @0.29/0.30 → @0.25, stairs DB 12 @0.45 → @0.41 and RB 9 @0.23 → @0.17; all other checks pass (39 spans, 53 columns, 18 footings).
 Yasothon / _big / _roof3: only the known design failures (tie spacing @0.20 > 16db on 4 columns, overloaded transfer girder …).
+BEAM SIDE WIDENING (2026-11-20, user: พอกข้างคานรับผนังก่อ, sections like their sheet; decisions: cast with the beam μ = 1.4 · the beam carries everything ·
+wall outer face flush with the strip · own type list; then "อิงมาตรฐาน ไม่ต้องลอกจำนวนเหล็กจากแบบผม"): frame.widenTypes (DEFAULT_WIDEN_TYPES W10 / W20 / W30:
+w, top, bot, st, s, sets) + drawn beam.widen {type, side 1 = left of a→b, e?}. floor.js solveFloor (every pass, the depth follows the type): strip weight
+2400·w·h as a DL line load in ln.slab (from "พอกข้าง" — the 3D frame takes it too) + EQUILIBRIUM torque items (widen: true) m = q_strip·(b + w)/2 +
+q_wall·e, e = b/2 + w − t_wall/2 (wall line loads carry tw) or beam.widen.e → span Mt / MtEq (not reduced, ACI 318-11 11.5.2.1). an.widen[i] checks:
+shear friction across the strip/beam joint Vu = 1.4(q_strip + q_wall) ≤ φVn = 0.75·1.4·fy·Avf (Avf = 2 legs × sets / s, 11.6.4) and ≤ φ·min(0.2f′c,
+3.3 + 0.08f′c, 11 MPa)·Ac (11.6.5); corner bars top + bottom (12.13.3); longitudinal bars ≤ 30 cm apart (11.5.6.2); As ≥ ρ·w·h by grade (7.12.2.1);
+stirrups ≤ d/2 ≤ 30 cm (11.4.5.1); sReq from shear friction; warnings. mat.widenTypes passed by frame.js. engine/widenDetail.js widenDetailModel (beam grey
++ its bars, strip, closed stirrup W = w + 5 cm enclosing the beam's corner bars, 2nd set w − 5 cm, "ขนาด H × W ซม.", dims, "<name> ตลอดคาน").
+src/WidenTypes.jsx: WidenTypesCard (step 7 Type คาน: type table, per-beam check table, sections), widenUses / widenSections, WIDEN_REFS. Beam inspector:
+พอกข้าง type + side + e, Result (q, e, m, Vu ≤ φVn, s ≤, As). FloorBoard green hatched strip + tag; Frame3D green box; DXF beam sheets + sheet "พอกข้างคาน";
+report beams chapter "พอกข้างคาน (รับผนังก่อ)" (method, refs, table, sections). cli/widen-check.mjs 13/13 (in the gate: weight → 3D ΣRz exact, torque, MtEq
++m·L/2, shear friction numbers, defaults pass, failing rules). E2E 47/47, regress identical, report-editions ALL OK.

@@ -39,7 +39,7 @@ export const corners = (P) => P.filter((q, i) => { const a = P[(i + P.length - 1
 const inside = (P, [x, y]) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
 const WALL_C = "#b54708", SP_C = "#d6409f", ST_C = "#0e9384";
 
-export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null, stairsAbove = null, aboveName = "", belowName = "", onStairUp = null, onPickAbove = null, onMoveTo = null, moveFloors = [], onAssignType = null }) {
+export default function FloorBoard({ floor, setFloor, an, types, wallTypes, widenTypes = null, step, show, sel, setSel, modeBar, dark, ghost = [], colInfo = null, onDxf, onCopyBelow = null, compact = false, resolveW = (w) => w, libItem = null, floorIdx, onMulti = null, onPick = null, pickSet = null, onImportFrame = null, colSize = () => null, stairsAbove = null, aboveName = "", belowName = "", onStairUp = null, onPickAbove = null, onMoveTo = null, moveFloors = [], onAssignType = null }) {
   const tools = TOOLS[step] ?? [SEL], result = step === "result";
   const svg = useRef(null), [tool, setToolState] = useState(step === "slab" ? "select" : tools[1]?.[0] ?? "select"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true), [gridOn, setGridOn] = useState(floor.grid?.on !== false);
   // each step starts with its main tool (slabs: select a panel to set its kind); a tool of another step is never kept
@@ -425,6 +425,10 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
                 {isSel("beam", i) && <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke="#f79009" strokeOpacity={0.45} strokeWidth={14 * k} strokeLinecap="round" />}
                 {/* true width of the designed (or chosen) type, like the columns; never under 4 px; thin centre line on top */}
                 <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={Math.max(bw(i), 4 * k)} strokeLinecap="square" strokeOpacity={step === "wall" || step === "slab" ? 0.35 : 0.55} strokeDasharray={b.lvl > 0 ? `${10 * k} ${6 * k}` : undefined} />
+                {(() => { const wt = b.widen ? (widenTypes ?? [])[b.widen.type] : null; if (!wt || b.arc?.s) return null; // side widening: a hatched strip on its side
+                  const sg = b.widen.side ?? 1, o1 = (bw(i) / 2) * sg, o2 = (bw(i) / 2 + wt.w) * sg, P4 = [[b.a, o1], [b.b, o1], [b.b, o2], [b.a, o2]].map(([p, o]) => `${p[0] + n[0] * o},${-(p[1] + n[1] * o)}`).join(" ");
+                  const tq = [m[0] + n[0] * (o2 + 10 * k * sg), m[1] + n[1] * (o2 + 10 * k * sg)];
+                  return <g pointerEvents="none"><polygon points={P4} fill="#12b76a" fillOpacity={0.18} stroke="#12b76a" strokeWidth={1 * k} />{txt(tq, wt.name, "#039855", 10, "middle", 700)}</g>; })()}
                 {b.lvl > 0 && txt([m[0] + n[0] * (12 * k + bw(i) / 2), m[1] + n[1] * (12 * k + bw(i) / 2)], `คานกลางชั้น +${(+b.lvl).toFixed(2)}`, "#7a5af8", 10, "middle", 600)}
                 {(() => { const lv = an?.levels?.beams?.[i]; if (!lv || b.lvl > 0 || (!lv.step && Math.abs(lv.top) < 0.005)) return null; const off = 12 * k + bw(i) / 2; // levels: lowered beam / step beam
                   return txt([m[0] + n[0] * off, m[1] + n[1] * off], `หลังคาน ${lv.top > 0 ? "+" : ""}${lv.top.toFixed(2)}`, "#0e9384", 10, "middle", 600); })()}

@@ -2,7 +2,7 @@
 // a column with nothing under it becomes a point load on the beams of the floor below. Columns are checked with engine/column.js.
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
 import { borePileRebar } from "./borePile.js";
-import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, autoOrder, checkSpan, cutType, cutoffs, robustSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
+import { CONC, DEFAULT_WALL_TYPES, DEFAULT_WIDEN_TYPES, analyzeFloor, autoOrder, checkSpan, cutType, cutoffs, robustSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
 import { BARS, allowableFs } from "./tables.js";
 import { frame3dModel, columnPatternSets } from "./frame3d.js";
 import { storeyStability, columnSlender } from "./colStability.js";
@@ -208,7 +208,7 @@ export function autoFootingFor(frame, res, stack, start = null) {
 
 // gravity analysis of every floor (continuous beams, top down) with column loads accumulated floor by floor
 function gravity(frame, minTypes) {
-  const { floors, beamTypes, colTypes } = frame, mat = { ...frame.mat, beamPick: frame.beamAutoMode === "cost" ? "cost" : "steel" }, n = floors.length, an = new Array(n), cols = [], warnings = [];
+  const { floors, beamTypes, colTypes } = frame, mat = { ...frame.mat, beamPick: frame.beamAutoMode === "cost" ? "cost" : "steel", widenTypes: frame.widenTypes ?? DEFAULT_WIDEN_TYPES }, n = floors.length, an = new Array(n), cols = [], warnings = [];
   let above = []; // columns of the floor above: { p, Pbot, stack }
   let downLines = []; // stair bottoms handed to the floor below
   for (let k = n - 1; k >= 0; k--) {

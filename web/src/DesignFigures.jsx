@@ -9,20 +9,21 @@ import { fmt } from "./beamModel.js";
 import { extraSpec, fixLoneBars, hasExtras, cantNote } from "../engine/beamDetail.js";
 import { beamSheetsDxf, downloadText } from "./beamDetailDxf.js";
 import { jointDetailModel } from "../engine/levelDetail.js";
+import { widenDetailModel } from "../engine/widenDetail.js";
 
 const card = "rounded-xl bg-[#fff] p-2 ring-1 ring-gray-200", cap = "mt-1 text-center text-[11px] text-[#667085]";
 const btn = (on) => `rounded-md px-2 py-0.5 text-[11px] ring-1 ${on ? "bg-brand-500 text-[#fff] ring-brand-500" : "text-gray-600 ring-gray-300 hover:bg-gray-50"}`;
 export const beamLayersOf = (t, mat) => { const L = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x));
   return { mid: { top: L(t.top), bottom: L(t.bot, t.botX) }, sup: { top: L(t.top, t.topX), bottom: L(t.bot) } }; };
 
-export function BeamTypeFigures({ types, mat, spans = [], count = () => null, onTypes = null, project = {}, joints = null }) {
+export function BeamTypeFigures({ types, mat, spans = [], count = () => null, onTypes = null, project = {}, joints = null, widens = null }) {
   const fixes = types.map((t) => fixLoneBars(t, mat)), nFix = fixes.filter((f) => f?.type).length;
   const fixAll = () => onTypes?.(types.map((t, i) => fixes[i]?.type ?? t));
   const [cage, setCage] = useState(null);
   return (
     <div className="mt-4"><div className="mb-1 flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-gray-800">รูปตัดเหล็กเสริม type คาน (หัวเสา · กลางคาน)</p>
       <button onClick={() => { const items = types.map((t, i) => ({ t, ext: extraSpec(i, spans), used: count(i) })).filter((x) => x.used !== 0);
-        downloadText(beamSheetsDxf(items, mat, project, "แบบขยายคาน", joints?.rows?.length ? { joints: joints.rows, groups: joints.groups.map((g) => ({ ...g, model: jointDetailModel(g, mat, { sub: `${g.n} จุด · ` }) })) } : {}).dxf, "แบบขยายคาน.dxf"); }} className={btn(false)}>ส่งออก DXF แบบขยายคาน</button>
+        downloadText(beamSheetsDxf(items, mat, project, "แบบขยายคาน", { ...(joints?.rows?.length ? { joints: joints.rows, groups: joints.groups.map((g) => ({ ...g, model: jointDetailModel(g, mat, { sub: `${g.n} จุด · ` }) })) } : {}), ...(widens?.length ? { widens: widens.map((u) => ({ model: widenDetailModel(u.type, u.wt, mat, { sub: `บนคาน ${u.type?.name} · ${u.n} คาน` }) })) } : {}) }).dxf, "แบบขยายคาน.dxf"); }} className={btn(false)}>ส่งออก DXF แบบขยายคาน</button>
       <span className="text-[11px] text-gray-500">กระดาษ A3 มาตราส่วน 1:25 (หน่วยเมตร) · กรอบแบบ + ตารางชื่อจากข้อมูลโครงการ · type ที่ใช้งานทั้งหมด + GB / GB-A มาตรฐาน (แผ่นแรก)</span>
       {nFix > 0 && onTypes && <button onClick={fixAll} className="rounded-md bg-[#b42318] px-2 py-0.5 text-[11px] font-medium text-[#fff]">แก้ {nFix} type ที่มีเหล็กเส้นเดียวลอย (เพิ่มเหล็กเสริมให้ชั้นละ ≥ 2 เส้น)</button>}</div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{types.map((t, i) => { const L = beamLayersOf(t, mat); return (

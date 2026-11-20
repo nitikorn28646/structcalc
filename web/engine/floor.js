@@ -64,6 +64,12 @@ export const wallsOf = (floor) => floor.walls ?? (floor.beams ?? []).filter((b) 
 // top / bot = through bars; topX = extra top bars at the supports (L/4), botX = extra bottom bars at mid-span (3L/5);
 // stirrup bar with spacing at the supports / mid-span (m)
 const T = (name, b, h, top, bot, topX, botX, st, sSup, sMid) => ({ name, b, h, top, bot, topX, botX, st, sSup, sMid });
+// side widening types (พอกข้างคาน, user 2026-11-20; examples from the user's drawing): strip width w (m), corner bars, stirrup set(s)
+export const DEFAULT_WIDEN_TYPES = [ // set from the standard rules below (user 2026-11-20: "ไม่ต้องยึดตามแบบผม อิงมาตรฐาน"), not copied from a sheet
+  { name: "W10", w: 0.1, top: "1-DB12", bot: "1-DB12", st: "RB 6", s: 0.15, sets: 1 },
+  { name: "W20", w: 0.2, top: "1-DB12", bot: "1-DB12", st: "RB 6", s: 0.15, sets: 1 },
+  { name: "W30", w: 0.3, top: "2-DB12", bot: "2-DB12", st: "RB 6", s: 0.15, sets: 1 },
+];
 export const DEFAULT_BEAM_TYPES = [ // the user's standard beam schedule (drawing 26546466)
   T("B1", 0.2, 0.4, "2-DB12", "2-DB12", "1-DB12", "1-DB12", "RB 6", 0.15, 0.15),
   T("B2", 0.2, 0.4, "2-DB12", "2-DB12", "2-DB12", "2-DB12", "RB 6", 0.15, 0.15),
@@ -628,7 +634,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     for (const ln of flat) {
       if (Math.abs(cross(ln.u, u)) > 1e-6 || Math.abs(cross(ln.u, sub(w.a, ln.A))) > TOL) continue;
       const proj = (p) => (p[0] - ln.A[0]) * ln.u[0] + (p[1] - ln.A[1]) * ln.u[1], a = Math.max(0, Math.min(proj(w.a), proj(w.b))), b = Math.min(ln.L, Math.max(proj(w.a), proj(w.b)));
-      if (b - a > 0.05) { ln.slab.push({ a, b, wa: q, wb: q, g: "WALL", from: `ผนัง ${i + 1}` }); out.on.push({ line: ln.id, len: b - a }); }
+      if (b - a > 0.05) { const wt = wallTypes.find((x) => x.id === w.kind); ln.slab.push({ a, b, wa: q, wb: q, g: "WALL", from: `ผนัง ${i + 1}`, tw: wallThick(wt) * (w.layers ?? 1) + ((w.layers ?? 1) > 1 ? 0.03 : 0) }); out.on.push({ line: ln.id, len: b - a }); }
     }
     if (!out.on.length && L > 0.05) {
       const pn = inPanel([(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2]);
@@ -940,7 +946,32 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       if (have < need - 1e-9) warnings.push(`คานบ่า ${t.name} (คาน ${i + 1}) รับแผ่นพื้น PS ${sd.dz < lv.top - 0.005 ? "ฝั่งต่ำบนบ่า" : "ฝั่งสูง"} วางได้ ${(have * 100).toFixed(1)} ซม. < ${(need * 100).toFixed(1)} ซม. (≥ 5 ซม. และ ≥ ln/180) — ขยายความกว้างคานหรือปรับความกว้างบ่า`);
     }
   });
-  return { ...result, beamTypeOf, levels, downOn, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
+  // side widening checks (ACI 318-11 11.6 shear friction across the vertical joint strip/beam, cast monolithically μ = 1.4, φ = 0.75,
+  // Vu = 1.4·(strip + wall) per metre (USD factors of ว.ส.ท.); Avf = the strip's stirrup legs crossing the joint (2 per set, anchored around the
+  // beam's corner bars, 11.6.8 / 12.13.3); Vn ≤ min(0.2f′c, 3.3 + 0.08f′c MPa, 11 MPa)·Ac (11.6.5); corner bars top and bottom; spacing ≤ the beam's)
+  const widen = (floor.beams ?? []).map((bm, i) => {
+    const wd = bm.widen, wt = wd ? (mat.widenTypes ?? [])[wd.type] : null; if (!wt || !(wt.w > 0) || bm.lvl > 0) return null;
+    const t = tyOf(i), fc = mat.fcBeam ?? mat.fcPrime, qw = CONC * wt.w * t.h;
+    const lns = flat.filter((l) => l.members.includes(i)), qWall = Math.max(0, ...lns.flatMap((l) => { const pt = l.parts.find((p) => p.i === i); return l.slab.filter((x) => x.g === "WALL" && Math.min(x.b, pt.t1) - Math.max(x.a, pt.t0) > 1e-6).map((x) => x.wa); }));
+    const tw = Math.max(0.1, ...lns.flatMap((l) => l.slab.filter((x) => x.g === "WALL").map((x) => x.tw ?? 0.1))), e = Number.isFinite(wd.e) ? Math.abs(wd.e) : t.b / 2 + wt.w - tw / 2;
+    const st = BARS[wt.st] ?? { A: 0.283, d: 0.6 }, sets = wt.sets ?? 1, s = wt.s ?? 0.15, fyt = String(wt.st).startsWith("RB") ? mat.fys ?? 2400 : mat.fy ?? 4000;
+    const Avf = (2 * st.A * sets) / s, Vu = 1.4 * (qw + qWall), phiVn = 0.75 * 1.4 * fyt * Avf, Ac = t.h * 100 * 100;
+    const vmax = Math.min(0.2 * fc, (3.3 + 0.08 * (fc / 10.197)) * 10.197, 11 * 10.197), phiVlim = 0.75 * vmax * Ac;
+    // detailing (standard, not a sheet): a bar in each outer corner (12.13.3: every bend of the stirrup encloses a bar); longitudinal bars ≤ 30 cm
+    // apart counted from the beam's corner bar (11.5.6.2); As ≥ ρ·w·h by the bars' grade (7.12.2.1: SR24 0.0025 · SD30 0.0020 · SD40 0.0018);
+    // stirrup spacing ≤ d/2 of the beam and ≤ 30 cm (11.4.5.1) — and enough for the shear friction above
+    const bT = parseBars(wt.top), bB = parseBars(wt.bot), corner = (bT?.n ?? 0) >= 1 && (bB?.n ?? 0) >= 1;
+    const gap = Math.max(...[bT, bB].map((b) => (wt.w + 0.05) / Math.max(1, b?.n ?? 1))), gapOk = gap <= 0.3 + 1e-9;
+    const rhoL = (b) => (String(b?.bar).startsWith("RB") ? 0.0025 : (mat.fy ?? 4000) >= 4000 ? 0.0018 : 0.002);
+    const AsL = [bT, bB].reduce((a, b) => a + (b ? b.n * (BARS[b.bar]?.A ?? 0) : 0), 0), AsMinL = rhoL(bT ?? bB) * wt.w * 100 * t.h * 100, AsOk = AsL >= AsMinL - 1e-9;
+    const dB = t.h - (mat.cover ?? 3) / 100 - 0.015, sMax = Math.min(dB / 2, 0.3), sOk = s <= sMax + 1e-9;
+    const why = [!(Vu <= phiVn + 1e-6) && `แรงเฉือนผ่านรอยต่อ Vu ${Math.round(Vu)} > φVn ${Math.round(phiVn)} กก./ม. — ปลอกส่วนพอกถี่ขึ้นหรือใหญ่ขึ้น`,
+      !(Vu <= phiVlim + 1e-6) && `Vu เกินขีดจำกัด φ·${vmax.toFixed(1)}·Ac`, !corner && "ส่วนพอกต้องมีเหล็กมุมบนและล่างอย่างน้อยด้านละ 1 เส้น (12.13.3)", !gapOk && `เหล็กยืนส่วนพอกห่าง ${gap.toFixed(2)} > 0.30 ม. — เพิ่มจำนวนเส้น (11.5.6.2)`,
+      !AsOk && `เหล็กยืนส่วนพอก ${AsL.toFixed(2)} < ${AsMinL.toFixed(2)} ซม.² (ρ·w·h, 7.12.2.1)`, !sOk && `ระยะปลอกส่วนพอก ${s} > ${sMax.toFixed(2)} ม. (d/2 ≤ 0.30, 11.4.5.1)`].filter(Boolean);
+    if (why.length) warnings.push(`คาน ${i + 1} พอกข้าง ${wt.name}: ${why.join(" · ")}`);
+    return { i, name: wt.name, w: wt.w, side: wd.side ?? 1, b: t.b, h: t.h, qw, qWall, e, tw, m: qw * (t.b + wt.w) / 2 + qWall * e, Vu, Avf, fyt, phiVn, vmax, phiVlim, sMax, gap, AsL, AsMinL, sReq: Math.floor(((0.75 * 1.4 * fyt * 2 * st.A * sets) / Math.max(Vu, 1)) * 40) / 40, ok: !why.length, why };
+  });
+  return { ...result, beamTypeOf, levels, widen, downOn, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
 }
 
 // largest |deflection| (m) of each element: v'' = M/EI integrated twice, matched to the nodal deflections
@@ -1049,6 +1080,21 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
       if (done.has(ln.id)) continue;
       const resting = lines.filter((o) => o.carriers.some((c) => c.host === ln.id));
       if (resting.some((o) => !done.has(o.id)) && pass < lines.length) continue; // wait for the beams resting on this one
+      // BEAM SIDE WIDENING (พอกข้างคาน, user 2026-11-20): a strip w wide cast with the beam over its full depth on one side to seat a masonry
+      // wall. The beam itself carries everything (user's choice): the strip's weight 2400·w·h is a dead line load, and the strip + the wall on it
+      // stand off the beam axis → torque per metre m = q_strip·(b + w)/2 + q_wall·e, e = b/2 + w − t_wall/2 (outer wall face flush with the
+      // strip, or beam.widen.e) — EQUILIBRIUM torsion (ACI 318-11 11.5.2.1: not reduced). Rebuilt every pass (the beam depth follows its type).
+      const WT = mat.widenTypes ?? [];
+      ln.slab = ln.slab.filter((l) => l.from !== "พอกข้าง"); ln.torsion = ln.torsion.filter((q) => !q.widen);
+      for (const pt of ln.parts) {
+        const bm = floor.beams[pt.i], wd = bm?.widen, wt = wd ? WT[wd.type] : null; if (!wt || !(wt.w > 0) || bm.lvl > 0) continue;
+        const t = types[typeOf.get(pt.i)] ?? types[0], qw = CONC * wt.w * t.h, ew = (t.b + wt.w) / 2;
+        ln.slab.push({ a: pt.t0, b: pt.t1, wa: qw, wb: qw, g: "DL", from: "พอกข้าง" });
+        ln.torsion.push({ a: pt.t0, b: pt.t1, m: qw * ew, mL: 0, compat: false, from: `พอกข้าง ${wt.name}`, widen: true });
+        for (const sl of ln.slab.filter((l) => l.g === "WALL")) { const a = Math.max(sl.a, pt.t0), b = Math.min(sl.b, pt.t1); if (b - a < 1e-6) continue;
+          const e = Number.isFinite(wd.e) ? Math.abs(wd.e) : t.b / 2 + wt.w - (sl.tw ?? 0.1) / 2;
+          ln.torsion.push({ a, b, m: sl.wa * Math.max(0, e), mL: 0, compat: false, from: `${sl.from} บนพอกข้าง`, widen: true }); }
+      }
       // loads: slab, wall, self weight per member, point loads from beams resting here
       const loads = [...ln.slab], pts = [];
       for (const pt of ln.parts) {

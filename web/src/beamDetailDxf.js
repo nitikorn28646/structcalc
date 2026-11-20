@@ -225,6 +225,16 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
       d.text(X0, y - 0.04, 0.04, "อ้างอิง ACI 318-11 (ฐานของ ว.ส.ท.): 12.5 ขอมาตรฐาน ldh · 12.12.1 เหล็กโมเมนต์ลบยึดผ่านจุดรองรับ · 12.11.1 เหล็กล่างเข้าจุดรองรับ ≥ 15 ซม. · 7.1 ขอ 90° ยาว 12db", "C-TEXT", 0, 0);
     }
   }
+  // side widening sections (พอกข้างคาน, 2026-11-20): one more sheet, the section of each widening type × beam type in use, packed
+  if (extra.widens?.length) {
+    let X = sheets.length * (SW + 0.5); frame(d, X, project, `${title} — พอกข้างคาน`); sheets.push([]);
+    let x = BX0 + 0.25, yTop = BY1 - 0.25, rowH = 0;
+    for (const g of extra.widens) { const m = g.model, [a, b, c, e] = m.box, w = c - a, h = e - b;
+      if (x + w > TX - 0.2 && x > BX0 + 0.3) { x = BX0 + 0.25; yTop -= rowH + 0.25; rowH = 0; }
+      if (yTop - h < BY0 + 0.4) { X = sheets.length * (SW + 0.5); frame(d, X, project, `${title} — พอกข้างคาน (ต่อ)`); sheets.push([]); x = BX0 + 0.25; yTop = BY1 - 0.25; rowH = 0; }
+      emitModel(d, m, X + x - a, yTop - e); x += w + 0.3; rowH = Math.max(rowH, h); }
+    d.text(X + BX0 + 0.2, BY0 + 0.15, 0.04, "พอกข้างคานหล่อพร้อมคานเต็มความลึก · ปลอกส่วนพอกโอบเหล็กมุมของคาน · อ้างอิง ACI 318-11 11.6 (แรงเฉือนผ่านรอยต่อ μ = 1.4) · 11.5.2.1 (แรงบิดสมดุล) · 12.13.3", "C-TEXT", 0, 0);
+  }
   return { dxf: d.toString(), sheets: sheets.length };
 }
 
