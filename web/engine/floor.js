@@ -511,6 +511,13 @@ export function spanReasons(c) {
 // floor.lineLoads = [{ a, b, q kg/m, name, g: SDL | WALL | LL (Load Cases page; none = SP) }] railings, walls typed as kg/m etc.; floor.pointLoads = [{ p, P kg, name }]; panels[key].extra kg/m² (SDL)
 // downLines: line loads handed down by the floor above (stair bottoms) → [{ a, b, q, g, from }]
 // minTypes: { drawnBeamIndex: typeIdx } lightest type allowed (set by the 3D-frame envelope of analyzeFrame)
+// end torque of a span x0–x1 from distributed torques [{a, b, m}] (kg-m per m): lever rule, larger end; cantilever = all at the fixed end
+export function spanTorque(list, x0, x1, cant = false) {
+  const L = x1 - x0; if (!(L > 0)) return 0; let T0 = 0, T1 = 0, all = 0;
+  for (const q of list) { const a = Math.max(q.a, x0), b = Math.min(q.b, x1), ov = b - a; if (!(ov > 0)) continue;
+    const T = q.m * ov, xc = (a + b) / 2; all += T; T0 += (T * (x1 - xc)) / L; T1 += (T * (xc - x0)) / L; }
+  return cant ? all : Math.max(T0, T1);
+}
 // the widened part of a drawn beam in line coordinates: beam.widen.from / to = distances from the beam's start point a (default the whole beam)
 // a beam may carry several widenings (user 2026-11-20: "พอกทั้ง 2 ฝั่ง"): beam.widen = one {type, side, from, to, e} or a list of them
 export const widensOf = (bm) => (Array.isArray(bm?.widen) ? bm.widen : bm?.widen ? [bm.widen] : []).filter((x) => x && x.type != null);
@@ -999,8 +1006,11 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     const why = [!(Vu <= phiVn + 1e-6) && `แรงเฉือนผ่านรอยต่อ Vu ${Math.round(Vu)} > φVn ${Math.round(phiVn)} กก./ม. — ปลอกส่วนพอกถี่ขึ้นหรือใหญ่ขึ้น`,
       !(Vu <= phiVlim + 1e-6) && `Vu เกินขีดจำกัด φ·${vmax.toFixed(1)}·Ac`, !corner && "ส่วนพอกต้องมีเหล็กมุมบนและล่างอย่างน้อยด้านละ 1 เส้น (12.13.3)", !gapOk && `เหล็กยืนส่วนพอกห่าง ${gap.toFixed(2)} > 0.30 ม. — เพิ่มจำนวนเส้น (11.5.6.2)`,
       !AsOk && `เหล็กยืนส่วนพอก ${AsL.toFixed(2)} < ${AsMinL.toFixed(2)} ซม.² (ρ·w·h, 7.12.2.1)`, !sOk && `ระยะปลอกส่วนพอก ${s} > ${sMax.toFixed(2)} ม. (d/2 ≤ 0.30, 11.4.5.1)`].filter(Boolean);
+    // end torque on each span this strip lies on (lever rule, spanTorque) and the span's whole equilibrium torque (all strips, cantilever slabs …)
+    const spT = result.spans.filter((sp) => sp.members.includes(i)).map((sp) => { const ln = flat.find((l) => l.id === sp.line), it = (ln?.torsion ?? []).filter((q) => q.widen && q.beam === i && q.strip === j);
+      const T = spanTorque(it, sp.x0, sp.x1, sp.kind === "cantilever"); return T > 0 ? { id: sp.id, L: sp.len, kind: sp.kind, T, Mt: sp.MtEq ?? sp.Mt ?? 0, MtAll: sp.Mt ?? 0, ok: sp.ok } : null; }).filter(Boolean);
     if (why.length) warnings.push(`คาน ${i + 1} พอกข้าง ${wt.name}${(wd.side ?? 1) > 0 ? " ซ้าย" : " ขวา"}: ${why.join(" · ")}`);
-    return { i, j, name: wt.name, w: wt.w, side: wd.side ?? 1, len, from: wd.from ?? 0, b: t.b, h: t.h, qw, qWall, e, tw, m: qw * (t.b + wt.w) / 2 + qWall * e, Vu, Avf, fyt, phiVn, vmax, phiVlim, sMax, gap, AsL, AsMinL, sReq: Math.floor(((0.75 * 1.4 * fyt * 2 * st.A * sets) / Math.max(Vu, 1)) * 40) / 40, ok: !why.length, why };
+    return { i, j, spans: spT, Ab: st.A, name: wt.name, w: wt.w, side: wd.side ?? 1, len, from: wd.from ?? 0, b: t.b, h: t.h, qw, qWall, e, tw, m: qw * (t.b + wt.w) / 2 + qWall * e, Vu, Avf, fyt, phiVn, vmax, phiVlim, sMax, gap, AsL, AsMinL, sReq: Math.floor(((0.75 * 1.4 * fyt * 2 * st.A * sets) / Math.max(Vu, 1)) * 40) / 40, ok: !why.length, why };
   }); return list.some(Boolean) ? list : null; // index = position in widensOf(beam)
   });
   return { ...result, beamTypeOf, levels, widen, downOn, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
@@ -1124,11 +1134,11 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
         const [w0, w1] = widenRange(bm, ln, pt, wd); if (w1 - w0 < 1e-6) continue; // a part of the beam only (user 2026-11-20: "อาจไม่ได้พอกทั้งเส้น")
         ln.slab.push({ a: w0, b: w1, wa: qw, wb: qw, g: "DL", from: "พอกข้าง" });
         // torques of strips on opposite sides are ADDED (not cancelled) — conservative
-        ln.torsion.push({ a: w0, b: w1, m: qw * ew, mL: 0, compat: false, from: `พอกข้าง ${wt.name}`, widen: true });
+        ln.torsion.push({ a: w0, b: w1, m: qw * ew, mL: 0, compat: false, from: `พอกข้าง ${wt.name}`, widen: true, beam: pt.i, strip: j });
         for (const sl of ln.slab.filter((l) => wallOnStrip(l, j))) { // walls standing on this strip (not wall load handed over by a slab)
           const a = Math.max(sl.a, w0), b = Math.min(sl.b, w1); if (b - a < 1e-6) continue;
           const e = Number.isFinite(sl.e) ? sl.e : Number.isFinite(wd.e) ? Math.abs(wd.e) : t.b / 2 + wt.w - (sl.tw ?? 0.1) / 2; // drawn on the strip → its real offset
-          ln.torsion.push({ a, b, m: sl.wa * Math.max(0, e), mL: 0, compat: false, from: `${sl.from} บนพอกข้าง`, widen: true }); }
+          ln.torsion.push({ a, b, m: sl.wa * Math.max(0, e), mL: 0, compat: false, from: `${sl.from} บนพอกข้าง`, widen: true, beam: pt.i, strip: j }); }
       }
       // loads: slab, wall, self weight per member, point loads from beams resting here
       const loads = [...ln.slab], pts = [];
@@ -1246,9 +1256,13 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
             const lL = Le / (mat.deflLive ?? 360), lT = Le / (mat.deflTotal ?? 240);
             return { dL: dl, dT: dt, limL: lL, limT: lT, ok: dl <= lL + 1e-9 && dt <= lT + 1e-9, I: (els[0] && EI[i0]) || 0,
               ...(bq ? { method: "branson", dD: bq.dDi, lam: bq.lam, dLong: bq.dLong, IeD: bq.D.Ie, IeDL: bq.DL.Ie, Ig: bq.D.P.Ig, IcrP: bq.D.P.Icr, IcrN: bq.D.N.Icr, Mcr: bq.D.P.Mcr, MaD: null, kind: bq.kind } : { method: "0.5Ig" }) }; })(),
-          Mt: ln.torsion.reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2),
+          // end torque of a span held against twisting at both ends (2026-11-20, was Σ/2): each distributed torque m over its overlap
+          // goes to the ends by the lever rule (like an axial load in a bar fixed at both ends) — T0 = Σ m·ov·(x1 − xc)/L, T1 = Σ m·ov·(xc − x0)/L;
+          // Mt = the larger end. Same as Σ/2 for torque along the whole span; larger for a part near one end (partial widening, short
+          // cantilever slab). A cantilever span takes it all at the fixed end.
+          Mt: spanTorque(ln.torsion, x[i0], x[i1], cant),
           // equilibrium part (cantilever slabs with no slab behind the beam, loads hung on it); the rest is compatibility torsion
-          MtEq: ln.torsion.filter((q) => !q.compat).reduce((s, q) => s + q.m * Math.max(0, Math.min(q.b, x[i1]) - Math.max(q.a, x[i0])), 0) / (cant ? 1 : 2) });
+          MtEq: spanTorque(ln.torsion.filter((q) => !q.compat), x[i0], x[i1], cant) });
       }
     }
   }

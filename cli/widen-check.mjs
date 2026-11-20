@@ -34,8 +34,8 @@ for (const [j, w] of DEFAULT_WIDEN_TYPES.entries()) { const r = analyzeFrame(mod
 const r5 = analyzeFrame({ ...model((f) => { f.walls = [wall]; f.beams[0].widen = { type: 0 }; return f; }), widenTypes: [{ ...DEFAULT_WIDEN_TYPES[2], top: "1-DB12", bot: "1-DB12" }] });
 ok("w 0.30 with one bar per face → spacing > 30 cm warned (11.5.6.2)", r5.floors[1].widen[0][0].why.some((x) => x.includes("11.5.6.2")));
 const r6 = analyzeFrame(model((f) => { f.walls = [wall]; f.beams[0].widen = { type: 0, from: 1, to: 2.5 }; return f; }));
-ok("partial widening 1.0–2.5 m: weight = q·1.5 m, torque over that part only", Math.abs(rz(r6) - rz(r0) - qw * 1.5) < 1e-6 * rz(r0) && Math.abs(r6.floors[1].widen[0][0].len - 1.5) < 1e-9
-  && Math.abs((r6.floors[1].spans.find((s) => s.members.includes(0)).MtEq ?? 0) - (sp0.MtEq ?? 0) - (m * 1.5) / 2) < 1e-6, `Δ ${(rz(r6) - rz(r0)).toFixed(2)} / ${qw * 1.5}`);
+ok("partial widening 1.0–2.5 m: weight = q·1.5 m, end torque by the lever rule m·1.5·(L − 1.75)/L (near end)", Math.abs(rz(r6) - rz(r0) - qw * 1.5) < 1e-6 * rz(r0) && Math.abs(r6.floors[1].widen[0][0].len - 1.5) < 1e-9
+  && Math.abs((r6.floors[1].spans.find((s) => s.members.includes(0)).MtEq ?? 0) - (sp0.MtEq ?? 0) - m * 1.5 * (4 - 1.75) / 4) < 1e-6, `Δ ${(rz(r6) - rz(r0)).toFixed(2)} / ${qw * 1.5}`);
 const r7 = analyzeFrame(model((f) => { f.walls = [wall]; f.beams[0] = { ...f.beams[0], a: [4, 0], b: [0, 0], widen: { type: 0, from: 1, to: 2.5 } }; return f; }));
 ok("same part on a beam drawn the other way (from its own start)", Math.abs(rz(r7) - rz(r6)) < 1e-6 && Math.abs(r7.floors[1].widen[0][0].len - 1.5) < 1e-9);
 // a wall drawn ON the strip (centre line 0.20 m off the axis for W20 on B1): a line load on the beam with its real eccentricity
@@ -55,6 +55,9 @@ ok("both sides: torques of the two strips added (not cancelled)", Math.abs((sp11
   && Math.abs(w11[1].m - qw2 * (t.b + DEFAULT_WIDEN_TYPES[1].w) / 2) < 1e-6, `${w11[0].m.toFixed(1)} + ${w11[1].m.toFixed(1)}`);
 const r12 = analyzeFrame(model((f) => { f.walls = [wallOff]; f.beams[0].widen = [{ type: 0, side: 1 }, { type: 1, side: -1 }]; return f; })), w12 = r12.floors[1].widen[0];
 ok("both sides: a wall drawn on the right strip goes to that strip", w12[0].qWall === 0 && w12[1].qWall === 540 && Math.abs(w12[1].e - 0.2) < 1e-9, `q ${w12[0].qWall} / ${w12[1].qWall}`);
+ok("check lists the strip's end torque per span (full length: m·L/2) and the span total", c.spans?.length === 1 && Math.abs(c.spans[0].T - m * 2) < 1e-6 && c.spans[0].Mt >= c.spans[0].T - 1e-9, JSON.stringify(c.spans?.[0]));
+const r13 = analyzeFrame(model((f) => { f.walls = [wall]; f.beams[0].widen = { type: 0, from: 2.5, to: 4 }; return f; }));
+ok("partial widening at the span end 2.5–4.0 m: end torque m·1.5·3.25/4 (not m·1.5/2)", Math.abs((r13.floors[1].spans.find((s) => s.members.includes(0)).MtEq ?? 0) - (sp0.MtEq ?? 0) - m * 1.5 * 3.25 / 4) < 1e-6);
 const mdl = widenDetailModel(t, DEFAULT_WIDEN_TYPES[2], mat);
 ok("section drawing finite", mdl.items.every((p) => Object.values(p).every((v) => typeof v !== "number" || Number.isFinite(v))) && mdl.box.every(Number.isFinite));
 const r4 = analyzeFrame(model((f) => ({ ...f, walls: [wall] })));

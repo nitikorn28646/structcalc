@@ -10,7 +10,7 @@ import { extraSpec } from "../engine/beamDetail.js";
 import { CalcLink, Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
 import { stairSections } from "./stairSection.js";
 import { LEVEL_REFS, LevelJointTable, JointDetail } from "./LevelJoints.jsx";
-import { WIDEN_REFS, WidenSection, widenUses, widenSections, sideName } from "./WidenTypes.jsx";
+import { WIDEN_REFS, WidenSection, widenUses, widenSections, sideName, beamWidenModel } from "./WidenTypes.jsx";
 import { levelJoints, jointGroups } from "../engine/levelDetail.js";
 import { stairSvgString } from "./stairSvg.js";
 import { fmt } from "./beamModel.js";
@@ -18,7 +18,7 @@ import Drawing from "./Drawing.jsx";
 import { beamSectionModel, columnSectionModel, footingModel, framePlanModel, pileCapModel } from "./drawings.js";
 import { PILES } from "../engine/footing.js";
 import { SLAB_BARS } from "../engine/tables.js";
-import { CONC, DEFAULT_WALL_TYPES, GROUPS, STAIR_KINDS, barLayers, faceBars, parseBars, stLabel, wallsOf } from "../engine/floor.js";
+import { CONC, DEFAULT_WALL_TYPES, DEFAULT_WIDEN_TYPES, GROUPS, STAIR_KINDS, barLayers, faceBars, parseBars, stLabel, wallsOf } from "../engine/floor.js";
 import { designSlabs } from "../engine/slabDesign.js";
 import { analyzeFrame } from "../engine/frame.js";
 import { arcGeom } from "../engine/arc.js";
@@ -110,6 +110,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             <ol className="list-decimal pl-5">
               <li>เหล็กปลอกขั้นต่ำเมื่อ V &gt; ½Vc: Av ≥ max(0.2√f′c, 3.5)·b·s/fy และ s ≤ d/2 ≤ 60 ซม. (ข้อ 11.4.5–11.4.6) ยกเว้นคานลึกไม่เกิน 25 ซม.</li>
               <li>แรงบิดแบบท่อผนังบาง: At/s = T/(2·0.85Aoh·fv), เหล็กตามยาว Al = (At/s)·ph·fv/fs และค่าต่ำสุด, s ≤ ph/8 ≤ 30 ซม. (ข้อ 11.5) — แรงบิดจากพื้นยื่นที่มีพื้นหล่อในที่ต่อเนื่องด้านหลังคิดเป็นแรงบิดแบบ compatibility (ข้อ 11.5.2.2)</li>
+              <li>แรงบิดกระจายตามคาน (พื้นยื่น ราว ส่วนพอกข้างและผนังบนส่วนพอก) แบ่งเข้าปลายช่วงตามระยะ (lever rule): T₁ = Σ m·ℓ·(L − x̄)/L, T₂ = Σ m·ℓ·x̄/L ใช้ปลายที่มากกว่า — แรงบิดเฉพาะช่วงใกล้ปลายคานจึงเข้าปลายนั้นมากกว่าครึ่ง; คานยื่นเข้าปลายยึดทั้งหมด</li>
               <li>ระยะแอ่น: Ie ของ Branson แยกน้ำหนักคงที่ และน้ำหนักคงที่ + จร (ข้อ 9.5.2.3–9.5.2.4), ระยะยาว λΔ = 2/(1 + 50ρ′) (ข้อ 9.5.2.5); รวม = δD + λΔ·δD + δL ≤ L/{mat.deflTotal ?? 240}, δL ≤ L/{mat.deflLive ?? 360}</li>
               <li>ระยะตัดเหล็กเสริมจากโมเมนต์ envelope ยืดเลยจุดตัดทางทฤษฎี และยาวไม่น้อยกว่า ld (ข้อ 12.2, 12.10–12.12)</li>
               <li>ช่วงคานสั้นกว่า 4h ใช้แรงเฉือนสูงสุด (ไม่ลดเป็นแรงเฉือนที่ระยะ d) · ตรวจหน่วยแรงจริงของหน้าตัดที่ใส่เหล็กแล้ว และการจัดเหล็กต่อชั้น</li>
@@ -162,13 +163,13 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
               <FootingPlan floor={base} footings={res.footings} columns={cols0} colTypes={colTypes} marks={FM} print className="mx-auto h-[118mm] w-full" /><FootingLegend footings={res.footings} marks={FM} /></Figure>; })()}
           {floors.map((f, k) => (f.columns ?? []).length > 0 && (
             <Figure key={`c${k}`} caption={`แปลนเสา — เสาใต้ ${f.name} (สีตาม type · ขนาด ซม. · ✕ = ไม่ผ่าน)`}>
-              <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k), { mode: "columns", colTypes })} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
+              <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k), { mode: "columns", colTypes, widenTypes: frame.widenTypes ?? DEFAULT_WIDEN_TYPES })} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
           {floors.map((f, k) => (f.beams ?? []).length > 0 && (
             <Figure key={`b${k}`} caption={`แปลนคาน ${f.name} — สีตาม type คาน`}>
-              <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k))} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
+              <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k), { widenTypes: frame.widenTypes ?? DEFAULT_WIDEN_TYPES })} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
           {floors.map((f, k) => res.floors[k].panels.length > 0 && (
             <Figure key={`s${k}`} caption={`แปลนพื้น ${f.name} — P = แผ่นพื้น · S หล่อในที่ · PS พื้นสำเร็จ (ลูกศร = ทิศวางแผ่น) · GS บนดิน · t = หนา (ซม.)`}>
-              <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k), { mode: "slabs" })} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
+              <Drawing model={framePlanModel(f, res.floors[k], types, res.columns.filter((c) => c.floor === k), { mode: "slabs", widenTypes: frame.widenTypes ?? DEFAULT_WIDEN_TYPES })} className="mx-auto h-[112mm]" fontSize={9} width={680} /></Figure>))}
         </Sec>}
 
         {(part === "all" || (Array.isArray(part) && part.includes("analysis"))) && (() => {
@@ -249,6 +250,30 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             <Table head={["ชั้น / คาน", "พอก", "ด้าน", "ยาว (ม.)", "คาน", "q พอก (กก./ม.)", "q ผนัง (กก./ม.)", "e (ม.)", "m (กก.-ม./ม.)", "Vu (กก./ม.)", "φVn (กก./ม.)", "ผล"]}
               rows={uses.map((u) => { const c = u.check; return [`${u.floorName} / ${u.i + 1}`, `${u.wt.name} ${fmt(u.wt.w * 100, 0)} ซม.`, sideName(u.side), c ? `${fmt(c.len, 2)}${c.from ? ` (เริ่ม ${fmt(c.from, 2)})` : ""}` : "-", `${u.type?.name}`, c ? fmt(c.qw, 0) : "-", c ? fmt(c.qWall, 0) : "-", c ? fmt(c.e, 3) : "-", c ? fmt(c.m, 0) : "-", c ? fmt(c.Vu, 0) : "-", c ? fmt(c.phiVn, 0) : "-", c ? P("คาน")(c.ok) : "-"]; })} />
             {secs.slice(0, 6).map((u, q) => <Figure key={q} caption={`${u.wt.name} พอกข้าง ${fmt(u.wt.w * 100, 0)} ซม. บนคาน ${u.type?.name} (${u.n} คาน)`}><WidenSection t={u.type} wt={u.wt} mat={mat} px={180} /></Figure>)}
+            {/* worked calculation per widened beam (user 2026-11-20: "เช็ครายการคำนวณ ระยะเยื้อง โมเมนต์บิด"): section with the walls, every step substituted */}
+            {[...new Map(uses.map((u) => [`${u.floor}|${u.i}`, u])).values()].map((u0) => { const strips = uses.filter((u) => u.floor === u0.floor && u.i === u0.i), wm = beamWidenModel(frame, res.floors[u0.floor], u0.i, u0.beam, { notes: false });
+              const tb = u0.type, n0 = (v, d = 0) => fmt(v, d);
+              return (<div key={`wc${u0.floor}-${u0.i}`} className="rp-keep">
+                <p className="mt-3 font-semibold">รายการคำนวณพอกข้าง — {u0.floorName} คาน {u0.i + 1} ({tb?.name} {n0(tb.b * 100)}×{n0(tb.h * 100)} ซม., {strips.length} ส่วน)</p>
+                {wm && <Figure caption={`รูปตัดคาน ${u0.i + 1} กับส่วนพอกและผนัง (มองจากต้นคาน → ปลายคาน)`}><div dangerouslySetInnerHTML={{ __html: stairSvgString(wm.model, { px: Math.min(380 / (wm.model.box[2] - wm.model.box[0]), 300 / (wm.model.box[3] - wm.model.box[1])) }) }} /></Figure>}
+                {strips.map((u) => { const c = u.check; if (!c) return null; const wt = u.wt, A = c.Ab ?? 0.283, eDef = tb.b / 2 + wt.w - (c.tw ?? 0.1) / 2, drawn = Math.abs(c.e - eDef) > 1e-6;
+                  const rows = [
+                    ["น้ำหนักส่วนพอก", "q พอก = 2,400·w·h", `2,400 × ${fmt(wt.w, 2)} × ${fmt(tb.h, 2)}`, `${n0(c.qw)} กก./ม.`],
+                    ["ผนังบนส่วนพอก", "q ผนัง (จากผนังที่วาด)", c.qWall > 0 ? `หนา ${n0((c.tw ?? 0.1) * 100)} ซม.` : "ไม่มีผนังบนส่วนนี้", `${n0(c.qWall)} กก./ม.`],
+                    ["ระยะเยื้องผนัง", drawn ? "e = ระยะจากแกนคานถึงแนวกลางผนัง (ตามแบบ)" : "e = b/2 + w − t/2 (ผิวนอกเสมอส่วนพอก)", drawn ? "วัดจากแบบ" : `${fmt(tb.b / 2, 3)} + ${fmt(wt.w, 2)} − ${fmt((c.tw ?? 0.1) / 2, 3)}`, `${fmt(c.e, 3)} ม.`],
+                    ["แรงบิดต่อเมตร", "m = q พอก·(b + w)/2 + q ผนัง·e", `${n0(c.qw)} × ${fmt((tb.b + wt.w) / 2, 3)} + ${n0(c.qWall)} × ${fmt(c.e, 3)}`, `${n0(c.m, 1)} กก.-ม./ม.`],
+                    ...(c.spans ?? []).map((sp) => [`แรงบิดที่ปลายช่วง ${sp.id}`, sp.kind === "cantilever" ? "T = Σ m·ℓ (ยื่น: ทั้งหมดเข้าปลายยึด)" : "T = Σ m·ℓ·(L − x̄)/L (ปลายที่มากกว่า)", `ช่วงยาว ${fmt(sp.L, 2)} ม., พอกยาว ${fmt(c.len, 2)} ม.`, `${n0(sp.T)} กก.-ม.`]),
+                    ...(c.spans ?? []).map((sp) => [`แรงบิดสมดุลรวมช่วง ${sp.id}`, "ทุกส่วนพอก + พื้นยื่น/ราว (ไม่หักล้าง)", "ตรวจในการออกแบบคาน (ท่อผนังบาง)", `${n0(sp.Mt)} กก.-ม. · ${sp.ok ? "คานผ่าน" : "คานไม่ผ่าน"}`]),
+                    ["แรงเฉือนผ่านรอยต่อ", "Vu = 1.4(q พอก + q ผนัง)", `1.4 × (${n0(c.qw)} + ${n0(c.qWall)})`, `${n0(c.Vu)} กก./ม.`],
+                    ["เหล็กข้ามรอยต่อ", "Avf = 2·Ab·ชุด/s", `2 × ${fmt(A, 3)} × ${wt.sets ?? 1} / ${fmt(wt.s, 3)}`, `${fmt(c.Avf, 2)} ซม.²/ม.`],
+                    ["กำลังเฉือนผ่านรอยต่อ", "φVn = 0.75·μ·fy·Avf, μ = 1.4", `0.75 × 1.4 × ${n0(c.fyt)} × ${fmt(c.Avf, 2)}`, `${n0(c.phiVn)} ≥ ${n0(c.Vu)} ${c.Vu <= c.phiVn + 1e-6 ? "✓" : "✕"}`],
+                    ["ขีดจำกัดหน้าตัดรอยต่อ", "φ·min(0.2f′c, 3.3 + 0.08f′c, 11 MPa)·Ac", `0.75 × ${fmt(c.vmax, 1)} × ${n0(tb.h * 1e4)}`, `${n0(c.phiVlim)} ≥ ${n0(c.Vu)} ${c.Vu <= c.phiVlim + 1e-6 ? "✓" : "✕"}`],
+                    ["ระยะปลอกส่วนพอก", "s ≤ min(d/2, 0.30 ม.) และ ≤ s จากแรงเฉือนผ่านรอยต่อ", `${fmt(wt.s, 3)} ≤ ${fmt(c.sMax, 3)} · ${fmt(c.sReq, 3)}`, wt.s <= Math.min(c.sMax, c.sReq) + 1e-9 ? "✓" : "✕"],
+                    ["เหล็กยืนส่วนพอก", "As ≥ ρ·w·h, ห่าง ≤ 0.30 ม.", `${fmt(c.AsL, 2)} ≥ ${fmt(c.AsMinL, 2)} ซม.² · ห่าง ${fmt(c.gap, 2)} ม.`, c.AsL >= c.AsMinL - 1e-9 && c.gap <= 0.3 + 1e-9 ? "✓" : "✕"],
+                    ["ผล", `${wt.name} ด้าน${sideName(u.side)}`, c.why?.length ? c.why.join(" · ") : "ตามเกณฑ์ทุกข้อ", P("คาน")(c.ok)]];
+                  return <div key={u.j}><p className="mt-2 text-[10pt]">{wt.name} ({n0(wt.w * 100)} ซม.) ด้าน{sideName(u.side)} · ยาว {fmt(c.len, 2)} ม.{c.from ? ` เริ่ม ${fmt(c.from, 2)} ม. จากต้นคาน` : ""}</p>
+                    <Table head={["รายการ", "สูตร", "แทนค่า", "ผล"]} rows={rows} /></div>; })}
+              </div>); })}
           </>); })()}
           {(() => { const rows = levelJoints(frame, res); if (!rows.length) return null; const gs = jointGroups(rows); return (<>
             <Sub>คานต่างระดับ (พื้นลดระดับ)</Sub>

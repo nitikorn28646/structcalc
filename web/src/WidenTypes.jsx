@@ -1,6 +1,6 @@
 // Side widening types (พอกข้างคาน, user 2026-11-20): table of types + the section of each type in use (step 7 Type คาน, report, DXF).
 import { DEFAULT_WIDEN_TYPES, widensOf } from "../engine/floor.js";
-import { widenDetailModel } from "../engine/widenDetail.js";
+import { widenDetailModel, widenBeamModel } from "../engine/widenDetail.js";
 import { stairSvgString } from "./stairSvg.js";
 import { fmt } from "./beamModel.js";
 
@@ -21,6 +21,18 @@ export const widenSections = (uses) => { const m = new Map(); for (const u of us
 export const WIDEN_REFS = "ACI 318-11 (ฐานของ ว.ส.ท. — เลขข้อ ว.ส.ท. ยังไม่ได้ตรวจกับต้นฉบับ): 11.6.4 แรงเฉือนผ่านรอยต่อ Avf = Vu/(φ·μ·fy), μ = 1.4 หล่อพร้อมกัน, φ = 0.75 · 11.6.5 Vn ≤ min(0.2f′c, 3.3 + 0.08f′c, 11 MPa)·Ac · 11.6.8 / 12.13.3 ปลอกยึดทั้งสองฝั่งรอยต่อ โอบเหล็กมุมคาน · 11.4.5.1 ระยะปลอก ≤ d/2 ≤ 30 ซม. · 11.5.6.2 เหล็กยืนห่าง ≤ 30 ซม. · 7.12.2.1 เหล็กยืน ≥ ρ·w·h · 11.5.2.1 แรงบิดสมดุล (รับเต็ม) · น้ำหนักประลัย 1.4D + 1.7L";
 
 export const WidenSection = ({ t, wt, mat, px = 300, sub }) => <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: stairSvgString(widenDetailModel(t, wt, mat, { sub }), { px }) }} />;
+
+// the section of one drawn beam with all its strips and the walls on them (inspector / report); width = target px of the drawing
+export function beamWidenModel(frame, an, i, beam, o = {}) {
+  const WT = widenTypesOf(frame), t = frame.beamTypes?.[an?.beamTypeOf?.[i] ?? beam.type ?? 0] ?? frame.beamTypes?.[0], cw = an?.widen?.[i];
+  const strips = widensOf(beam).map((wd, j) => ({ wt: WT[wd.type], side: wd.side ?? 1, chk: Array.isArray(cw) ? cw[j] : null })).filter((x) => x.wt);
+  return t && strips.length ? { t, strips, model: widenBeamModel(t, strips, frame.mat, o) } : null;
+}
+export function WidenBeamSection({ frame, an, i, beam, width = 300 }) {
+  const r = beamWidenModel(frame, an, i, beam); if (!r) return null;
+  const [x0, , x1] = r.model.box, px = Math.min(520, width / (x1 - x0));
+  return <div className="overflow-x-auto rounded-md bg-white p-1 ring-1 ring-gray-200 dark:ring-gray-700" dangerouslySetInnerHTML={{ __html: stairSvgString(r.model, { px }) }} />;
+}
 
 const inp = "h-7 w-full rounded border border-gray-300 bg-transparent px-1.5 text-[12px] dark:border-gray-700";
 export function WidenTypesCard({ frame, set, res }) {

@@ -40,7 +40,7 @@ import { LateralChoice, LateralPanel } from "./LateralPanel.jsx";
 import { FootingTypes } from "./FootingTypes.jsx";
 import { BeamTypeFigures, ColumnTypeFigures } from "./DesignFigures.jsx";
 import { LevelJointsCard } from "./LevelJoints.jsx";
-import { WidenTypesCard, widenTypesOf, widenUses, widenSections } from "./WidenTypes.jsx";
+import { WidenTypesCard, widenTypesOf, WidenBeamSection, widenUses, widenSections } from "./WidenTypes.jsx";
 import { levelJoints, jointGroups } from "../engine/levelDetail.js";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
 import WallTypesPanel from "./WallTypesPanel.jsx";
@@ -449,7 +449,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   // stairs: drawn on the floor they start from, stored on the floor above (the floor they reach) — the board shows both
   const stairUp = above ? (ns) => { const n = (above.stairs ?? []).length; set("floors", frame.floors.map((f, i) => (i === cur + 1 ? { ...f, stairs: [...(f.stairs ?? []), ns] } : f))); set("cur", cur + 1); setSel({ kind: "stair", i: n }); } : null;
   const boardEl = (<FloorBoard widenTypes={widenTypesOf(frame)} onMoveTo={moveTo} moveFloors={moveFloors} onAssignType={boardStep === "frame" || boardStep === "result" ? (idx, ti) => setFloor({ beams: assignBeams({ floors: [fl] }, 0, idx, ti)[0].beams }) : null} stairsAbove={above?.stairs ?? []} aboveName={above?.name ?? ""} belowName={below?.name ?? (stairRiseOf(frame, 0, {}) < fl.h - 1e-6 ? "ดิน ±0.00" : "ฐานราก")} onStairUp={stairUp} onPickAbove={(i) => { set("cur", cur + 1); setSel({ kind: "stair", i }); }} floor={fl} setFloor={setFloor} an={an} types={types} wallTypes={wallTypes} step={boardStep} show={show} sel={sel} setSel={setSel} modeBar={boardOnly ? tabsBar : null} dark={dark} resolveW={resolveW} libItem={libItem} floorIdx={cur} onMulti={setMultiSel} pickSet={pickSet} onPick={boardStep === "assign" && armed ? (t) => pickRef.current?.(t) : null} colSize={(i) => { const c = colsHere.find((x) => x.i === i); return c?.lv ? [c.lv.Bx / 100, c.lv.By / 100, `${cTypes[c.typeIdx]?.name ?? ""} ${c.lv.Bx}×${c.lv.By}`] : null; }} onImportFrame={step === "frame" || step === "grid" ? importFrame : null}
-            ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
+            ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere, { widenTypes: widenTypesOf(frame) }), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   // click a beam / column in 3D = select it (its floor becomes the current one) — user 2026-11-04
   const pick3d = (h) => { if (h.floor !== cur) set("cur", h.floor); setSel({ kind: h.kind, i: h.i }); };
   const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} onPick={pick3d} selected={sel && (sel.kind === "beam" || sel.kind === "column") ? { floor: cur, ...sel } : null} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
@@ -666,6 +666,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 return (<div className="col-span-2 space-y-2">
                   <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-medium text-gray-700 dark:text-gray-200">พอกข้างคาน (รับผนังก่อ){list.length ? ` · ${list.length} ส่วน` : ""}</span>
                     <button onClick={add} className={btnGhost}>+ {list.length ? "เพิ่มพอกอีกด้าน / อีกช่วง" : "เพิ่มพอกข้าง"}</button></div>
+                  {list.length > 0 && <WidenBeamSection frame={frame} an={an} i={sel.i} beam={beam} width={300} />}
                   {list.map((wd, k) => { const c = cs[k]; return (<div key={k} className="space-y-2 rounded-md p-2 ring-1 ring-gray-200 dark:ring-gray-700">
                     <div className="grid grid-cols-2 gap-2">
                       <Field label={`พอกข้าง ${k + 1}`}><Select value={String(wd.type)} onChange={(v) => put(k, { type: +v })} options={WT.map((t, j) => [String(j), `${t.name} กว้าง ${fmt(t.w * 100, 0)} ซม.`])} /></Field>

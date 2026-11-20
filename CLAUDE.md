@@ -794,3 +794,12 @@ with its drawn offset e (ln.slab {e, strip: j}). beam.widen = one object OR a li
 each strip weighed and checked on its own (an.widen[i] = array by position, nulls kept), torques of opposite strips ADDED (not cancelled — conservative);
 a wall on the axis goes to the first strip. Inspector: list of strips + "เพิ่มพอกอีกด้าน / อีกช่วง"; plan / 3D / tables / report per strip (column ด้าน).
 widen-check 20/20.
+SPAN TORQUE BY THE LEVER RULE (2026-11-20, user "เช็ครายการคำนวณ ระยะเยื้อง โมเมนต์บิด"): floor.js spanTorque(list, x0, x1, cant) — a span's end torque was
+Σ m·ℓ / 2 (right only for torque along the whole span); now each distributed torque goes to the ends by the lever rule T0 = Σ m·ℓ·(x1 − x̄)/L,
+T1 = Σ m·ℓ·(x̄ − x0)/L, Mt = larger end (cantilever: all). A partial widening near one end gave up to ~60 % too little. Yasothon / verify20 / E2E unchanged
+(their torques run full length). Widen checks carry spans [{id, L, T (this strip, lever rule), Mt (span total)}] and Ab; torsion items tagged {beam, strip}.
+Beam inspector: section of the clicked beam with every strip and the walls on them at their offset e (engine/widenDetail.js widenBeamModel,
+WidenTypes.jsx WidenBeamSection / beamWidenModel). Report beams chapter: worked calculation per widened beam (section + table formula / substituted /
+result: q strip, wall, e (formula or "from the drawing"), m, end torque per span, span total, Vu, Avf, φVn, limit, s, As) and the lever-rule line in
+the criteria list. Report plans (and the floor DXF): widening strips (green, type name), slab levels "ระดับ −0.10", beam tops "หลังคาน −0.10"; the type
+tag moves to the side without a strip. widen-check 22/22.

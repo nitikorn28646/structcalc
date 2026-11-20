@@ -1,6 +1,7 @@
 ﻿// Reinforcement drawings built as Maker.js models (units: cm) → SVG for screen/PDF, DXF for CAD.
 import makerjs from "makerjs";
 import { arcPolyline } from "../engine/arc.js";
+import { widensOf } from "../engine/floor.js";
 import { BARS, STIRRUPS } from "../engine/tables.js";
 import { barText } from "./beamModel.js";
 import { SYM } from "../engine/steelSections.js";
@@ -605,6 +606,7 @@ export function framePlanModel(floor, an, beamTypes, cols = [], opts = {}) {
     const kind = p.open ? "ช่องเปิด" : p.stairWell ? "ช่องบันได" : p.st === "GS" ? "GS บนดิน" : p.st === "PS" ? `PS ${p.dir === "x" ? "↔" : "↕"}` : p.kind === "twoway" ? "S 2 ทาง" : p.kind === "oneway" ? "S 1 ทาง" : "S";
     if (p.st === "S" && !p.open && !p.stairWell) { const C = p.P.filter((q, j) => { const a = p.P[(j + p.P.length - 1) % p.P.length], b = p.P[(j + 1) % p.P.length]; const u = [q[0] - a[0], q[1] - a[1]], w = [b[0] - q[0], b[1] - q[1]], L = Math.hypot(...u) * Math.hypot(...w); return L > 0 && Math.abs(u[0] * w[1] - u[1] * w[0]) / L > 0.05; }); if (C.length === 4) [[0, 2], [1, 3]].forEach(([a, b]) => d.line([C[a][0] * 100, C[a][1] * 100], [C[b][0] * 100, C[b][1] * 100], "DIM")); } // two-way: diagonals
     d.text(`P${i + 1}`, m[0], m[1] + 14); d.text(`${kind}${p.open || p.stairWell ? "" : ` t=${num(p.t * 100, 0)}`}`, m[0], m[1] - 14);
+    if (Math.abs(p.dz ?? 0) > 0.004 && !p.open) d.text(`ระดับ ${p.dz > 0 ? "+" : ""}${num(p.dz, 2)}`, m[0], m[1] - 40); // slab level (levels P1)
   });
   floor.beams.forEach((b, i) => {
     const sps = an?.spans.filter((s) => (s.members ?? [s.member]).includes(i)) ?? [], sp = sps[0], ti = sp?.typeIdx ?? b.type ?? 0, t = beamTypes[ti] ?? beamTypes[0];
@@ -614,9 +616,19 @@ export function framePlanModel(floor, an, beamTypes, cols = [], opts = {}) {
       const sc = L / Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]);
       for (const s of [-1, 1]) { const P = arcPolyline(b.a, b.b, b.arc.s, 16), off = P.map((p, k) => { const q = P[Math.min(k + 1, P.length - 1)], r = P[Math.max(k - 1, 0)], tx = q[0] - r[0], ty = q[1] - r[1], tl = Math.hypot(tx, ty); return c([p[0] - (ty / tl) * (w / sc) * s, p[1] + (tx / tl) * (w / sc) * s]); }); off.slice(1).forEach((p, k) => d.line(off[k], p, layer)); }
     } else for (const s of [-1, 1]) d.line([a[0] + n[0] * w * s, a[1] + n[1] * w * s], [e[0] + n[0] * w * s, e[1] + n[1] * w * s], layer);
+    // side widenings (พอกข้าง): the strip outline beside the beam over its widened part, with its type name (every plan mode)
+    if (!b.arc?.s) for (const wd of widensOf(b)) { const wt = (opts.widenTypes ?? [])[wd.type]; if (!wt) continue;
+      const Lm = L / 100, f0 = Math.max(0, Math.min(Lm, wd.from ?? 0)), f1 = Math.max(f0, Math.min(Lm, wd.to ?? Lm)), g = wd.side ?? 1, o1 = w * g, o2 = (w + wt.w * 100) * g;
+      const at = (tt, o) => [a[0] + ((e[0] - a[0]) * tt) / Lm + n[0] * o, a[1] + ((e[1] - a[1]) * tt) / Lm + n[1] * o];
+      const P4 = [at(f0, o1), at(f1, o1), at(f1, o2), at(f0, o2)]; d.fill(P4, "#d1fadf"); for (let k = 0; k < 4; k++) d.line(P4[k], P4[(k + 1) % 4], "OUTLINE");
+      const q = at((f0 + f1) / 2, o2 + 16 * g); d.text(wt.name, q[0], q[1], Math.abs(n[0]) > 0.7); }
     if (mode !== "beams") return;
+    const ws = (g) => Math.max(0, ...widensOf(b).filter((x) => (x.side ?? 1) === g).map((x) => ((opts.widenTypes ?? [])[x.type]?.w ?? 0) * 100));
+    const lv = an?.levels?.beams?.[i]; if (lv && Math.abs(lv.top) > 0.004 && !(b.lvl > 0)) { const g2 = ws(-1) > 0 && !(ws(1) > 0) ? -1 : 1, o2 = w + ws(g2) + 26 + (ws(g2) > 0 ? 24 : 0); d.text(`หลังคาน ${lv.top > 0 ? "+" : ""}${num(lv.top, 2)}`, (a[0] + e[0]) / 2 + g2 * n[0] * o2, (a[1] + e[1]) / 2 + g2 * n[1] * o2, Math.abs(n[0]) > 0.7); }
     const vert = Math.abs(n[0]) > 0.7, cant = sps.length && sps.every((x) => x.kind === "cantilever");
-    d.text(`${t.name}${cant ? "A" : ""} ${num(t.b * 100, 0)}x${num(t.h * 100, 0)}`, (a[0] + e[0]) / 2 - n[0] * (w + 26), (a[1] + e[1]) / 2 - n[1] * (w + 26), vert);
+    // the type tag goes on the side without a widening strip (else past the strip)
+    const tg = ws(-1) > 0 && !(ws(1) > 0) ? 1 : -1, to = w + ws(tg) + 26 + (ws(tg) > 0 ? 24 : 0);
+    d.text(`${t.name}${cant ? "A" : ""} ${num(t.b * 100, 0)}x${num(t.h * 100, 0)}`, (a[0] + e[0]) / 2 + tg * n[0] * to, (a[1] + e[1]) / 2 + tg * n[1] * to, vert);
   });
   // footings first (under the columns)
   if (mode === "footings") for (const f of opts.footings ?? []) {

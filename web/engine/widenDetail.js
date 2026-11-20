@@ -57,3 +57,57 @@ export function widenDetailModel(t, wt, mat = {}, o = {}) {
   if (o.sub) text((b + w) / 2 + 0.1, -0.2, TH * 0.85, o.sub, "C-TEXT", 1, 0);
   return { items: P, box: [-0.2, -0.26, tx + longest + 0.05, h + 0.16] };
 }
+
+// Section of ONE drawn beam with all its widenings and the walls on them (inspector, report calc sheet; user 2026-11-20 "คลิกคานให้ขึ้นรูปตัด
+// คานพอก แนวผนัง"). Looking from the beam start a → end b: side 1 (left of a→b) on the left. strips = [{ wt, side, chk }] (chk = floor.js an.widen[i][j]:
+// e, tw, qWall, qw, m). Beam axis at x = 0; wall drawn on the strip at its offset e with its thickness, dims e / b / w, torque line under.
+export function widenBeamModel(t, strips, mat = {}, o = {}) {
+  const P = [], TH = o.th ?? 0.028;
+  const line = (x1, y1, x2, y2, layer = "C-CONC", dash = false) => P.push({ t: "line", x1, y1, x2, y2, layer, dash });
+  const poly = (pts, layer = "C-CONC", closed = false, fill = false) => P.push({ t: "poly", pts, layer, closed, fill });
+  let bx0 = Infinity, bx1 = -Infinity; // horizontal extent of the texts (so the box never cuts a label)
+  const text = (x, y, h, s, layer = "C-TEXT", ha = 0, va = 0, rot = 0) => { P.push({ t: "text", x, y, h, s, layer, ha, va, rot });
+    if (!rot) { const L = String(s).length * h * 0.62, a = ha === 0 ? x : ha === 1 ? x - L / 2 : x - L; bx0 = Math.min(bx0, a); bx1 = Math.max(bx1, a + L); } };
+  const circle = (x, y, r, layer = "C-BAR") => P.push({ t: "circle", x, y, r, layer });
+  const c = (mat.cover ?? 3) / 100, b = t.b, h = t.h, sdB = (STIRRUPS[t.st]?.d ?? 0.6) / 100, ins = c + sdB / 2;
+  poly([[-b / 2, 0], [b / 2, 0], [b / 2, h], [-b / 2, h]], "C-CONC", true);
+  poly([[-b / 2 + ins, ins], [b / 2 - ins, ins], [b / 2 - ins, h - ins], [-b / 2 + ins, h - ins]], "C-FRAME2", true);
+  const tb = parseBars(t.top), bb = parseBars(t.bot), rB = (BARS[(tb ?? bb)?.bar]?.d ?? 1.2) / 200, xb0 = -b / 2 + c + sdB + rB, xb1 = b / 2 - c - sdB - rB;
+  const row = (n, y) => { const m = Math.max(2, n ?? 2); for (let k = 0; k < m; k++) circle(xb0 + ((xb1 - xb0) * k) / (m - 1), y, rB, "C-FRAME2"); };
+  row(tb?.n, h - c - sdB - rB); row(bb?.n, c + sdB + rB);
+  // one strip per side (the widest when a side has several parts)
+  const bySide = new Map(); for (const s of strips) { const k = (s.side ?? 1) > 0 ? -1 : 1; if (!bySide.has(k) || s.wt.w > bySide.get(k).wt.w) bySide.set(k, s); }
+  let xl = -b / 2, xr = b / 2, wallTop = h; const notes = [];
+  for (const [g, s] of bySide) { // g = −1 left, +1 right
+    const w = s.wt.w, xi = (g * b) / 2, xo = g * (b / 2 + w), sdW = (STIRRUPS[s.wt.st]?.d ?? BARS[s.wt.st]?.d ?? 0.6) / 100;
+    poly([[xi, 0], [xo, 0], [xo, h], [xi, h]], "C-CONC", true);
+    const sx1 = xo - g * (c + sdW / 2), sx0 = sx1 - g * (w + 0.05); // closed stirrup from the outer face − cover back past the joint (encloses the beam bars)
+    poly([[sx0, ins], [sx1, ins], [sx1, h - ins], [sx0, h - ins]], "C-STIRRUP", true);
+    const tw = parseBars(s.wt.top), bw = parseBars(s.wt.bot), rW = (BARS[(tw ?? bw)?.bar]?.d ?? 1.2) / 200, xw = xo - g * (c + sdW + rW);
+    for (const [n, y] of [[tw?.n, h - c - sdW - rW], [bw?.n, c + sdW + rW]]) { const m = Math.max(1, n ?? 1), xa = xi + g * (0.02 + rW);
+      for (let k = 0; k < m; k++) circle(m === 1 ? xw : xa + ((xw - xa) * k) / (m - 1), y, rW, "C-BAR"); }
+    if (g < 0) xl = xo; else xr = xo;
+    text((xi + xo) / 2, -0.05, TH * 0.85, `${s.wt.name} · ${Math.round(w * 100)} ซม.`, "C-DIM", 1, 3);
+    const k = s.chk;
+    if (k && k.qWall > 0) { // the wall on the strip at its real offset
+      const xc = g * k.e, tw2 = k.tw ?? 0.1, H = Math.min(0.32, Math.max(0.24, h * 0.7)), x0 = xc - tw2 / 2, x1 = xc + tw2 / 2, zz = [[x1, h + H - 0.03], [xc + tw2 / 6, h + H + 0.02], [xc - tw2 / 6, h + H - 0.05], [x0, h + H]];
+      poly([[x0, h], [x1, h], ...zz], "C-CONC", true, true); wallTop = Math.max(wallTop, h + H + 0.02);
+      line(xc, h + H + 0.06, xc, h + 0.04, "C-DIM", true);
+      const yd = h + H + 0.12; line(0, yd, xc, yd, "C-DIM"); for (const x of [0, xc]) { line(x - 0.01, yd - 0.01, x + 0.01, yd + 0.01, "C-DIM"); line(x, yd - 0.02, x, yd + 0.02, "C-DIM"); }
+      text(xc / 2, yd + 0.012, TH, `e = ${k.e.toFixed(3)}`, "C-DIM", 1, 0);
+      text(xc + g * (tw2 / 2 + 0.02), h + H * 0.55, TH * 0.85, `ผนัง ${Math.round(tw2 * 100)} ซม.`, "C-TEXT", g > 0 ? 0 : 2, 2);
+      text(xc + g * (tw2 / 2 + 0.02), h + H * 0.55 - TH * 1.3, TH * 0.85, `${Math.round(k.qWall)} กก./ม.`, "C-TEXT", g > 0 ? 0 : 2, 2);
+      wallTop = Math.max(wallTop, yd + 0.05);
+    }
+    if (k) notes.push(`${g < 0 ? "ซ้าย" : "ขวา"} ${s.wt.name}: m = ${Math.round(k.qw)}·${((b + w) / 2).toFixed(3)}${k.qWall > 0 ? ` + ${Math.round(k.qWall)}·${k.e.toFixed(3)}` : ""} = ${Math.round(k.m)} กก.-ม./ม.${k.ok ? "" : " ✕"}`);
+  }
+  line(0, -0.03, 0, Math.max(wallTop, h + 0.1), "C-DIM", true); // beam axis
+  // dims: beam width under it, depth on the left
+  const yb = -0.11; line(-b / 2, yb, b / 2, yb, "C-DIM"); for (const x of [-b / 2, b / 2]) line(x - 0.01, yb - 0.01, x + 0.01, yb + 0.01, "C-DIM");
+  text(0, yb - 0.012, TH * 0.85, `${t.name ?? ""} ${Math.round(b * 100)}×${Math.round(h * 100)}`, "C-DIM", 1, 3);
+  const xd = xl - 0.06; line(xd, 0, xd, h, "C-DIM"); for (const y of [0, h]) line(xd - 0.01, y - 0.01, xd + 0.01, y + 0.01, "C-DIM");
+  text(xd - 0.012, h / 2, TH * 0.85, h.toFixed(2), "C-DIM", 1, 0, 90);
+  let y = yb - 0.07; if (o.notes !== false) { for (const n of notes) { text(xl - 0.1, y, TH * 0.9, n, "C-TEXT", 0, 3); y -= TH * 1.6; }
+    text(xl - 0.1, y, TH * 0.8, "มองจากต้นคาน → ปลายคาน · แรงบิดสองด้านรวมกัน (ไม่หักล้าง)", "C-ELEV", 0, 3); y -= TH * 1.6; }
+  return { items: P, box: [Math.min(xl - 0.14, bx0 - 0.02), y - 0.02, Math.max(xr + 0.06, bx1 + 0.02), wallTop + 0.06] };
+}
