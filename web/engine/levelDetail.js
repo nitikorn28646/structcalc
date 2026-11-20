@@ -78,7 +78,7 @@ export function jointDetailModel(r, mat = {}, o = {}) {
   }
   // dimensions
   dimH(0, c, Math.min(yLo, botH - 0.3) - 0.12, `เสา ${cm(c)} ซม.`, false);
-  dimH(0, xh, 0.12, `ldh ≥ ${cm(ldh)} ซม.${r.hook?.ok ? "" : " (ไม่พอ)"}`);
+  dimH(0, xh, 0.12, r.hook?.ok ? `ldh ≥ ${cm(ldh)} ซม.` : `ldh ต้อง ${cm(ldh)} > มี ${cm(xh)} ซม. → ตรวจหัวเสาที่ h − Δ`);
   { const xl = -Math.min(ld, Lb - 0.1), yd = botH - 0.16; line(xl, yl - 0.02, xl, yd - 0.03, "C-DIM", true); line(0, botH - 0.02, 0, yd - 0.03, "C-DIM"); dimH(xl, 0, yd, `≥ ld ${cm(ld)} ซม.`, false); }
   dimV(-Lb - 0.15, botH, 0, `${cm(h1)}`); dimV(c + Lb + 0.15, botL, -dz, `${cm(h2)}`); dimV(c + Lb + 0.32, -dz, 0, `Δ ${cm(dz)}`);
   line(c + 0.05, 0, c + Lb + 0.36, 0, "C-DIM", true);
@@ -171,7 +171,7 @@ export function depthDetailModel(r, mat = {}, o = {}) {
   // dims
   const yb = -hD - 0.42; // dimension rows under the deep soffit: ld, ldh, column
   line(xl, -hS + cv - 0.02, xl, -hD - 0.14, "C-DIM", true); line(0, -hD - 0.02, 0, yb - 0.14, "C-DIM", true); dimH(xl, 0, -hD - 0.12, `≥ ld ${cm(ld)} ซม.`, false);
-  line(xh, -hD + cv - 0.02, xh, -hD - 0.28, "C-DIM", true); dimH(0, xh, -hD - 0.26, `ldh ≥ ${cm(ldh)} ซม.${r.hook?.ok ? "" : " (ไม่พอ)"}`, false);
+  line(xh, -hD + cv - 0.02, xh, -hD - 0.28, "C-DIM", true); dimH(0, xh, -hD - 0.26, r.hook?.ok ? `ldh ≥ ${cm(ldh)} ซม.` : r.lateral ? `ldh ต้อง ${cm(ldh)} > มี ${cm(xh)} ซม. (ไม่พอ)` : `ฝังในเสา ${cm(xh)} ซม. ≥ 15 ซม. (ไม่มีแรงด้านข้าง ไม่ต้องยึดเต็ม ldh ${cm(ldh)})`, false);
   line(c, -hS - 0.02, c, yb - 0.14, "C-DIM", true); dimH(0, c, yb - 0.12, `เสา ${cm(c)} ซม.`, false);
   dimV(-Lb - 0.15, -hD, 0, `${cm(hD)}`); dimV(c + Lb + 0.15, -hS, 0, `${cm(hS)}`); dimV(c + Lb + 0.32, -hD, -hS, `Δh ${cm(hD - hS)}`);
   line(c + 0.05, -hD, c + Lb + 0.36, -hD, "C-DIM", true);
