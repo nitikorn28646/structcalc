@@ -757,3 +757,7 @@ FULL-LENGTH EXTRAS IN BOTH SECTIONS (2026-11-20, user "บอกยาวตล�
 without a footnote (every span of the type) → sectionNotes / beamDetailDxf section / Details BeamDetail draw + note the extra top bars at mid-span
 too (and full bottom extras at the support); extraSpec: all spans full → label "ยาวตลอดช่วง" (was the first fraction L/4 + note). Drawing only —
 checkSpan mid-span still counts only the through top bars (conservative). E2E 47/47.
+MERGED THROUGH BARS (2026-11-20, user "ทำไมไม่ใส่เป็น 3DB12"): beamDetail.js sectionBarSpec(t, at, ext) = [through, extra] per face for the drawing;
+extras that run the whole span in every span (fullExtras) and are the same size as the through bars are merged into one count ("3-DB 12 มม.") in the
+notes (sectionNotes) and drawn as through bars (beamDetailDxf section, Details BeamDetail). Checks unchanged (mid-span still counts the type's
+through bars only).

@@ -7,7 +7,7 @@
 import { barLayout } from "./drawings.js";
 import { barLayers, parseBars } from "../engine/floor.js";
 import { STIRRUPS } from "../engine/tables.js";
-import { fullExtras, sectionNotes, extraFootnote, hasExtras, cantNote } from "../engine/beamDetail.js";
+import { sectionBarSpec, sectionNotes, extraFootnote, hasExtras, cantNote } from "../engine/beamDetail.js";
 import { ELEVATION_SAMPLE } from "./elevationSample.js";
 import { DXF2010 } from "./dxfTemplate2010.js";
 
@@ -56,7 +56,7 @@ const groupW = (t, at, ext, th) => t.b + 0.09 + Math.max(...sectionNotes(t, at, 
 function section(d, t, mat, at, ext, ox, oy, title, th = 0.035, sub = "") {
   const B = t.b * 100, H = t.h * 100, cover = mat.cover ?? 3, sd = STIRRUPS[t.st]?.d ?? 0.6, m = (v) => v / 100;
   const lay = (a, b) => barLayers(t.b, mat, t.st, parseBars(a), parseBars(b));
-  const fx = fullExtras(ext), top = at !== "mid" || fx.top ? lay(t.top, t.topX) : lay(t.top), bot = at === "mid" || (at === "sup" && fx.bot) ? lay(t.bot, t.botX) : lay(t.bot); // "cant" = cantilever root; full-length extras in both sections
+  const bs = sectionBarSpec(t, at, ext), top = lay(...bs.top), bot = lay(...bs.bot); // "cant" = cantilever root; full-length extras in both sections
   const bars = [...barLayout(B, H, cover, sd, top, true), ...barLayout(B, H, cover, sd, bot, false)];
   d.poly([[ox, oy], [ox + t.b, oy], [ox + t.b, oy + t.h], [ox, oy + t.h]], "C-CONC");
   // stirrup centre line with rounded corners (bulge = tan(90°/4)) and 90° hooks at the top-left corner

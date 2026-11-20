@@ -39,6 +39,13 @@ export function extraSpec(ti, spans) {
 
 // extra bars that run the whole span for every span of the type (label "ยาวตลอดช่วง" without a footnote)
 export const fullExtras = (ext) => ({ top: ext?.top === "ยาวตลอดช่วง" && !ext?.topNote, bot: ext?.bot === "ยาวตลอดช่วง" && !ext?.botNote });
+// the bars drawn in a section: [through, extra] per face; full-length extras of the same size become through bars (one count)
+export function sectionBarSpec(t, at, ext) {
+  const fx = fullExtras(ext), mg = (a, x) => { const A = parseBars(a), X = parseBars(x); return A && X && A.bar === X.bar ? [`${A.n + X.n}-${A.bar}`, null] : [a, x]; };
+  const top = at === "cant" || at === "sup" ? (fx.top ? mg(t.top, t.topX) : [t.top, t.topX]) : at === "mid" && fx.top ? mg(t.top, t.topX) : [t.top, at === "all" ? t.topX : null];
+  const bot = at === "mid" ? (fx.bot ? mg(t.bot, t.botX) : [t.bot, t.botX]) : at === "sup" && fx.bot ? mg(t.bot, t.botX) : [t.bot, null];
+  return { top, bot };
+}
 const barTxt = (s) => { const b = parseBars(s); return b ? `${b.n}-${b.bar} มม.` : null; };
 const stTxt = (t, s) => `${t.stSets ?? 1}ป-${t.st} มม. @ ${Number(s).toFixed(2)} ม.`;
 
@@ -53,6 +60,13 @@ export function sectionNotes(t, at, ext = { top: "L/4", bot: "3L/5" }) {
   }
   // a type without extra bars (GB, GB-A …): one section "ตลอดคาน" (user 2026-11-18)
   if (at === "all") { add(barTxt(t.top), "top"); add(stTxt(t, Math.min(t.sSup, t.sMid)), "st"); add(barTxt(t.bot), "bot"); return out; }
+  // extras running the whole span of every span (fullExtras) are through bars: same size → one count "3-DB 12 มม." (user 2026-11-20:
+  // "ทำไมไม่ใส่เป็น 3DB12"), as the cantilever section does
+  const fx0 = fullExtras(ext), merge = (a, x) => { const A = parseBars(a), X = parseBars(x); return A && X && A.bar === X.bar ? `${A.n + X.n}-${A.bar} มม.` : null; };
+  const mTop = fx0.top ? merge(t.top, t.topX) : null, mBot = fx0.bot ? merge(t.bot, t.botX) : null;
+  if (mTop || mBot) { add(mTop ?? barTxt(t.top), "top"); if (!mTop && (at === "sup" || fx0.top)) add(xt(t.topX, ext.top, ext.topNote), "top", true);
+    add(stTxt(t, at === "sup" ? t.sSup : t.sMid), "st");
+    if (!mBot && (at === "mid" || fx0.bot)) add(xt(t.botX, ext.bot, ext.botNote), "bot", true); add(mBot ?? barTxt(t.bot), "bot"); return out; }
   add(barTxt(t.top), "top");
   // extras running the whole span (every span of the type needs it, user 2026-11-20: "บอกยาวตลอดช่วง แต่กลางคานไม่มี") are drawn and
   // noted in BOTH sections
