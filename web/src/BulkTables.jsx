@@ -32,15 +32,17 @@ export function PanelTable({ an, fl, setFloor, dark, mode = "all" }) { // mode: 
     <Bar n={keys.length} onApply={apply} onClear={Object.assign(() => setFloor({ panels: Object.fromEntries(Object.entries(fl.panels ?? {}).filter(([k]) => !keys.includes(k))) }), { label: "กลับเป็นค่าของชั้น" })}>
       {S && <select value={bulk.kind ?? ""} onChange={(e) => setBulk({ ...bulk, kind: e.target.value || undefined })} className={box}><option value="">ชนิด —</option>{Object.entries(SLAB_KINDS).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>}
       {S && <label className="flex items-center gap-1">หนา<Num v={bulk.t} on={(v) => setBulk({ ...bulk, t: v })} step="0.01" ph="ม." /></label>}
+      {S && <label className="flex items-center gap-1" title="ระดับหลังพื้นเทียบระดับชั้น เช่น เฉลียงต่ำกว่า 10 ซม. = −0.10 (คานรอบแผ่นตามระดับนี้อัตโนมัติ)">ระดับ<Num v={bulk.dz} on={(v) => setBulk({ ...bulk, dz: v })} step="0.05" ph="ม. (−0.10)" /></label>}
       {Ld && <label className="flex items-center gap-1">ปูผิว<Num v={bulk.finish} on={(v) => setBulk({ ...bulk, finish: v })} ph="กก./ม.²" /></label>}
       {Ld && <label className="flex items-center gap-1">จร<Num v={bulk.live} on={(v) => setBulk({ ...bulk, live: v })} step="50" ph="กก./ม.²" /></label>}
       {Ld && <label className="flex items-center gap-1">ฝ้า/ระบบ<Num v={bulk.extra} on={(v) => setBulk({ ...bulk, extra: v })} ph="กก./ม.²" /></label>}
     </Bar>
-    <div className="h-[calc(100vh-330px)] min-h-[280px]"><Grid dark={dark} rows={rows.map((p, i) => ({ id: p.key, name: `P${i + 1}${fl.panels?.[p.key] ? " *" : ""}`, st: p.st, dir: p.st === "PS" ? p.dir : "", area: p.area, t: p.t, finish: p.finish, live: p.live, extra: p.extraSDL ?? 0, open: !!p.open,
+    <div className="h-[calc(100vh-330px)] min-h-[280px]"><Grid dark={dark} rows={rows.map((p, i) => ({ id: p.key, name: `P${i + 1}${fl.panels?.[p.key] ? " *" : ""}`, st: p.st, dir: p.st === "PS" ? p.dir : "", area: p.area, t: p.t, dz: p.dz ?? 0, finish: p.finish, live: p.live, extra: p.extraSDL ?? 0, open: !!p.open,
       total: p.open ? null : p.t * 2400 + p.finish + (p.extraSDL ?? 0) + p.live }))}
       columns={[{ field: "name", headerName: "แผ่น", width: 74 }, { field: "st", headerName: "ชนิด", width: 150, editable: S, type: "select", options: Object.entries(SLAB_KINDS) },
         ...(S ? [{ field: "dir", headerName: "ทิศ (PS)", width: 84, editable: (r) => r.st === "PS", type: "select", options: [["x", "X ↔"], ["y", "Y ↕"]] }] : []),
         { field: "area", headerName: "พื้นที่ ม.²", width: 90, type: "number", fmt: (v) => fmt(v, 2) }, { field: "t", headerName: "หนา ม.", width: 80, editable: S, type: "number" },
+        ...(S ? [{ field: "dz", headerName: "ระดับ ม.", width: 82, editable: true, type: "number", fmt: (v) => (Math.abs(v ?? 0) < 1e-9 ? "0" : fmt(v, 2)) }] : []),
         ...(Ld ? [{ field: "finish", headerName: "ปูผิว", width: 80, editable: true, type: "number" }, { field: "live", headerName: "จร", width: 80, editable: true, type: "number" },
         { field: "extra", headerName: "ฝ้า/ระบบ", width: 90, editable: true, type: "number" }] : []), ...(S ? [{ field: "open", headerName: "ช่องเปิด", width: 84, editable: true, type: "check" }] : []),
         { field: "total", headerName: "รวม กก./ม.²", width: 100, type: "number", fmt: (v) => (v == null ? "-" : fmt(v, 0)) }]}

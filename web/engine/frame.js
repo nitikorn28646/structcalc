@@ -2,7 +2,7 @@
 // a column with nothing under it becomes a point load on the beams of the floor below. Columns are checked with engine/column.js.
 // frame.floors run bottom up: floor k is a beam level, its columns (length h) stand below it; column type level k is used there.
 import { borePileRebar } from "./borePile.js";
-import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, autoOrder, checkSpan, cutoffs, robustSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
+import { CONC, DEFAULT_WALL_TYPES, analyzeFloor, autoOrder, checkSpan, cutType, cutoffs, robustSpan, faceBars, parseBars, resolveWall, vAtD } from "./floor.js";
 import { BARS, allowableFs } from "./tables.js";
 import { frame3dModel, columnPatternSets } from "./frame3d.js";
 import { storeyStability, columnSlender } from "./colStability.js";
@@ -315,7 +315,7 @@ const steelA = (s) => { const x = parseBars(s); return x ? x.n * BARS[x.bar].A :
 const tWeight = (t) => t.b * t.h * 1e4 + (steelA(t.top) + steelA(t.bot) + steelA(t.topX) + steelA(t.botX)) / 100;
 // a span checked with its design forces and its deflection scaled to another type: δ · I(span type) / I(t)
 export function checkEnv(t, sp, mat) {
-  const c = checkSpan(t, sp, mat), d = sp.defl, f = (sp.type.b * sp.type.h ** 3) / (t.b * t.h ** 3);
+  const c = checkSpan(t, sp, mat), d = sp.defl, tc = cutType(t, sp.hCut), sc = cutType(sp.type, sp.hCut), f = (sc.b * sc.h ** 3) / (tc.b * tc.h ** 3);
   const dd = d ? { ...d, dL: d.dL * f, dT: d.dT * f, ok: d.dL * f <= d.limL + 1e-9 && d.dT * f <= d.limT + 1e-9 } : { ok: true };
   return { ...c, defl: dd, ok: c.ok && dd.ok, util: Math.max(c.util, d ? Math.max(dd.dT / d.limT, dd.dL / d.limL) : 0) };
 }
@@ -397,17 +397,17 @@ export function analyzeFrame(frame) {
   // final checks of every span with its design forces (envelope when the frame ran)
   for (const an of g.an) {
     for (const sp of an.spans) {
-      const F = sp.envF ?? { Mpos: sp.Mpos, Mneg: sp.Mneg, V: vAtD(sp, sp.type.h, mat), Mt: sp.Mt ?? 0, MtEq: sp.MtEq ?? sp.Mt ?? 0 };
+      const F = sp.envF ?? { Mpos: sp.Mpos, Mneg: sp.Mneg, V: vAtD(sp, cutType(sp.type, sp.hCut).h, mat), Mt: sp.Mt ?? 0, MtEq: sp.MtEq ?? sp.Mt ?? 0 };
       sp.cont = { Mpos: sp.Mpos, Mneg: sp.Mneg, V: sp.V, Mt: sp.Mt ?? 0 };
       sp.Vmax = Math.max(sp.V, sp.f3?.V ?? 0); // largest shear (the design value F.V may be the one at d)
-      const vc = vAtD(sp, sp.type.h, mat), src = (k) => (sp.gov?.[k] ? "LAT" : F[k] > (k === "V" ? vc : sp[k]) + 1e-6 ? "3D" : "ต่อเนื่อง"); // LAT = a combination with wind / earthquake governs
+      const vc = vAtD(sp, cutType(sp.type, sp.hCut).h, mat), src = (k) => (sp.gov?.[k] ? "LAT" : F[k] > (k === "V" ? vc : sp[k]) + 1e-6 ? "3D" : "ต่อเนื่อง"); // LAT = a combination with wind / earthquake governs
       sp.src = { Mpos: src("Mpos"), Mneg: src("Mneg"), V: src("V") };
       Object.assign(sp, F, { vDone: true, vAtD: F.V < sp.Vmax - 1e-6 });
       sp.check = checkEnv(sp.type, sp, mat);
       // near a limit (user 2026-11-05): passes with the full-precision forces but not with them × (1 + 1e-6) → flagged, the result is not changed
       if (sp.check.ok && !checkEnv(sp.type, robustSpan(sp, 1 + 1e-6), mat).ok) { sp.nearLimit = true; sp.check.nearLimit = true; }
       // bar cut-offs and development (audit F4): lengths of the extra bars from the envelope, NG on the minimum continuous steel
-      const cut = cutoffs(sp, an.lines.find((l) => l.id === sp.line), sp.type, mat, F, sp.check);
+      const cut = cutoffs(sp, an.lines.find((l) => l.id === sp.line), cutType(sp.type, sp.hCut), mat, F, sp.check);
       if (cut) { sp.cut = cut; sp.check.cut = cut; if (!cut.ok) sp.check.ok = false; if (cut.topFull && !sp.topFull) sp.topFull = { bars: [sp.type.top, sp.type.topX].filter(Boolean).join(" + "), cut: true }; }
       sp.ok = sp.check.ok;
     }

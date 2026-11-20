@@ -401,6 +401,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
                     {[-L, L].flatMap((t) => [0, 1, 2].map((j) => tick(t, t < 0 ? j : -j)))}
                     <circle cx={cx} cy={cy} r={r} fill={dark ? "#0f1222" : "#fff"} stroke={col} strokeWidth={1.2 * k} />
                     <text x={cx} y={cy} dy="0.35em" textAnchor="middle" fontSize={12 * k} fontWeight={700} fill={col} fontFamily="Arial, Helvetica, sans-serif" letterSpacing={-0.3 * k}>PS</text></g>; })()}
+                {!p.open && Math.abs(p.dz ?? 0) > 0.004 && txt([c[0], c[1] + 36 * k], `ระดับ ${p.dz > 0 ? "+" : ""}${p.dz.toFixed(2)}`, "#0e9384", 11, "middle", 700)}
                 {txt([c[0], c[1] + 20 * k], `P${i + 1} ${p.open ? "ช่องเปิด" : p.st === "GS" ? "GS บนดิน" : `${p.st} ${fmt(p.t * 100, 0)} ซม.${p.st === "PS" ? ` วาง${p.dir === "x" ? "แนว X" : "แนว Y"}` : p.kind === "twoway" ? " 2 ทาง" : p.kind === "oneway" ? " 1 ทาง" : ""}`}`, muted, 11, "middle", 600)}
                 {labels && step === "slab" && !p.open && p.st !== "GS" && loads && txt([c[0], c[1] + 4 * k], `${loads} กก./ม.²`, muted, 10)}
               </g>
@@ -425,6 +426,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
                 {/* true width of the designed (or chosen) type, like the columns; never under 4 px; thin centre line on top */}
                 <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={Math.max(bw(i), 4 * k)} strokeLinecap="square" strokeOpacity={step === "wall" || step === "slab" ? 0.35 : 0.55} strokeDasharray={b.lvl > 0 ? `${10 * k} ${6 * k}` : undefined} />
                 {b.lvl > 0 && txt([m[0] + n[0] * (12 * k + bw(i) / 2), m[1] + n[1] * (12 * k + bw(i) / 2)], `คานกลางชั้น +${(+b.lvl).toFixed(2)}`, "#7a5af8", 10, "middle", 600)}
+                {(() => { const lv = an?.levels?.beams?.[i]; if (!lv || b.lvl > 0 || (!lv.step && Math.abs(lv.top) < 0.005)) return null; const off = 12 * k + bw(i) / 2; // levels: lowered beam / step beam
+                  return txt([m[0] + n[0] * off, m[1] + n[1] * off], lv.step ? `คานบ่า Δ${(lv.step * 100).toFixed(0)} ซม.` : `หลังคาน ${lv.top > 0 ? "+" : ""}${lv.top.toFixed(2)}`, "#0e9384", 10, "middle", 600); })()}
                 <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={1.3 * k} strokeDasharray={`${10 * k} ${3 * k} ${2 * k} ${3 * k}`} opacity={step === "wall" || step === "slab" ? 0.6 : 1} />
                 {result && ti !== undefined && txt([m[0] - n[0] * (11 * k + bw(i) / 2), m[1] - n[1] * (11 * k + bw(i) / 2)], `${types[ti]?.name}${sp.length && sp.every((x) => x.kind === "cantilever") ? "A" : ""}${bad ? " ✕" : ""}`, color, 11, "middle", 600)}
                 {/* a cantilever part of a longer drawn beam gets its own tag (B1A = B1, top bars the whole cantilever) */}
@@ -529,6 +532,8 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, step
               </g>
             );
           })}
+          {(an?.levels?.steps ?? []).map((j) => { const r = 6 * k, ox = 14 * k; return <g key={`st${j.line}-${j.t}`} pointerEvents="none"><title>คานต่างระดับ {(j.dz * 100).toFixed(0)} ซม.</title>
+            <path d={`M${j.p[0] + ox} ${-j.p[1] - ox - r} L${j.p[0] + ox + r} ${-j.p[1] - ox} L${j.p[0] + ox} ${-j.p[1] - ox + r} L${j.p[0] + ox - r} ${-j.p[1] - ox} Z`} fill={j.ok ? "#0e9384" : "#f04438"} fillOpacity={0.85} /></g>; })}
           {from && cur?.p && tool === "stairLine" && (() => { const r = stairFromLine(from, cur.p, beams); const q = r.stair; return q ? <rect x={Math.min(q.a[0], q.b[0])} y={-Math.max(q.a[1], q.b[1])} width={Math.abs(q.b[0] - q.a[0])} height={Math.abs(q.b[1] - q.a[1])} fill={ST_C} fillOpacity={0.08} stroke={r.error ? "#f04438" : ST_C} strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} /> : null; })()}
           {from && cur?.p && tool !== "stairLine" && (tool === "stair" ? <rect x={Math.min(from[0], cur.p[0])} y={-Math.max(from[1], cur.p[1])} width={Math.abs(cur.p[0] - from[0])} height={Math.abs(cur.p[1] - from[1])} fill="none" stroke={ST_C} strokeWidth={2 * k} strokeDasharray={`${5 * k} ${3 * k}`} />
             : <line x1={from[0]} y1={-from[1]} x2={cur.p[0]} y2={-cur.p[1]} stroke={tool === "wall" ? WALL_C : tool === "line" ? SP_C : "#465fff"} strokeWidth={4 * k} opacity={0.5} />)}

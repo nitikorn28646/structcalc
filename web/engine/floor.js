@@ -367,7 +367,15 @@ export function vAtD(sp, h, mat) {
 }
 
 // WSD checks of one span with one beam type (mid-span sagging + support hogging), like the beam module
+// a type with the depth lost at a level step (m): the inscribed rectangle b × (h − cut) used for every check of that span
+export const cutType = (t, cut) => (cut > 0 && t ? { ...t, h: Math.max(0.1, +(t.h - cut).toFixed(4)), hCut: cut } : t);
 export function checkSpan(t, sp, mat) {
+  // levels (2026-11-20): a step joint at a supported end → that support checked again with h − dz (the bars running through the joint
+  // sit at the lower beam's top level); mid-span keeps the full depth (M+ of the cut run set to 0). Both runs must pass.
+  if (sp.hCutSup > 0) { const s0 = { ...sp, hCutSup: 0 }, full = checkSpan(t, s0, mat), cr = checkSpan(cutType(t, sp.hCutSup), { ...s0, Mpos: 0 }, mat);
+    if (full.error || cr.error) return full.error ? full : cr;
+    return { ...full, sup: cr.sup, step: { cut: sp.hCutSup, sup: cr.sup, mid: cr.mid, ok: cr.ok, util: cr.util }, ok: full.ok && cr.ok, util: Math.max(full.util, cr.util) }; }
+  if (sp.hCut > 0) t = cutType(t, sp.hCut); // levels: step beam (notch) / step joint inside the span → inscribed rectangle b × (h − dz)
   if (sp.Vx && !sp.vDone) sp = { ...sp, Vface: sp.V, V: vAtD(sp, t.h, mat) }; // the frame envelope passes vDone (already at d)
   // a candidate depth that makes the span deep (L < 4h) must use the largest shear even when V came "at d" for another depth (audit F2;
   // the type search passes vDone forces computed for the current type)
@@ -567,9 +575,36 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     const t = o.t ?? floor.t, finish = o.finish ?? floor.finish, live = o.live ?? floor.live;
     const area = Math.abs(P.reduce((s, p, i) => s + cross(p, P[(i + 1) % P.length]), 0) / 2);
     const g = open ? { DL: 0, SDL: 0, LL: 0, WALL: 0 } : { DL: CONC * t, SDL: finish + (o.extra ?? 0), LL: live, WALL: 0 };
-    return { key, P, st, dir, t, finish, live, extraSDL: o.extra ?? 0, open, area, g, ...panelLoads(P, 1, dir), ...(st === "GS" ? { kind: "ground" } : {}) };
+    return { key, P, st, dir, t, finish, live, extraSDL: o.extra ?? 0, open, area, g, dz: Number.isFinite(+o.dz) ? +o.dz : 0, ...panelLoads(P, 1, dir), ...(st === "GS" ? { kind: "ground" } : {}) };
   });
   const inPanel = (pt) => panels.find((pn) => { let c = false; for (let i = 0, j = pn.P.length - 1; i < pn.P.length; j = i++) { const [xi, yi] = pn.P[i], [xj, yj] = pn.P[j]; if (yi > pt[1] !== yj > pt[1] && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) c = !c; } return c; });
+  // LEVELS (user 2026-11-20: a porch slab 10 cm below the rooms, both PS → beams at different levels). The slab level is set per panel
+  // (floor.panels[key].dz, m from the floor level); a drawn beam follows the slabs beside it: top = the higher side, low = the lower side.
+  // Sides at different levels = a STEP beam (คานบ่า): bottom kept, the low side notched dz deep (notch width beam.notchW, default b/2)
+  // for the low slab to bear on → checked with the inscribed rectangle b × (h − dz) (always inside the real section = conservative).
+  // beam.dz = a top level set by hand (overrides the slabs). Beams inside the storey (lvl) are not concerned.
+  const beamLv = (floor.beams ?? []).map((b) => {
+    const L = dist(b.a, b.b); if (b.lvl > 0 || L < 0.05) return null;
+    const u = [(b.b[0] - b.a[0]) / L, (b.b[1] - b.a[1]) / L], m = [(b.a[0] + b.b[0]) / 2, (b.a[1] + b.b[1]) / 2];
+    const side = (sg) => { const pn = inPanel([m[0] - u[1] * 0.06 * sg, m[1] + u[0] * 0.06 * sg]); return pn && !pn.open && pn.st !== "GS" ? pn : null; };
+    const sides = [side(1), side(-1)], zs = sides.filter(Boolean).map((pn) => pn.dz), set = Number.isFinite(b.dz);
+    const top = set ? +b.dz : zs.length ? Math.max(...zs) : 0, low = Math.min(top, ...zs), step = top - low > 0.005 ? +(top - low).toFixed(3) : 0;
+    return { top, low, step, auto: !set, sides: sides.map((pn) => (pn ? { key: pn.key, dz: pn.dz, st: pn.st, dir: pn.dir } : null)), u };
+  });
+  const topOf = (i) => beamLv[i]?.top ?? 0;
+  lines.lv = beamLv;
+  // step joints: two drawn beams of one line meeting at different top levels. Detail (ACI 318-11 12.12.1, 12.5; crank 1:6 as 7.8.1):
+  // the lower beam's top bars run through the joint into the higher beam (≥ ld), the higher beam's top bars end in standard hooks in
+  // the column → the higher beam is checked with h − dz on the spans touching the joint
+  for (const ln of flat) {
+    const ps = [...ln.parts].sort((a, b) => a.t0 - b.t0); ln.steps = [];
+    for (let k = 0; k + 1 < ps.length; k++) {
+      const a = ps[k], b = ps[k + 1], za = topOf(a.i), zb = topOf(b.i);
+      if (Math.abs(a.t1 - b.t0) > TOL || Math.abs(za - zb) <= 0.005) continue;
+      ln.steps.push({ t: b.t0, p: [ln.A[0] + ln.u[0] * b.t0, ln.A[1] + ln.u[1] * b.t0], dz: +Math.abs(za - zb).toFixed(3), hi: za > zb ? a.i : b.i, lo: za > zb ? b.i : a.i,
+        col: ln.cols.some((c) => Math.abs(c.t - b.t0) < TOL) });
+    }
+  }
   for (const ln of lines) { ln.slab = []; ln.torsion = []; }
   // walls: on a beam → line load on that beam; on a slab → spread over that panel
   const walls = wallsOf(floor).map((w, i) => {
@@ -756,7 +791,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     result = solveFloor(floor, lines, types, mat, typeOf, warnings, pass === 3);
     changed = false;
     // deflection with another type: δ · I(current) / I(type)
-    const deflWith = (sp, t) => { const cur = types[spanType(sp)] ?? types[0], f = (cur.b * cur.h ** 3) / (t.b * t.h ** 3), d = sp.defl;
+    const deflWith = (sp, t0) => { const cur = cutType(types[spanType(sp)] ?? types[0], sp.hCut), t = cutType(t0, sp.hCut), f = (cur.b * cur.h ** 3) / (t.b * t.h ** 3), d = sp.defl;
       return { ...d, dL: d.dL * f, dT: d.dT * f, ok: d.dL * f <= d.limL + 1e-9 && d.dT * f <= d.limT + 1e-9 }; };
     const withDefl = (c, sp, t) => { const d = deflWith(sp, t); return { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) }; };
     for (const sp of result.spans) {
@@ -784,7 +819,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     sp.member = sp.members.find((m) => typeOf.get(m) === ti) ?? sp.member;
     sp.typeIdx = ti; const c = checkSpan(t, sp, mat), d = sp.defl;
     sp.check = { ...c, defl: d, ok: c.ok && d.ok, util: Math.max(c.util, d.dT / d.limT, d.dL / d.limL) };
-    { const cut = cutoffs(sp, result.lines.find((l) => l.id === sp.line), t, mat, { Mpos: sp.Mpos, Mneg: sp.Mneg }, sp.check); // audit F4 (frame.js repeats it with the envelope forces)
+    { const cut = cutoffs(sp, result.lines.find((l) => l.id === sp.line), cutType(t, sp.hCut), mat, { Mpos: sp.Mpos, Mneg: sp.Mneg }, sp.check); // audit F4 (frame.js repeats it with the envelope forces)
       if (cut) { sp.cut = cut; sp.check.cut = cut; if (!cut.ok) sp.check.ok = false; } }
   }
   // a cantilever span is shown as its type + "A" (user 2026-11-03: B1A = B1's section and support bars, top bars the whole length)
@@ -854,7 +889,42 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   for (const sp of result.spans) groups.DL += CONC * sp.type.b * sp.type.h * sp.len;
   // the type each drawn beam ended with (fixed or chosen) — engine/beamAssign.js locks these
   const beamTypeOf = (floor.beams ?? []).map((_, i) => typeOf.get(i));
-  return { ...result, beamTypeOf, downOn, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
+  // level checks (user 2026-11-20 — ACI 318-11 refs; ว.ส.ท. equivalents not checked against the text)
+  const levels = { beams: beamLv, steps: [], notes: [] }, cover = (mat.cover ?? 3) / 100;
+  const tyOf = (i) => types[typeOf.get(i)] ?? types[0];
+  for (const ln of flat) for (const j of ln.steps ?? []) {
+    const th = tyOf(j.hi), tl = tyOf(j.lo), left = th.h - j.dz, colW = 0.2; // the higher beam's depth below the lower beam's top
+    const crank = j.dz <= (colW - 2 * cover) / 6 + 1e-9; // 1:6 inside a 0.20 m column (7.8.1 slope, as for offset column bars)
+    const ok = left >= Math.max(0.15, 2 * cover + 0.05) && tl.h >= 0.15;
+    levels.steps.push({ ...j, line: ln.id, left, crank, ok, hi: j.hi, lo: j.lo });
+    const at = `แนวคาน ${ln.id + 1} ที่ (${j.p[0].toFixed(2)}, ${j.p[1].toFixed(2)})`;
+    if (!ok) warnings.push(`${at}: คานต่างระดับ ${(j.dz * 100).toFixed(0)} ซม. — คานตัวสูงเหลือความลึกใต้หลังคานตัวต่ำ ${(left * 100).toFixed(0)} ซม. ไม่พอให้เหล็กบนวิ่งผ่าน (ต้อง ≥ 15 ซม.) — ลดระยะต่างระดับหรือเพิ่มความลึกคาน`);
+    if (!j.col) warnings.push(`${at}: คานต่างระดับ ${(j.dz * 100).toFixed(0)} ซม. กลางแนวคาน ไม่มีเสารับ — เหล็กล่างสองข้างอยู่คนละระดับ ควรมีเสาหรือคานรับที่จุดนี้ (คานตัวสูงคิดความลึก h − ${(j.dz * 100).toFixed(0)} ซม. ทั้งช่วง)`);
+  }
+  // a secondary beam whose bottom is below the bottom of the beam carrying it: its bottom bars cannot sit on the main bars
+  for (const ln of lines) for (const c of ln.carriers ?? []) {
+    if (c.rev) continue; const h = lines.find((o) => o.id === c.host); if (!h) continue;
+    const ms = ln.parts.find((p) => Math.abs(p.t0 - c.t) < TOL || Math.abs(p.t1 - c.t) < TOL)?.i, mh = h.parts.find((p) => c.at >= p.t0 - TOL && c.at <= p.t1 + TOL)?.i;
+    if (ms == null || mh == null) continue;
+    const bs = topOf(ms) - tyOf(ms).h, bh = topOf(mh) - tyOf(mh).h;
+    if (bs < bh - 0.005) warnings.push(`คานซอยแนว ${ln.id + 1} วางบนแนว ${h.id + 1} แต่ท้องคานซอยต่ำกว่าท้องคานหลัก ${((bh - bs) * 100).toFixed(0)} ซม. (ระดับต่าง) — เหล็กล่างคานซอยต้องวางบนเหล็กล่างคานหลัก: ลดความลึกคานซอยหรือเพิ่มความลึกคานหลัก`);
+  }
+  // precast planks (PS) on a step beam: bearing ≥ max(5 cm, ln/180) on each side (ACI 318-11 16.6.2.2) — low side on the notch
+  // (beam.notchW, default b/2), high side on the rest of the width
+  (floor.beams ?? []).forEach((b, i) => {
+    const lv = beamLv[i]; if (!lv?.step) return;
+    const t = tyOf(i), wl = b.notchW > 0 ? Math.min(b.notchW, t.b - 0.02) : t.b / 2;
+    lv.notchW = wl; lv.type = t.name;
+    for (const sd of lv.sides) {
+      if (!sd || sd.st !== "PS") continue;
+      const pn = panels.find((q) => q.key === sd.key); if (!pn) continue;
+      const along = sd.dir === "y" ? Math.abs(lv.u[1]) : Math.abs(lv.u[0]); if (along > 0.3) continue; // planks parallel to this beam: not a bearing edge
+      const xs = pn.P.map((q) => q[0]), ys = pn.P.map((q) => q[1]), ln_ = sd.dir === "y" ? Math.max(...ys) - Math.min(...ys) : Math.max(...xs) - Math.min(...xs);
+      const need = Math.max(0.05, ln_ / 180), have = sd.dz < lv.top - 0.005 ? wl : t.b - wl;
+      if (have < need - 1e-9) warnings.push(`คานบ่า ${t.name} (คาน ${i + 1}) รับแผ่นพื้น PS ${sd.dz < lv.top - 0.005 ? "ฝั่งต่ำบนบ่า" : "ฝั่งสูง"} วางได้ ${(have * 100).toFixed(1)} ซม. < ${(need * 100).toFixed(1)} ซม. (≥ 5 ซม. และ ≥ ln/180) — ขยายความกว้างคานหรือปรับความกว้างบ่า`);
+    }
+  });
+  return { ...result, beamTypeOf, levels, downOn, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
 }
 
 // largest |deflection| (m) of each element: v'' = M/EI integrated twice, matched to the nodal deflections
@@ -979,7 +1049,15 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
       const x = [...new Set([0, ln.L, ...sx, ...ln.parts.flatMap((p) => [p.t0, p.t1])].map((v) => +v.toFixed(4)))].sort((a, b) => a - b);
       const sup = x.map((v) => sx.some((s) => Math.abs(s - v) < 1e-3));
       // EI = Ec · 0.5 Ig (cracked section, for deflections; the reactions only depend on the ratios)
-      const Ec = EcOf(mat), EI = x.slice(1).map((v, k) => { const m = (v + x[k]) / 2, pt = ln.parts.find((p) => m >= p.t0 - 1e-6 && m <= p.t1 + 1e-6), t = types[typeOf.get(pt?.i)] ?? types[0]; return (Ec * 0.5 * t.b * t.h ** 3) / 12; });
+      // depth lost at a step (levels): notch of a step beam / the higher beam at a step joint — per support-to-support interval
+      const supK = sup.map((v, k) => (v ? k : -1)).filter((k) => k >= 0), lvB = lines.lv ?? [];
+      // all: notch of a step beam, or a step joint inside the span (no column) → the whole span; sup: a step joint at a supported end of
+      // the span where its beam is the higher one → the support check only (mid-span keeps the full depth)
+      const cutIn = (x0, x1) => { const ms = ln.parts.filter((p) => Math.min(p.t1, x1) - Math.max(p.t0, x0) > 1e-6).map((p) => p.i), js = (ln.steps ?? []).filter((j) => ms.includes(j.hi));
+        return { all: Math.max(0, ...ms.map((i) => lvB[i]?.step ?? 0), ...js.filter((j) => j.t > x0 + 1e-6 && j.t < x1 - 1e-6).map((j) => j.dz)),
+          sup: Math.max(0, ...js.filter((j) => Math.abs(j.t - x0) < 1e-3 || Math.abs(j.t - x1) < 1e-3).map((j) => j.dz)) }; };
+      const cutAtEl = (k) => { const a = [...supK].reverse().find((q) => q <= k) ?? 0, b = supK.find((q) => q > k) ?? x.length - 1; return cutIn(x[a], x[b]).all; };
+      const Ec = EcOf(mat), EI = x.slice(1).map((v, k) => { const m = (v + x[k]) / 2, pt = ln.parts.find((p) => m >= p.t0 - 1e-6 && m <= p.t1 + 1e-6), t = cutType(types[typeOf.get(pt?.i)] ?? types[0], cutAtEl(k)); return (Ec * 0.5 * t.b * t.h ** 3) / 12; });
       const res = solveBeam({ x, sup, EI, loads });
       ln.beamIn = { x, sup, EI, loads }; // kept for the PyNite differential test (cli/frame3d-export.mjs)
       if (res.error) {
@@ -1031,7 +1109,7 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
       const brn = (() => { if ((mat.deflMethod ?? "branson") !== "branson" || dead.error || res.error) return null;
         const sk2 = sup.map((v, k) => (v ? k : -1)).filter((k) => k >= 0), cuts = [...new Set([0, ...sk2, x.length - 1])].sort((a, b) => a - b), nIn2 = sk2.length - 1;
         const spansB = cuts.slice(1).map((i1, k) => { const i0 = cuts[k], cant = !sup[i0] || !sup[i1], j = sk2.indexOf(i0), kind = cant ? "cantilever" : nIn2 === 1 ? "simple" : j === 0 || j === nIn2 - 1 ? "one_end" : "both_ends";
-          const mid = (x[i0] + x[i1]) / 2, pt = ln.parts.find((p) => mid >= p.t0 - 1e-6 && mid <= p.t1 + 1e-6), t = types[typeOf.get(pt?.i)] ?? types[0];
+          const mid = (x[i0] + x[i1]) / 2, pt = ln.parts.find((p) => mid >= p.t0 - 1e-6 && mid <= p.t1 + 1e-6), t = cutType(types[typeOf.get(pt?.i)] ?? types[0], cutIn(x[i0], x[i1]).all);
           const Ma = (r) => { const els = r.el.slice(i0, i1), Ms = els.flatMap((el) => Array.from({ length: 21 }, (_, q) => el.M((el.L * q) / 20)));
             const hog = (i) => { const el = i === i0 ? r.el[i0] : r.el[i1 - 1]; return Math.max(0, -(i === i0 ? el.M(0) : el.M(el.L))); }; // hogging at a supported end (continuous or with a cantilever beyond)
             const negs = cant ? [Math.max(0, ...Ms.map((m) => -m))] : [i0, i1].filter((i) => sup[i]).map(hog).filter((m) => m > 1);
@@ -1053,7 +1131,8 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
         const mid = (x[i0] + x[i1]) / 2, member = ln.parts.find((p) => mid >= p.t0 - 1e-6 && mid <= p.t1 + 1e-6)?.i ?? ln.members[0];
         // every drawn beam lying on this span (a span over a missing column covers two or more drawn beams; all get its type)
         const members = ln.parts.filter((p) => Math.min(p.t1, x[i1]) - Math.max(p.t0, x[i0]) > 1e-6).map((p) => p.i);
-        spans.push({ id: `${ln.id + 1}-${spans.filter((s) => s.line === ln.id).length + 1}`, line: ln.id, member, members: members.length ? members : [member], x0: x[i0], x1: x[i1], len: x[i1] - x[i0], kind,
+        const { all: hCut, sup: hCutSup } = cutIn(x[i0], x[i1]);
+        spans.push({ id: `${ln.id + 1}-${spans.filter((s) => s.line === ln.id).length + 1}`, line: ln.id, member, members: members.length ? members : [member], x0: x[i0], x1: x[i1], len: x[i1] - x[i0], kind, ...(hCut > 0 ? { hCut } : {}), ...(hCutSup > 0 ? { hCutSup } : {}),
           ...(cant ? { fixedAt: sup[i0] ? "start" : sup[i1] ? "end" : null } : {}),
           a: [ln.A[0] + ln.u[0] * x[i0], ln.A[1] + ln.u[1] * x[i0]], b: [ln.A[0] + ln.u[0] * x[i1], ln.A[1] + ln.u[1] * x[i1]],
           Mpos: Math.max(0, ...env.slice(i0, i1).map((e) => e.Mmax)), Mneg: Math.max(0, -env[i0].ML, -env[i1 - 1].MR, ...(cant ? env.slice(i0, i1).map((e) => -e.Mmin) : [])),

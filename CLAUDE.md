@@ -714,3 +714,18 @@ mode, only when uplift points exist): every column under the point in compressio
 note (res.notes; the floor's an.warnings entry → "หมายเหตุ: …" so the report appendix says the same): "ไม่ถอนจริง · ให้เหล็กบนของช่วงสั้น
 ต่อเนื่องและงอขอยึดเข้าเสา"; still in tension → the warning stays (Yasothon (3.50, 7.90) stays, 3 others → notes). Warnings panel lists the notes
 under the warnings (grey, locatable), status bar "· n หมายเหตุ". Column loads unchanged (max of continuous / simple). E2E 47/47, regress identical.
+LEVELS P1 (2026-11-20, user: porch slab 10 cm below the rooms, both PS → beams at different levels; "ศึกษามาตรฐานมาอ้างอิง"): slab level per
+panel floor.panels[key].dz (m from the floor level; inspector "ระดับพื้น", PanelTable column + bulk "ระดับ"); floor.js beamLv per drawn beam from the
+panels beside it (sampled 6 cm each side; open / GS ignored): top = higher side, step = top − low (> 5 mm = STEP beam "คานบ่า": bottom kept, low side
+notched dz deep, notch beam.notchW default b/2); beam.dz = top set by hand (inspector "ระดับหลังคาน", "ใช้ระดับตามพื้น"). Step joints (ln.steps): two
+drawn beams of one line meeting at different tops. Checks (frozen beam.js untouched): cutType(t, cut) = inscribed rectangle b × (h − cut) (always
+inside the real section → conservative): span.hCut (notch / joint inside the span) → every check + EI + Branson of that span; span.hCutSup (joint at a
+supported end, member = the higher beam) → checkSpan runs twice (full depth, and h − dz with M+ 0 for the support) and both must pass (c.step).
+Detail assumed (cited ACI 318-11 12.12.1 / 12.5 / 7.8.1; ว.ส.ท. clauses not checked): the lower beam's top bars run through the joint into the higher
+beam ≥ ld, the higher beam's top bars end in 90° hooks in the column (a 20 cm column cannot develop ldh → full depth not counted). Warnings: depth left
+under the lower top < 15 cm; joint without a column (mid-line); secondary bottom below the main bottom; PS planks on a step beam bearing < max(5 cm,
+ln/180) (16.6.2.2) on the notch / high side. an.levels {beams, steps}. Plan: "ระดับ −0.10" on panels, "หลังคาน −0.10" / "คานบ่า Δ10 ซม." on beams,
+teal ◆ at joints (red = depth not enough). 3D frame: same nodes (≤ 15 cm offsets ignored), full depth stiffness. Loads unchanged (3D ΣRz identical).
+cli/levels-check.mjs 16/16 (in the gate). No levels → results identical (regress, E2E 47/47). User's file, porch −0.10, auto types: 37/39 (the two 4.8 m
+spans at the joints need a type deeper than B5 20×60 once 10 cm is lost). NEXT P2: drawings (step-beam section with notch + U-bar, joint elevation:
+through bars / hooks, table of joints) in step 7, DXF with the beam sheets, report section with the references; Frame3D drawn at the levels.
