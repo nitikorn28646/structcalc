@@ -34,22 +34,39 @@ function beamFace(tag, r, M, V, tensionTop, b, fcp) {
   return { eqs: eqs.filter(Boolean), checks };
 }
 
-export function BeamTypeSheet({ t, g, count, floorName, mat, ext }) {
-  const b = t.b * 100, fcp = mat.fcBeam ?? mat.fcPrime, c = g.check, d = g.defl;
+// level step joints (2026-11-20): the higher beam's top bars hooked in the column (ldh) → full depth; else the support face is checked
+// a second time with h − Δ (both must pass). c.step = the reduced run, c.supFull = the full-depth support face, c.stepHook = hook fits.
+function stepRows(t, g, c, mat, b, fcp) {
+  const js = g.stepSup ?? [], hk = c.stepHook ?? []; if (!js.length) return null;
+  const fy = mat.fy ?? 4000, info = js.map((j, k) => [`รอยต่อต่างระดับ ${js.length > 1 ? k + 1 : ""}`.trim(), `Δ ${num(j.dz * 100, 0)} ซม. · เสายาวตามแนวคาน ${j.along ? num(j.along * 100, 0) : "-"} ซม. · ${hk[k]?.ok ? "ขอยึดในเสาได้ → ความลึกเต็ม" : "ขอยึดไม่พอ → ตรวจหัวเสาที่ h − Δ"}`]);
+  const eqs = [], checks = [];
+  js.forEach((j, k) => { const h = hk[k]; if (!h?.db) return;
+    eqs.push([`ขอยึด 90° เหล็กบนในเสา${js.length > 1 ? ` (${k + 1})` : ""}`, `ldh = 0.075·fy·d_b/√f′c${h.side ? " × 0.7" : ""} ≥ 8d_b ≥ 15`, `0.075 × ${n0(fy)} × ${num(h.db, 1)} / √${n0(fcp)}${h.side ? " × 0.7" : ""}`, num(h.ldh, 1), "ซม."]);
+    checks.push([`ldh ≤ ความลึกเสาตามแนวคาน − 5 ซม. (ACI 318-11 12.5)`, h.ldh, h.avail, "ซม.", h.ok, null]); });
+  const st = c.step;
+  if (st) { eqs.push(["ความลึกที่หัวเสา (รอยต่อต่างระดับ)", "h′ = h − Δ (เหล็กบนผ่านรอยต่อที่ระดับคานตัวต่ำ)", `${num(t.h * 100, 0)} − ${num(st.cut * 100, 0)}`, num(t.h * 100 - st.cut * 100, 0), "ซม."]);
+    checks.push(["หัวเสาผ่านทั้งความลึกเต็ม และ h − Δ", c.supFull ? (c.supFull.ok === false ? "ไม่ผ่าน" : "ผ่าน") : "-", st.ok ? "ผ่าน" : "ไม่ผ่าน", "", (c.supFull?.ok !== false) && st.ok, null]); }
+  return { info, eqs, checks };
+}
+
+export function BeamTypeSheet({ t, g, count, floorName, mat, ext, stepSheet = false }) {
+  const b = t.b * 100, fcp = mat.fcBeam ?? mat.fcPrime, c = g.check, d = g.defl, stp = stepRows(t, g, c, mat, b, fcp), cutH = c.step ? t.h * 100 - c.step.cut * 100 : null;
   const mid = c.mid ? beamFace("กลางคาน", c.mid, g.Mpos, g.V, false, b, fcp) : { eqs: [], checks: [] };
-  const sup = c.sup ? beamFace("หัวเสา", c.sup, g.Mneg, g.V, true, b, fcp) : { eqs: [], checks: [] };
+  const supF = c.step && c.supFull ? beamFace("หัวเสา (h เต็ม)", c.supFull, g.Mneg, g.V, true, b, fcp) : null;
+  const sup0 = c.sup ? beamFace(c.step ? `หัวเสา (h − Δ = ${num(cutH, 0)} ซม.)` : "หัวเสา", c.sup, g.Mneg, g.V, true, b, fcp) : { eqs: [], checks: [] };
+  const sup = supF ? { eqs: [...supF.eqs, ...sup0.eqs], checks: [...supF.checks, ...sup0.checks] } : sup0;
   const r0 = c.mid ?? c.sup ?? {};
   const defl = d && [["ระยะแอ่นรวม 3·δD + δL ≤ L/" + (mat.deflTotal ?? 240), d.dT * 1000, d.limT * 1000, "มม.", d.dT <= d.limT + 1e-9], ["ระยะแอ่นจากน้ำหนักจร δL ≤ L/" + (mat.deflLive ?? 360), d.dL * 1000, d.limL * 1000, "มม.", d.dL <= d.limL + 1e-9]];
   return (
-    <CheckSheet id={`B-${t.name}`} title={`การตรวจสอบคาน — ${t.name}${g.kind === "cantilever" ? "A" : ""}`} sub={`${num(b, 0)} × ${num(t.h * 100, 0)} ซม. · ช่วงวิกฤต ${floorName} ${g.id}`}
+    <CheckSheet id={`B-${t.name}${stepSheet ? "-step" : ""}`} title={`การตรวจสอบคาน — ${t.name}${g.kind === "cantilever" ? "A" : ""}${stepSheet ? " (ช่วงที่มีรอยต่อต่างระดับ)" : ""}`} sub={`${num(b, 0)} × ${num(t.h * 100, 0)} ซม. · ${stepSheet ? "ช่วง" : "ช่วงวิกฤต"} ${floorName} ${g.id}`}
       info={[["Type", t.name], ["หน้าตัด b × h", `${num(b, 0)} × ${num(t.h * 100, 0)}`, "ซม."], ["ช่วงวิกฤต", `${floorName} ${g.id}`], ["ยาวช่วง", n2(g.len), "ม."], ["ลักษณะช่วง", KIND[g.kind] ?? g.kind], ["ใช้ type นี้", `${count} ช่วง`],
-        ["เหล็กบน", [t.top, t.topX && `+ ${t.topX}`].filter(Boolean).join(" ")], ["เหล็กล่าง", [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" ")], ["เหล็กปลอก", `${stLabel(t)} @${n2(t.sSup)} / @${n2(t.sMid)}`, "ม."]]}
+        ["เหล็กบน", [t.top, t.topX && `+ ${t.topX}`].filter(Boolean).join(" ")], ["เหล็กล่าง", [t.bot, t.botX && `+ ${t.botX}`].filter(Boolean).join(" ")], ["เหล็กปลอก", `${stLabel(t)} @${n2(t.sSup)} / @${n2(t.sMid)}`, "ม."], ...(stp?.info ?? [])]}
       input={[["f′c", n0(fcp), "กก./ซม.²"], ["fc ยอมให้", n0(r0.fc), "กก./ซม.²"], ["fy / fs", `${n0(mat.fy ?? 4000)} / ${n0(r0.fs)}`, "กก./ซม.²"], ["n = Es/Ec", n2(r0.n)], ["k · j", `${n3(r0.k)} · ${n3(r0.j)}`], ["R", n2(r0.R), "กก./ซม.²"],
         ["ระยะหุ้ม", n2(mat.cover ?? 3), "ซม."]]}
       forces={[["M+ (กลางช่วง)", n0(g.Mpos), "กก.-ม."], ["M− (หัวเสา)", n0(g.Mneg), "กก.-ม."], ["V ออกแบบ" + (g.vAtD ? " (ที่ระยะ d)" : ""), n0(g.V), "กก."],
         ["T (แรงบิด)", n0(c.MtUse ?? g.Mt ?? 0), "กก.-ม."], g.src && ["แหล่งแรง", g.src === "3D" ? "โครง 3 มิติ" : g.src === "LAT" ? "ชุดผสมแรงด้านข้าง" : "คานต่อเนื่อง"]]}
-      eqs={[["ค่าคงที่หน้าตัด", "k = 1/(1 + fs/(n·fc)), j = 1 − k/3, R = ½·fc·k·j", "", `R = ${n2(r0.R)}`, "กก./ซม.²"], ...mid.eqs, ...sup.eqs]}
-      checks={[...mid.checks, ...sup.checks, ...(defl ?? [])]}
+      eqs={[["ค่าคงที่หน้าตัด", "k = 1/(1 + fs/(n·fc)), j = 1 − k/3, R = ½·fc·k·j", "", `R = ${n2(r0.R)}`, "กก./ซม.²"], ...mid.eqs, ...(stp?.eqs ?? []), ...sup.eqs]}
+      checks={[...mid.checks, ...sup.checks, ...(stp?.checks ?? []), ...(defl ?? [])]}
       note={c.error ?? (g.kind === "cantilever" ? "คานยื่น: เหล็กบนยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลัง" : undefined)}
       figure={<div className="grid gap-1">{[["sup", g.kind === "cantilever" ? "โคนคานยื่น" : "ปลายคาน (หัวเสา)", t.sSup], ["mid", g.kind === "cantilever" ? "ปลายคานยื่น" : "กลางคาน", t.sMid]].map(([at, cap, sp]) => (
         <div key={at} className="text-center"><BeamDetail t={t} mat={mat} at={at} ext={ext} className="h-[36mm] w-full" /><div className="text-[7.5pt] text-[#667085]">{cap} · ปลอก @{n2(sp)}</div></div>))}</div>} />

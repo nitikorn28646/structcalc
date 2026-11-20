@@ -78,8 +78,10 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, wide
   const nodeName = (p) => { const i = GX.findIndex((x) => Math.abs(x - p[0]) < 1e-6), j = GY.findIndex((y) => Math.abs(y - p[1]) < 1e-6); return i >= 0 && j >= 0 ? `โหนด ${xName(i)}-${yName(j)}` : "จุดกริด"; };
   const onBeamText = (b, q) => { const d0 = dist(b.a, q), d1 = dist(b.b, q); return `บนคาน · ห่างปลาย ${fmt(Math.min(d0, d1), 2)} ม.`; };
   // side widening strips (พอกข้าง): their centre lines are snap lines for the wall tool, so a wall can be drawn on the strip (user 2026-11-20)
+  const twDraw = () => { const t = wallTypes.find((x) => x.id === wallDraw.kind) ?? wallTypes[0]; return Math.max(0.06, t?.core ? wallThick(t) : t?.id === "brick2" ? 0.2 : 0.1); };
+  // snap line on a strip = the wall's centre line with its outer face flush with the strip's outer face (agreed default)
   const strips = () => tool !== "wall" ? [] : beams.flatMap((b, i) => b.arc?.s ? [] : widensOf(b).flatMap((wd) => { const wt = (widenTypes ?? [])[wd.type]; if (!wt) return [];
-    const L = dist(b.a, b.b) || 1, n = [-(b.b[1] - b.a[1]) / L, (b.b[0] - b.a[0]) / L], o = (wd.side ?? 1) * (bw(i) / 2 + wt.w / 2), f0 = Math.max(0, Math.min(L, wd.from ?? 0)), f1 = Math.max(f0, Math.min(L, wd.to ?? L));
+    const L = dist(b.a, b.b) || 1, n = [-(b.b[1] - b.a[1]) / L, (b.b[0] - b.a[0]) / L], o = (wd.side ?? 1) * (bw(i) / 2 + wt.w - twDraw() / 2), f0 = Math.max(0, Math.min(L, wd.from ?? 0)), f1 = Math.max(f0, Math.min(L, wd.to ?? L));
     const at = (t) => round3([b.a[0] + ((b.b[0] - b.a[0]) * t) / L + n[0] * o, b.a[1] + ((b.b[1] - b.a[1]) * t) / L + n[1] * o]);
     return [{ a: at(f0), b: at(f1), name: wt.name }]; }));
   const snap = (raw, from) => {

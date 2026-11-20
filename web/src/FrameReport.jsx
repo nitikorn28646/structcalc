@@ -238,7 +238,10 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
             if (!list.length) return null;
             const g = list.reduce((a, s) => (s.check.util > a.check.util ? s : a));
             return (
-              <BeamTypeSheet key={i} t={t} g={g} count={list.length} floorName={floors[g.floor].name} mat={mat} ext={extraSpec(i, spans)} />
+              <div key={i}><BeamTypeSheet t={t} g={g} count={list.length} floorName={floors[g.floor].name} mat={mat} ext={extraSpec(i, spans)} />
+                {/* a span of this type at a level step joint that is not the governing one: its own sheet (hook / h − Δ check, user 2026-11-20) */}
+                {(() => { const st = list.filter((s) => s.stepSup?.length && s !== g); if (!st.length || g.stepSup?.length) return null; const gs = st.reduce((a, s) => (s.check.util > a.check.util ? s : a));
+                  return <BeamTypeSheet t={t} g={gs} count={list.length} floorName={floors[gs.floor].name} mat={mat} ext={extraSpec(i, spans)} stepSheet />; })()}</div>
             );
           })}
           {(() => { const uses = widenUses(frame, res); if (!uses.length) return null; const secs = widenSections(uses); return (<>
@@ -256,11 +259,11 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
               return (<div key={`wc${u0.floor}-${u0.i}`} className="rp-keep">
                 <p className="mt-3 font-semibold">รายการคำนวณพอกข้าง — {u0.floorName} คาน {u0.i + 1} ({tb?.name} {n0(tb.b * 100)}×{n0(tb.h * 100)} ซม., {strips.length} ส่วน)</p>
                 {wm && <Figure caption={`รูปตัดคาน ${u0.i + 1} กับส่วนพอกและผนัง (มองจากต้นคาน → ปลายคาน)`}><div dangerouslySetInnerHTML={{ __html: stairSvgString(wm.model, { px: Math.min(380 / (wm.model.box[2] - wm.model.box[0]), 300 / (wm.model.box[3] - wm.model.box[1])) }) }} /></Figure>}
-                {strips.map((u) => { const c = u.check; if (!c) return null; const wt = u.wt, A = c.Ab ?? 0.283, eDef = tb.b / 2 + wt.w - (c.tw ?? 0.1) / 2, drawn = Math.abs(c.e - eDef) > 1e-6;
+                {strips.map((u) => { const c = u.check; if (!c) return null; const wt = u.wt, A = c.Ab ?? 0.283, eDef = tb.b / 2 + wt.w - (c.tw ?? 0.1) / 2, drawn = c.eSrc === "drawn" || c.eSrc === "set";
                   const rows = [
                     ["น้ำหนักส่วนพอก", "q พอก = 2,400·w·h", `2,400 × ${fmt(wt.w, 2)} × ${fmt(tb.h, 2)}`, `${n0(c.qw)} กก./ม.`],
                     ["ผนังบนส่วนพอก", "q ผนัง (จากผนังที่วาด)", c.qWall > 0 ? `หนา ${n0((c.tw ?? 0.1) * 100)} ซม.` : "ไม่มีผนังบนส่วนนี้", `${n0(c.qWall)} กก./ม.`],
-                    ["ระยะเยื้องผนัง", drawn ? "e = ระยะจากแกนคานถึงแนวกลางผนัง (ตามแบบ)" : "e = b/2 + w − t/2 (ผิวนอกเสมอส่วนพอก)", drawn ? "วัดจากแบบ" : `${fmt(tb.b / 2, 3)} + ${fmt(wt.w, 2)} − ${fmt((c.tw ?? 0.1) / 2, 3)}`, `${fmt(c.e, 3)} ม.`],
+                    ["ระยะเยื้องผนัง", drawn ? "e = ระยะจากแกนคานถึงแนวกลางผนัง" : "e = b/2 + w − t/2 (ผิวนอกผนังเสมอผิวนอกส่วนพอก)", drawn ? (c.eSrc === "set" ? "กำหนดที่คาน" : "วัดจากแบบ (ผนังเลยขอบส่วนพอก)") : `${fmt(tb.b / 2, 3)} + ${fmt(wt.w, 2)} − ${fmt((c.tw ?? 0.1) / 2, 3)}`, `${fmt(c.e, 3)} ม.`],
                     ["แรงบิดต่อเมตร", "m = q พอก·(b + w)/2 + q ผนัง·e", `${n0(c.qw)} × ${fmt((tb.b + wt.w) / 2, 3)} + ${n0(c.qWall)} × ${fmt(c.e, 3)}`, `${n0(c.m, 1)} กก.-ม./ม.`],
                     ...(c.spans ?? []).map((sp) => [`แรงบิดที่ปลายช่วง ${sp.id}`, sp.kind === "cantilever" ? "T = Σ m·ℓ (ยื่น: ทั้งหมดเข้าปลายยึด)" : "T = Σ m·ℓ·(L − x̄)/L (ปลายที่มากกว่า)", `ช่วงยาว ${fmt(sp.L, 2)} ม., พอกยาว ${fmt(c.len, 2)} ม.`, `${n0(sp.T)} กก.-ม.`]),
                     ...(c.spans ?? []).map((sp) => [`แรงบิดสมดุลรวมช่วง ${sp.id}`, "ทุกส่วนพอก + พื้นยื่น/ราว (ไม่หักล้าง)", "ตรวจในการออกแบบคาน (ท่อผนังบาง)", `${n0(sp.Mt)} กก.-ม. · ${sp.ok ? "คานผ่าน" : "คานไม่ผ่าน"}`]),

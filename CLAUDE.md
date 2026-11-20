@@ -803,3 +803,10 @@ WidenTypes.jsx WidenBeamSection / beamWidenModel). Report beams chapter: worked 
 result: q strip, wall, e (formula or "from the drawing"), m, end torque per span, span total, Vu, Avf, φVn, limit, s, As) and the lever-rule line in
 the criteria list. Report plans (and the floor DXF): widening strips (green, type name), slab levels "ระดับ −0.10", beam tops "หลังคาน −0.10"; the type
 tag moves to the side without a strip. widen-check 22/22.
+STEP JOINT IN THE CHECK SHEET + WALL FLUSH ON THE STRIP (2026-11-20): checkSpan keeps supFull (full-depth support face) next to sup (h − Δ run);
+CheckSheets BeamTypeSheet stepRows: info "รอยต่อต่างระดับ Δ … · hook fits / not", eqs ldh substituted + h′ = h − Δ, both support faces (h เต็ม /
+h − Δ), checks ldh ≤ column depth − 5 cm and "both depths pass"; FrameReport adds a second sheet per type (stepSheet, CALC ID B-<type>-step) for the
+worst span at a step joint when the governing span has none. Widening e (user "รูปไม่สอดคล้องกับระยะเยื้องจริง": the wall snapped to the strip
+centre, e = 0.20 instead of the agreed flush 0.25): e = beam.widen.e if typed, else max(drawn offset, b/2 + w − t/2) — a wall drawn inside the
+strip counts flush with its outer face, one drawn past it keeps its real offset (check eSrc set | drawn | flush, eDrawn); the wall tool's strip
+snap line is now the flush centre line for the wall type being drawn. widen-check 24/24.

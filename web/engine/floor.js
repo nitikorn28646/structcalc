@@ -393,7 +393,7 @@ export function checkSpan(t, sp, mat) {
     if (!need.length || full.error) return { ...full, stepHook: hk };
     const cut = Math.max(...need.map((j) => j.dz)), cr = checkSpan(cutType(t, cut), { ...s0, Mpos: 0 }, mat);
     if (cr.error) return cr;
-    return { ...full, sup: cr.sup, stepHook: hk, step: { cut, sup: cr.sup, mid: cr.mid, ok: cr.ok, util: cr.util }, ok: full.ok && cr.ok, util: Math.max(full.util, cr.util) }; }
+    return { ...full, sup: cr.sup, supFull: full.sup, stepHook: hk, step: { cut, sup: cr.sup, mid: cr.mid, ok: cr.ok, util: cr.util }, ok: full.ok && cr.ok, util: Math.max(full.util, cr.util) }; }
   if (sp.hCut > 0) t = cutType(t, sp.hCut); // levels: step beam (notch) / step joint inside the span → inscribed rectangle b × (h − dz)
   if (sp.Vx && !sp.vDone) sp = { ...sp, Vface: sp.V, V: vAtD(sp, t.h, mat) }; // the frame envelope passes vDone (already at d)
   // a candidate depth that makes the span deep (L < 4h) must use the largest shear even when V came "at d" for another depth (audit F2;
@@ -991,7 +991,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     const lns = flat.filter((l) => l.members.includes(i)), rg = lns.map((l) => widenRange(bm, l, l.parts.find((p) => p.i === i), wd)), len = Math.max(0, ...rg.map(([a, b]) => b - a));
     const qWall = Math.max(0, ...lns.flatMap((l, k) => { const [a0, a1] = rg[k]; return l.slab.filter((x) => wallOnStrip(x, j) && Math.min(x.b, a1) - Math.max(x.a, a0) > 1e-6).map((x) => x.wa); }));
     const tw = Math.max(0.1, ...lns.flatMap((l) => l.slab.filter((x) => wallOnStrip(x, j)).map((x) => x.tw))), eD = Math.max(0, ...lns.flatMap((l) => l.slab.filter((x) => wallOnStrip(x, j) && Number.isFinite(x.e)).map((x) => x.e)));
-    const e = eD > 0 ? eD : Number.isFinite(wd.e) ? Math.abs(wd.e) : t.b / 2 + wt.w - tw / 2;
+    const eFlush = t.b / 2 + wt.w - tw / 2, eSrc = Number.isFinite(wd.e) ? "set" : eD > eFlush + 1e-6 ? "drawn" : "flush";
+    const e = eSrc === "set" ? Math.abs(wd.e) : Math.max(eD, eFlush); // same rule as the torque above
     const st = BARS[wt.st] ?? { A: 0.283, d: 0.6 }, sets = wt.sets ?? 1, s = wt.s ?? 0.15, fyt = String(wt.st).startsWith("RB") ? mat.fys ?? 2400 : mat.fy ?? 4000;
     const Avf = (2 * st.A * sets) / s, Vu = 1.4 * (qw + qWall), phiVn = 0.75 * 1.4 * fyt * Avf, Ac = t.h * 100 * 100;
     const vmax = Math.min(0.2 * fc, (3.3 + 0.08 * (fc / 10.197)) * 10.197, 11 * 10.197), phiVlim = 0.75 * vmax * Ac;
@@ -1010,7 +1011,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     const spT = result.spans.filter((sp) => sp.members.includes(i)).map((sp) => { const ln = flat.find((l) => l.id === sp.line), it = (ln?.torsion ?? []).filter((q) => q.widen && q.beam === i && q.strip === j);
       const T = spanTorque(it, sp.x0, sp.x1, sp.kind === "cantilever"); return T > 0 ? { id: sp.id, L: sp.len, kind: sp.kind, T, Mt: sp.MtEq ?? sp.Mt ?? 0, MtAll: sp.Mt ?? 0, ok: sp.ok } : null; }).filter(Boolean);
     if (why.length) warnings.push(`คาน ${i + 1} พอกข้าง ${wt.name}${(wd.side ?? 1) > 0 ? " ซ้าย" : " ขวา"}: ${why.join(" · ")}`);
-    return { i, j, spans: spT, Ab: st.A, name: wt.name, w: wt.w, side: wd.side ?? 1, len, from: wd.from ?? 0, b: t.b, h: t.h, qw, qWall, e, tw, m: qw * (t.b + wt.w) / 2 + qWall * e, Vu, Avf, fyt, phiVn, vmax, phiVlim, sMax, gap, AsL, AsMinL, sReq: Math.floor(((0.75 * 1.4 * fyt * 2 * st.A * sets) / Math.max(Vu, 1)) * 40) / 40, ok: !why.length, why };
+    return { i, j, spans: spT, Ab: st.A, eSrc, eDrawn: eD, name: wt.name, w: wt.w, side: wd.side ?? 1, len, from: wd.from ?? 0, b: t.b, h: t.h, qw, qWall, e, tw, m: qw * (t.b + wt.w) / 2 + qWall * e, Vu, Avf, fyt, phiVn, vmax, phiVlim, sMax, gap, AsL, AsMinL, sReq: Math.floor(((0.75 * 1.4 * fyt * 2 * st.A * sets) / Math.max(Vu, 1)) * 40) / 40, ok: !why.length, why };
   }); return list.some(Boolean) ? list : null; // index = position in widensOf(beam)
   });
   return { ...result, beamTypeOf, levels, widen, downOn, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
@@ -1137,7 +1138,10 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
         ln.torsion.push({ a: w0, b: w1, m: qw * ew, mL: 0, compat: false, from: `พอกข้าง ${wt.name}`, widen: true, beam: pt.i, strip: j });
         for (const sl of ln.slab.filter((l) => wallOnStrip(l, j))) { // walls standing on this strip (not wall load handed over by a slab)
           const a = Math.max(sl.a, w0), b = Math.min(sl.b, w1); if (b - a < 1e-6) continue;
-          const e = Number.isFinite(sl.e) ? sl.e : Number.isFinite(wd.e) ? Math.abs(wd.e) : t.b / 2 + wt.w - (sl.tw ?? 0.1) / 2; // drawn on the strip → its real offset
+          // e (user 2026-11-20 "ไม่สอดคล้องกับระยะเยื้องจริง"): the wall's outer face is flush with the strip's outer face (agreed default) —
+          // a wall drawn inside the strip is moved out to that position (the strip exists to seat it there; larger e = conservative); a wall
+          // drawn past the strip keeps its real offset; beam.widen.e (typed) overrides
+          const e = Number.isFinite(wd.e) ? Math.abs(wd.e) : Math.max(Number.isFinite(sl.e) ? sl.e : 0, t.b / 2 + wt.w - (sl.tw ?? 0.1) / 2);
           ln.torsion.push({ a, b, m: sl.wa * Math.max(0, e), mL: 0, compat: false, from: `${sl.from} บนพอกข้าง`, widen: true, beam: pt.i, strip: j }); }
       }
       // loads: slab, wall, self weight per member, point loads from beams resting here

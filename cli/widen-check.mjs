@@ -42,7 +42,7 @@ ok("same part on a beam drawn the other way (from its own start)", Math.abs(rz(r
 const wallOff = { ...wall, a: [0, -0.2], b: [4, -0.2] };
 const r8 = analyzeFrame(model((f) => { f.walls = [wallOff]; f.beams[0].widen = { type: 1, side: -1 }; return f; })), c8 = r8.floors[1].widen[0][0];
 const r9 = analyzeFrame(model((f) => { f.walls = [wall]; f.beams[0].widen = { type: 1, side: -1 }; return f; }));
-ok("wall drawn on the strip → on the beam (same total as on the axis), e = 0.20 m drawn", Math.abs(rz(r8) - rz(r9)) < 1e-6 && Math.abs(c8.e - 0.2) < 1e-9 && c8.qWall === 540
+ok("wall drawn mid-strip → on the beam (same total as on the axis), e moved out flush with the strip: 0.10 + 0.20 − 0.05 = 0.25", Math.abs(rz(r8) - rz(r9)) < 1e-6 && Math.abs(c8.e - 0.25) < 1e-9 && c8.eSrc === "flush" && c8.qWall === 540
   && !r8.warnings.some((w) => w.includes("ไม่อยู่บนคานหรือพื้น")), `e ${c8.e} · q ${c8.qWall}`);
 const r10 = analyzeFrame(model((f) => { f.walls = [{ ...wall, a: [0, 0.2], b: [4, 0.2] }]; f.beams[0].widen = { type: 1, side: -1 }; return f; }));
 ok("a wall on the OTHER side (no strip there) is not taken by the strip", r10.floors[1].widen[0][0].qWall === 0);
@@ -54,10 +54,14 @@ const sp11 = r11.floors[1].spans.find((s) => s.members.includes(0)), mSum = w11[
 ok("both sides: torques of the two strips added (not cancelled)", Math.abs((sp11.MtEq ?? 0) - (sp0.MtEq ?? 0) - (mSum * 4) / 2) < 1e-6 && Math.abs(w11[0].m - m) < 1e-6 && w11[1].qWall === 0
   && Math.abs(w11[1].m - qw2 * (t.b + DEFAULT_WIDEN_TYPES[1].w) / 2) < 1e-6, `${w11[0].m.toFixed(1)} + ${w11[1].m.toFixed(1)}`);
 const r12 = analyzeFrame(model((f) => { f.walls = [wallOff]; f.beams[0].widen = [{ type: 0, side: 1 }, { type: 1, side: -1 }]; return f; })), w12 = r12.floors[1].widen[0];
-ok("both sides: a wall drawn on the right strip goes to that strip", w12[0].qWall === 0 && w12[1].qWall === 540 && Math.abs(w12[1].e - 0.2) < 1e-9, `q ${w12[0].qWall} / ${w12[1].qWall}`);
+ok("both sides: a wall drawn on the right strip goes to that strip", w12[0].qWall === 0 && w12[1].qWall === 540 && Math.abs(w12[1].e - 0.25) < 1e-9, `q ${w12[0].qWall} / ${w12[1].qWall}`);
 ok("check lists the strip's end torque per span (full length: m·L/2) and the span total", c.spans?.length === 1 && Math.abs(c.spans[0].T - m * 2) < 1e-6 && c.spans[0].Mt >= c.spans[0].T - 1e-9, JSON.stringify(c.spans?.[0]));
 const r13 = analyzeFrame(model((f) => { f.walls = [wall]; f.beams[0].widen = { type: 0, from: 2.5, to: 4 }; return f; }));
 ok("partial widening at the span end 2.5–4.0 m: end torque m·1.5·3.25/4 (not m·1.5/2)", Math.abs((r13.floors[1].spans.find((s) => s.members.includes(0)).MtEq ?? 0) - (sp0.MtEq ?? 0) - m * 1.5 * 3.25 / 4) < 1e-6);
+const r14 = analyzeFrame(model((f) => { f.walls = [{ ...wall, a: [0, -0.35], b: [4, -0.35] }]; f.beams[0].widen = { type: 1, side: -1 }; return f; })), c14 = r14.floors[1].widen[0][0];
+ok("wall drawn past the strip edge keeps its real offset (0.35 > flush 0.25)", Math.abs(c14.e - 0.35) < 1e-9 && c14.eSrc === "drawn" && c14.qWall === 540, `e ${c14.e}`);
+const r15 = analyzeFrame(model((f) => { f.walls = [wallOff]; f.beams[0].widen = { type: 1, side: -1, e: 0.18 }; return f; })), c15 = r15.floors[1].widen[0][0];
+ok("e typed at the beam overrides", Math.abs(c15.e - 0.18) < 1e-9 && c15.eSrc === "set");
 const mdl = widenDetailModel(t, DEFAULT_WIDEN_TYPES[2], mat);
 ok("section drawing finite", mdl.items.every((p) => Object.values(p).every((v) => typeof v !== "number" || Number.isFinite(v))) && mdl.box.every(Number.isFinite));
 const r4 = analyzeFrame(model((f) => ({ ...f, walls: [wall] })));
