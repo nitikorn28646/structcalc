@@ -90,5 +90,12 @@ ok("same model without the type change: no depth joint on y = 0", !analyzeFrame(
   ok("non-contact lap: into the higher beam 1.3·ld, Δ 0.10 ≤ 15 cm and ≤ lap/5 → lapOk", rws.every((r) => Math.abs(r.lapLo - 1.3 * Math.max(r.ld, 0.3)) < 1e-9 && r.lapOk));
   const rBig = analyzeFrame(porch(-0.2)), rwB = levelJoints(porch(-0.2), rBig).filter((r) => r.needCut);
   ok("Δ 0.20 > 15 cm → lap not allowed: joint NG + warning", rwB.length > 0 && rwB.every((r) => !r.lapOk && !r.ok) && rBig.warnings.some((w) => w.includes("12.14.2.3")), rwB[0]?.mode); }
+{ // walls on a lowered beam (user 2026-11-20 "ผนังลอยจากคาน"): an auto-height wall is taller by the drop → load × (h + Δ)/h; a typed height is kept
+  const wl = (auto) => ({ a: [0, 0], b: [4, 0], kind: "brick", h: 3, hAuto: auto, open: 0, layers: 1 });
+  const rA = analyzeFrame(porch(-0.1, {})), m0 = porch(); m0.floors[1].walls = [wl(true)]; const rW = analyzeFrame(m0);
+  const m1 = model((f) => { f.walls = [wl(true)]; return f; }), rF = analyzeFrame(m1);
+  const m2 = porch(); m2.floors[1].walls = [wl(false)]; const rT = analyzeFrame(m2);
+  const qL = rW.floors[1].walls[0].q, qF = rF.floors[1].walls[0].q, qT = rT.floors[1].walls[0].q;
+  ok("auto-height wall on the beam lowered 0.10: q = q(flat) × 3.10/3.00; typed height unchanged", Math.abs(qL - qF * 3.1 / 3) < 1e-6 && Math.abs(qT - qF) < 1e-6, `${qF.toFixed(1)} → ${qL.toFixed(1)} / typed ${qT.toFixed(1)}`); }
 console.log(bad ? `levels-check: ${bad} FAIL` : "levels-check: all ok");
 process.exit(bad ? 1 : 0);

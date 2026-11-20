@@ -233,7 +233,11 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                     if (sill + o.h < H - 0.01) parts.push([a, b, sill + o.h, H - sill - o.h]);
                     x = b; }
                   if (x < L - 0.01) parts.push([x, L, 0, H]);
-                  return <group key={`w${i}`}>{(w0.gable ? [[0, L, 0, w.h]] : parts).map(([a, b, z, h], j) => <Box key={j} p={P(a)} q={P(b)} w={th} z0={Zk + z} h={h} color={col} opacity={0.6} />)}</group>;
+                  // base = top of what the wall stands on (user 2026-11-20 "ผนังลอยจากคาน"): a lowered beam / slab (levels) puts the wall lower
+                  const r = an?.walls?.[i], lns = (r?.on ?? []).map((o) => an?.lines?.find((l) => l.id === o.line)).filter(Boolean);
+                  const tops = lns.flatMap((ln) => (ln.parts ?? []).map((pt) => an?.levels?.beams?.[pt.i]?.top).filter(Number.isFinite));
+                  const zb = tops.length ? Math.min(...tops) : r?.panel ? an?.panels?.find((p) => p.key === r.panel)?.dz ?? 0 : 0;
+                  return <group key={`w${i}`}>{(w0.gable ? [[0, L, 0, w.h]] : parts).map(([a, b, z, h], j) => <Box key={j} p={P(a)} q={P(b)} w={th} z0={Zk + (z === 0 ? zb : z)} h={z === 0 ? h - zb : h} color={col} opacity={0.6} />)}</group>;
                 })}
                 {on.stair && an?.stairs.map((st, i) => <Stair key={`s${i}`} st={st} raw={fl.stairs?.[st.i] ?? {}} zb={Zk - stairRiseOf(frame, k, fl.stairs?.[st.i] ?? {})} zt={Zk} color="#cfd4dc" />)}
               </group>

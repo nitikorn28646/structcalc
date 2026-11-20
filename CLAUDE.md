@@ -830,3 +830,6 @@ levels-check 24/24.
 Non-contact lap at step joints (2026-11-20 review): the bars at the lower level (lower beam's top + added) overlap the higher beam's top bars Δ higher
 → into the higher beam 1.3·ld (class B, 12.15.1), Δ ≤ 15 cm and ≤ lap/5 (12.14.2.3) — else lapOk false, joint NG + warning (frame.js uses
 levelJoints). Rows carry lapLo / lapAdd / lapOk; detail dims "ทาบ ≥ 1.3ld"; report / DXF / check sheet texts updated. levels-check 26/26.
+WALLS ON LOWERED BEAMS (2026-11-20, user "ผนัง 3D ลอยจากคาน"): Frame3D walls start at the top of what they stand on (min lv.top of the beams of their line,
+or the panel dz) instead of the floor level, top unchanged; floor.js walls: an auto-height wall (hAuto) on a lowered beam / slab is taller by the drop
+→ q = wallLoad(h + drop) (gable: drop/2); typed heights unchanged. levels-check 27/27.

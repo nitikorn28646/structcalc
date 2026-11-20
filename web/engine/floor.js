@@ -648,11 +648,15 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   for (const ln of lines) { ln.slab = []; ln.torsion = []; }
   // walls: on a beam → line load on that beam; on a slab → spread over that panel
   const walls = wallsOf(floor).map((w, i) => {
-    const q = wallLoad(w, wallTypes), L = dist(w.a, w.b), u = sub(w.b, w.a).map((v) => v / (L || 1)), out = { i, q, len: L, on: [] };
+    const q0 = wallLoad(w, wallTypes), L = dist(w.a, w.b), u = sub(w.b, w.a).map((v) => v / (L || 1)), out = { i, q: q0, len: L, on: [] };
+    // levels (user 2026-11-20 "ผนังลอยจากคาน"): an auto-height wall standing on a lowered beam / slab is taller by the drop (its top stays under the
+    // beam above) → weight for that height; a typed height is kept as typed
+    const qAt = (drop) => (w.hAuto && drop > 0.001 ? wallLoad({ ...w, h: (w.h ?? 3) + (w.gable ? drop / 2 : drop) }, wallTypes) : q0);
+    const lineDrop = (ln, a, b) => Math.max(0, ...ln.parts.filter((pt) => Math.min(pt.t1, b) - Math.max(pt.t0, a) > 1e-6).map((pt) => -(beamLv[pt.i]?.top ?? 0)));
     for (const ln of flat) {
       if (Math.abs(cross(ln.u, u)) > 1e-6 || Math.abs(cross(ln.u, sub(w.a, ln.A))) > TOL) continue;
       const proj = (p) => (p[0] - ln.A[0]) * ln.u[0] + (p[1] - ln.A[1]) * ln.u[1], a = Math.max(0, Math.min(proj(w.a), proj(w.b))), b = Math.min(ln.L, Math.max(proj(w.a), proj(w.b)));
-      if (b - a > 0.05) { const wt = wallTypes.find((x) => x.id === w.kind); ln.slab.push({ a, b, wa: q, wb: q, g: "WALL", from: `ผนัง ${i + 1}`, tw: wallThick(wt) * (w.layers ?? 1) + ((w.layers ?? 1) > 1 ? 0.03 : 0) }); out.on.push({ line: ln.id, len: b - a }); }
+      if (b - a > 0.05) { const wt = wallTypes.find((x) => x.id === w.kind), q = qAt(lineDrop(ln, a, b)); out.q = q; ln.slab.push({ a, b, wa: q, wb: q, g: "WALL", from: `ผนัง ${i + 1}`, tw: wallThick(wt) * (w.layers ?? 1) + ((w.layers ?? 1) > 1 ? 0.03 : 0) }); out.on.push({ line: ln.id, len: b - a }); }
     }
     // a wall drawn on a side widening (พอกข้าง, user 2026-11-20): parallel to a widened beam, standing on its widened side within the strip
     // (axis distance ≤ 0.25 + w) and over the widened part → a line load on that beam, its real eccentricity e = the distance drawn
@@ -666,7 +670,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
         const [r0, r1] = widenRange(bm, ln, pt, wd), proj = (p) => (p[0] - ln.A[0]) * ln.u[0] + (p[1] - ln.A[1]) * ln.u[1];
         const a = Math.max(r0, Math.min(proj(w.a), proj(w.b))), b = Math.min(r1, Math.max(proj(w.a), proj(w.b)));
         if (b - a <= 0.05) continue;
-        const wtT = wallTypes.find((x) => x.id === w.kind);
+        const wtT = wallTypes.find((x) => x.id === w.kind), q = qAt(lineDrop(ln, a, b)); out.q = q;
         ln.slab.push({ a, b, wa: q, wb: q, g: "WALL", from: `ผนัง ${i + 1}`, tw: wallThick(wtT) * (w.layers ?? 1) + ((w.layers ?? 1) > 1 ? 0.03 : 0), e: Math.abs(d), strip: j });
         out.on.push({ line: ln.id, len: b - a, widen: true });
       }
@@ -674,7 +678,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     }
     if (!out.on.length && L > 0.05) {
       const pn = inPanel([(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2]);
-      if (pn && pn.st !== "GS") { pn.g.WALL += (q * L) / pn.area; out.panel = pn.key; }
+      if (pn && pn.st !== "GS") { const q = qAt(Math.max(0, -(floor.panels?.[pn.key]?.dz ?? 0))); out.q = q; pn.g.WALL += (q * L) / pn.area; out.panel = pn.key; }
       else if (!pn) warnings.push(`ผนัง ${i + 1} ไม่อยู่บนคานหรือพื้น — ไม่ได้นำน้ำหนักไปใช้`);
       else out.ground = true;
     }
