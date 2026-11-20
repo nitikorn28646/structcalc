@@ -78,7 +78,7 @@ export function jointDetailModel(r, mat = {}, o = {}) {
   }
   // dimensions
   dimH(0, c, Math.min(yLo, botH - 0.3) - 0.12, `เสา ${cm(c)} ซม.`, false);
-  dimH(0, xh, 0.12, r.hook?.ok ? `ฝังในเสา ${cm(ldh)} ซม. — ผ่าน` : `ฝังได้ ${cm(xh)} ซม. (ต้องการ ${cm(ldh)}) → คิดคานลึก h − Δ ที่หัวเสา`);
+  dimH(0, xh, 0.12, r.hook?.ok ? `ฝังในเสา ${cm(ldh)} ซม. — ผ่าน` : `ฝังได้ ${cm(xh)} ซม. ไม่ถึง ${cm(ldh)} → หัวเสาคิดคานลึกแค่ ${cm(h1 - dz)} ซม. (h − Δ)`);
   { const xl = -Math.min(ld, Lb - 0.1), yd = botH - 0.16; line(xl, yl - 0.02, xl, yd - 0.03, "C-DIM", true); line(0, botH - 0.02, 0, yd - 0.03, "C-DIM"); dimH(xl, 0, yd, `≥ ld ${cm(ld)} ซม.`, false); }
   dimV(-Lb - 0.15, botH, 0, `${cm(h1)}`); dimV(c + Lb + 0.15, botL, -dz, `${cm(h2)}`); dimV(c + Lb + 0.32, -dz, 0, `Δ ${cm(dz)}`);
   line(c + 0.05, 0, c + Lb + 0.36, 0, "C-DIM", true);
