@@ -740,3 +740,12 @@ LEVELS: NO NOTCH BEAMS (2026-11-20, user "ไม่ต้องทำเป็�
 (step always 0 → no hCut from notches; the notch / PS-bearing code stays dormant), lv.up = how much the other slab stands above the beam top
 (inspector note: curb on the beam or let that slab span the other way). Step joints / hook rule unchanged. Plan shows "หลังคาน −0.10" only;
 3D draws plain lowered beams. User's file (both porches −0.10, locked types): 39/39, 8 joints all hooked in the 30×30 columns. levels-check 17/17, E2E 47/47.
+LEVELS P2 (2026-11-20): engine/levelDetail.js — levelJoints(frame, res) = every step joint (floor / line / point / Δ / higher + lower type / column
+depth along the beam from res.columns lv / hookFit / ld of the lower top bars (devLength, top) / mode / ok); jointGroups (same types, column, Δ);
+jointDetailModel(row, mat) = elevation primitives (column broken top/bottom with ties, higher beam left, lower beam right, top bars of the higher
+beam hooked 90° down in the column with ldh dim, top bars of the lower beam through the column into the higher beam ≥ ld, bottom bars into the
+column (hooked up when the bottoms differ, else straight through), stirrups, h / Δ / column dims, labels citing ACI 318-11 12.5 / 12.12.1 /
+12.11.1, title + 1:20). src/LevelJoints.jsx: LevelJointTable, JointDetail (stairSvg renderer), LevelJointsCard (step 7 Type คาน, below the type
+figures), LEVEL_REFS text. DXF: beamSheetsDxf(..., extra {joints, groups with model}) adds sheet(s) "แบบขยายคาน — คานต่างระดับ" (details packed,
+table of every joint + references; overflow to "(ต่อ)" sheets). Report: beams chapter Sub "คานต่างระดับ (พื้นลดระดับ)" (method + refs + table +
+≤ 4 detail figures). No notch-beam section (user dropped notch beams). levels-check 18/18, report-editions ALL OK, E2E 47/47, ezdxf 0 errors.

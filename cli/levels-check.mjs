@@ -3,6 +3,7 @@
 // warnings (depth left, secondary bottom). Loads must not change with levels. node cli/levels-check.mjs
 import { analyzeFrame } from "../web/engine/frame.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, checkSpan, cutType } from "../web/engine/floor.js";
+import { levelJoints, jointGroups, jointDetailModel } from "../web/engine/levelDetail.js";
 const mat = { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 };
 const Bm = (a, b, x = {}) => ({ a, b, type: 4, ...x }); // fixed type B5 20×50 → self weight independent of the levels
 const xs = [0, 4, 8], ys = [0, 1.5, 5.5];
@@ -59,6 +60,10 @@ ok("secondary bottom below the main beam bottom → warned", r3.warnings.some((w
 const r6 = analyzeFrame(model((f) => { f.beams[bi(f, [4, 1.5], [8, 1.5])].dz = -0.05; return f; }));
 ok("beam.dz overrides", r6.floors[1].levels.beams[bi(floor("x", 3, 0.1), [4, 1.5], [8, 1.5])].top === -0.05);
 ok("3D frame still builds with levels", !r1.frame3d?.error);
+// joint table + detail drawing (P2): one row per joint, every primitive finite
+const fm = porch(), rows = levelJoints(fm, r1), gs = jointGroups(rows), mdl = gs.map((g) => jointDetailModel(g, mat));
+const finite = (m) => m.items.every((p) => Object.values(p).every((v) => typeof v !== "number" || Number.isFinite(v)) && (!p.pts || p.pts.flat().every(Number.isFinite))) && m.box.every(Number.isFinite);
+ok("joint table: one row per step joint, detail drawings finite", rows.length === an.levels.steps.length && rows.length >= 2 && mdl.every(finite) && rows.every((r) => r.mode && r.ld > 0), `${rows.length} rows · ${gs.length} details`);
 
 console.log(bad ? `levels-check: ${bad} FAIL` : "levels-check: all ok");
 process.exit(bad ? 1 : 0);

@@ -139,7 +139,7 @@ export const STD_GROUND_BEAMS = [
   { name: "GB", b: 0.2, h: 0.2, top: "2-RB 9", topX: "", bot: "2-RB 9", botX: "", st: "RB 6", stSets: 1, sSup: 0.2, sMid: 0.2 },
   { name: "GB-A", b: 0.2, h: 0.2, top: "5-RB 9", topX: "", bot: "2-RB 9", botX: "", st: "RB 6", stSets: 1, sSup: 0.2, sMid: 0.2 },
 ];
-export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบขยายคาน") {
+export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบขยายคาน", extra = {}) {
   const own = new Set(itemsIn.map((x) => x.t.name)), std = STD_GROUND_BEAMS.filter((t) => !own.has(t.name)).map((t) => ({ t, ext: { spans: 1, cant: 0 }, std: true }));
   const items = [...std, ...itemsIn]; // first → on sheet 1
   const d = new Dxf(), th = 0.035, cellW = (t) => Math.max(1.2, t.b + 1.0), pad = 0.18, tagH = 0.15;
@@ -198,6 +198,30 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
       notes.forEach((s, i) => { const parts = split2(s, 62); parts.forEach((q, j) => d.text(nx, BY0 + 1.85 - i * 0.16 - j * 0.07, i ? 0.042 : 0.056, q, i ? "C-TEXT" : "C-TITLE", 0, 0)); });
     }
   });
+  // beams at different levels (2026-11-20): one more sheet — the typical joint detail per distinct case (engine/levelDetail.js, drawn
+  // at true size, 1:20 note) side by side, and the table of every joint under them
+  if (extra.joints?.length) {
+    const gs = extra.groups ?? [], AW2 = TX - BX0 - 0.3, rowsN = extra.joints.length, tableH = 0.55 + 0.085 * rowsN;
+    let X = sheets.length * (SW + 0.5), first = true, x = BX0 + 0.15, yTop = BY1 - 0.15, rowH = 0;
+    const newSheet = (t) => { X = sheets.length * (SW + 0.5); frame(d, X, project, t); sheets.push([]); x = BX0 + 0.15; yTop = BY1 - 0.15; rowH = 0; };
+    newSheet(`${title} — คานต่างระดับ`);
+    const bottom = () => BY0 + 0.15 + (first ? tableH : 0);
+    for (const g of gs) { const m = g.model, [a, b, c, e] = m.box, w = c - a, h = e - b;
+      if (x + w > BX0 + 0.15 + AW2 && x > BX0 + 0.2) { x = BX0 + 0.15; yTop -= rowH + 0.15; rowH = 0; }
+      if (yTop - h < bottom()) { if (first) { tableAt(yTop - rowH - 0.2); first = false; } newSheet(`${title} — คานต่างระดับ (ต่อ)`); }
+      emitModel(d, m, X + x - a, yTop - e); x += w + 0.2; rowH = Math.max(rowH, h); }
+    if (first) tableAt(yTop - rowH - 0.3);
+    function tableAt(y0) { // table of every joint
+      let y = y0; const th = 0.045, X0 = X + BX0 + 0.2;
+      d.text(X0, y, 0.06, "ตารางจุดคานต่างระดับ", "C-TITLE", 0, 0); y -= 0.12;
+      const cols = [0, 0.9, 1.8, 2.4, 3.4, 4.4, 5.2, 6.3], head = ["ชั้น / แนว", "ตำแหน่ง", "ต่าง (ซม.)", "คานตัวสูง", "คานตัวต่ำ", "เสา (ซม.)", "ldh ต้อง / มี (ซม.)", "การตรวจ"];
+      head.forEach((t, i) => d.text(X0 + cols[i], y, th, t, "C-TEXT", 0, 0)); d.line(X0 - 0.05, y - 0.03, X + TX - 0.15, y - 0.03, "C-FRAME2"); y -= 0.1;
+      for (const r of extra.joints) {
+        [`${r.floorName} / ${r.line + 1}`, `(${r.p[0].toFixed(2)}, ${r.p[1].toFixed(2)})`, (r.dz * 100).toFixed(0), r.hi?.name ?? "", r.lo?.name ?? "", r.along ? (r.along * 100).toFixed(0) : "-",
+          r.hook?.ldh ? `${r.hook.ldh} / ${r.hook.avail}` : "-", r.mode].forEach((t, i) => d.text(X0 + cols[i], y, th, t, "C-TEXT", 0, 0)); y -= 0.085; }
+      d.text(X0, y - 0.04, 0.04, "อ้างอิง ACI 318-11 (ฐานของ ว.ส.ท.): 12.5 ขอมาตรฐาน ldh · 12.12.1 เหล็กโมเมนต์ลบยึดผ่านจุดรองรับ · 12.11.1 เหล็กล่างเข้าจุดรองรับ ≥ 15 ซม. · 7.1 ขอ 90° ยาว 12db", "C-TEXT", 0, 0);
+    }
+  }
   return { dxf: d.toString(), sheets: sheets.length };
 }
 

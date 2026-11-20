@@ -39,6 +39,8 @@ import { downloadDxf, framePlanModel } from "./drawings.js";
 import { LateralChoice, LateralPanel } from "./LateralPanel.jsx";
 import { FootingTypes } from "./FootingTypes.jsx";
 import { BeamTypeFigures, ColumnTypeFigures } from "./DesignFigures.jsx";
+import { LevelJointsCard } from "./LevelJoints.jsx";
+import { levelJoints, jointGroups } from "../engine/levelDetail.js";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
 import WallTypesPanel from "./WallTypesPanel.jsx";
 import LoadLibPanel from "./LoadLibPanel.jsx";
@@ -305,6 +307,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
   const [show, setShow] = useState({ DL: true, SDL: true, WALL: true, LL: true, SP: true }), wallTypes = frame.wallTypes ?? DEFAULT_WALL_TYPES;
   const cur = Math.min(frame.cur ?? 0, frame.floors.length - 1), fl = frame.floors[cur], types = frame.beamTypes, cTypes = frame.colTypes;
   const res = useMemo(() => resIn ?? analyzeFrame(frame), [resIn, frame]), an = res.floors[cur];
+  const lvJ = useMemo(() => { const rows = levelJoints(frame, res); return { rows, groups: jointGroups(rows) }; }, [frame, res]);
   const setFloor = (patch) => set("floors", frame.floors.map((f, i) => (i === cur ? { ...f, ...patch } : f)));
   // move / copy what is selected on this floor to another floor (user 2026-11-19: "เขียนคานผิดชั้น อยากย้ายคานหรือพื้นไปชั้นอื่น").
   // items = [{ kind, i, obj }] from the board. Same plan position on the other floor; nothing that is already there is doubled
@@ -469,7 +472,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       </Card>
       </div>
     </div>
-  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} cur={cur} frame={frame} onRenumber={() => { const r = renumberTypes(frame); set("beamTypes", r.beamTypes); set("floors", r.floors); }} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} project={project} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /></div>
+  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} cur={cur} frame={frame} onRenumber={() => { const r = renumberTypes(frame); set("beamTypes", r.beamTypes); set("floors", r.floors); }} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} project={project} joints={lvJ} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /><LevelJointsCard rows={lvJ.rows} groups={lvJ.groups} mat={frame.mat} /></div>
     : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} delType={(i) => { const r = deleteColType(frame, i); set("colTypes", r.colTypes); set("colPick", r.colPick); }} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (() => {

@@ -9,6 +9,8 @@ import { beamLayersOf } from "./DesignFigures.jsx";
 import { extraSpec } from "../engine/beamDetail.js";
 import { CalcLink, Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
 import { stairSections } from "./stairSection.js";
+import { LEVEL_REFS, LevelJointTable, JointDetail } from "./LevelJoints.jsx";
+import { levelJoints, jointGroups } from "../engine/levelDetail.js";
 import { stairSvgString } from "./stairSvg.js";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
@@ -236,6 +238,14 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
               <BeamTypeSheet key={i} t={t} g={g} count={list.length} floorName={floors[g.floor].name} mat={mat} ext={extraSpec(i, spans)} />
             );
           })}
+          {(() => { const rows = levelJoints(frame, res); if (!rows.length) return null; const gs = jointGroups(rows); return (<>
+            <Sub>คานต่างระดับ (พื้นลดระดับ)</Sub>
+            <Note>แผ่นพื้นที่กำหนดระดับต่ำกว่าระดับชั้น (เช่น เฉลียง −0.10 ม.) — คานที่แผ่นนั้นวางอยู่ลดระดับลงทั้งตัวตามแผ่นที่ต่ำที่สุด; จุดที่คานแนวเดียวกันต่างระดับมาชนกันที่เสา: เหล็กบนของคานตัวสูงงอขอ 90° ฝังในเสา ยาว ≥ ldh,
+              เหล็กบนของคานตัวต่ำวิ่งผ่านเสาเข้าไปในคานตัวสูง ≥ ld, เหล็กล่างเข้าเสา ≥ 15 ซม. ถ้าเสายาวไม่พอให้ขอยึด (ldh &gt; ความลึกเสาตามแนวคาน − 5 ซม.) ฝั่งคานตัวสูงที่หัวเสาตรวจด้วยความลึก h − ระยะต่าง
+              (เหล็กบนที่ยึดได้อยู่ระดับคานตัวต่ำ) และต้องผ่านทั้งสองกรณี · {LEVEL_REFS}</Note>
+            <LevelJointTable rows={rows} small />
+            {gs.slice(0, 4).map((g, i) => <Figure key={i} caption={`รายละเอียดคานต่างระดับที่หัวเสา — ${g.hi?.name} / ${g.lo?.name} · ต่าง ${fmt(g.dz * 100, 0)} ซม. · เสา ${g.along ? fmt(g.along * 100, 0) : "-"} ซม. (${g.n} จุด)`}><JointDetail g={g} mat={mat} px={140} /></Figure>)}
+          </>); })()}
         </Sec>}
 
         {show("back", "columns") && <Sec id="c-columns" n={N("c-columns")} th="เสา" en="Column design"
