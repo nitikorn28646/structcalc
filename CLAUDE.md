@@ -761,3 +761,13 @@ MERGED THROUGH BARS (2026-11-20, user "ทำไมไม่ใส่เป็�
 extras that run the whole span in every span (fullExtras) and are the same size as the through bars are merged into one count ("3-DB 12 มม.") in the
 notes (sectionNotes) and drawn as through bars (beamDetailDxf section, Details BeamDetail). Checks unchanged (mid-span still counts the type's
 through bars only).
+DETAILING AUDIT (2026-11-20, user "ตรวจเช็คการเสริมเหล็กใหม่ อย่างละเอียด"): cli/audit-detail.mjs <project.json> [panelKey=dz …] — independent re-check of
+what the drawings say vs what was checked + detailing rules: beams B1 drawn steel = checked steel + notes = drawn bars · B2 top extra length ≥
+cut-off of every span · B3 bottom extra zone · B4 ACI 12.11.1 · B5 layers · B6 ≥ 2 through bars · B7 clear spacing (7.6.1) · B8 cantilever back
+anchorage · B9 level joints · B10 span passes; columns C1 ρ 1–8 % · C2 ≥ 4 bars · C3 clear spacing (7.6.3) · C4 ties (7.10.5) · C5; slabs S1
+spacing ≤ 3t / 5t / 45 cm · S2 As ≥ required and ≥ ρ·b·t by the bar's own grade · S3; F1 footings. FOUND + FIXED: slab / stair minimum steel —
+the frozen slab.js stripDesign never raises main steel to the minimum (spacing only capped at 3t) and takes the temperature ratio from the MAIN
+bars' grade (stair DB main → RB 9 temp at 0.0018 instead of 0.0025). slabDesign.js (outside the frozen file) now closes the spacing so every bar
+set has As ≥ ρ·b·t by its own grade (SR24 0.0025 · SD30 0.0020 · SD40 0.0018), row.minFix + texts rewritten, report note. User's file: two-way
+slabs RB 9 @0.29/0.30 → @0.25, stairs DB 12 @0.45 → @0.41 and RB 9 @0.23 → @0.17; all other checks pass (39 spans, 53 columns, 18 footings).
+Yasothon / _big / _roof3: only the known design failures (tie spacing @0.20 > 16db on 4 columns, overloaded transfer girder …).

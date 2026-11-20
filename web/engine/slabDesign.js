@@ -2,6 +2,7 @@
 // Edge continuity: an edge shared with another slab panel is continuous. PS (precast) and GS (on ground) are not designed here.
 import { cantilever, oneWay, stair, twoWay } from "./slab.js";
 import { stairRT } from "./floor.js";
+import { BARS } from "./tables.js";
 
 const close = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.03;
 // share of edge p-q that lies on an edge of another slab panel
@@ -63,6 +64,27 @@ export function designSlabs(an, floor, mat, sm = {}) {
       out.push({ name: `บันได ${i + 1}`, si: i, kind: "ST", L: r0.Lr, r, text: `${r.mainText} (หลัก) · ${r.tempText}`, ok: r.nOk && r.minTOk && r.dOk && r.VcOk && r.McOk && r.uOk });
     } catch (e) { out.push({ name: `บันได ${i + 1}`, si: i, kind: "ST", note: e.message, ok: false }); }
   });
+  // MINIMUM STEEL (audit 2026-11-20, user "ตรวจเช็คการเสริมเหล็กอย่างละเอียด"): the frozen strip design (slab.js, Excel-replicated) caps the main-bar
+  // spacing at 3t / 45 cm but never raises it to the minimum flexural steel of a slab, and takes the temperature ratio from the MAIN bars'
+  // grade even when the temperature bars are RB (a stair with DB main bars got RB 9 at 0.0018 instead of 0.0025). Here, outside the frozen
+  // file: every bar set of a slab / cantilever slab / stair gets As ≥ ρ·b·t with ρ by ITS OWN grade (the sheet's own table: SR24 0.0025 ·
+  // SD30 0.0020 · SD40 0.0018 — ACI 318-11 7.12.2.1 / 10.5.4 slabs: minimum flexural steel = shrinkage steel); the spacing is closed to
+  // the cm below when needed (never opened), recorded in row.minFix and the texts rewritten. Bond / shear only get better with more bars.
+  const rho = (b) => (String(b).startsWith("RB") ? 0.0025 : (mat.fy ?? 4000) >= 4000 ? 0.0018 : 0.002);
+  for (const row of out) {
+    const r = row.r; if (!r) continue;
+    const t = row.kind === "ST" ? stairRT(floor.stairs[row.si]).t : row.kind === "C" ? an.cants[row.ci]?.t : an.panels.find((pn) => pn.key === row.key)?.t;
+    if (!(t > 0)) continue;
+    const fix = (sKey, tKey, label) => { const m = /^(\w+ \d+) @ ([\d.]+)/.exec(r[tKey] ?? ""); if (!m || !BARS[m[1]]) return;
+      const A = BARS[m[1]].A, need = rho(m[1]) * 100 * t * 100, s0 = +m[2];
+      if (A / s0 >= need - 1e-9) return;
+      const s1 = Math.floor((A / need) * 100 + 1e-9) / 100;
+      (row.minFix ??= []).push({ label, bar: m[1], from: s0, to: s1, need: +need.toFixed(2), rho: rho(m[1]) });
+      r[sKey] = s1; r[tKey] = `${m[1]} @ ${s1}`; };
+    if (r.shortText !== undefined) { fix("sShort", "shortText", "ด้านสั้น"); fix("sLong", "longText", "ด้านยาว"); if (row.minFix) row.text = `${r.shortText} (สั้น) · ${r.longText} (ยาว)`; }
+    else { fix("sMain", "mainText", row.kind === "C" ? "บน" : "หลัก"); fix("sTemp", "tempText", "กันร้าว");
+      if (row.minFix) row.text = row.kind === "ST" ? `${r.mainText} (หลัก) · ${r.tempText}` : row.kind === "C" ? row.text.replace(/^\S+ \S+ @ [\d.]+/, r.mainText).replace(/· \S+ \S+ @ [\d.]+ \(กันร้าว\)/, `· ${r.tempText} (กันร้าว)`) : `${r.mainText} (หลัก) · ${r.tempText} (กันร้าว)`; }
+  }
   return out;
 }
 
