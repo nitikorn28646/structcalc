@@ -426,8 +426,10 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, wide
                 {/* true width of the designed (or chosen) type, like the columns; never under 4 px; thin centre line on top */}
                 <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={Math.max(bw(i), 4 * k)} strokeLinecap="square" strokeOpacity={step === "wall" || step === "slab" ? 0.35 : 0.55} strokeDasharray={b.lvl > 0 ? `${10 * k} ${6 * k}` : undefined} />
                 {(() => { const wt = b.widen ? (widenTypes ?? [])[b.widen.type] : null; if (!wt || b.arc?.s) return null; // side widening: a hatched strip on its side
-                  const sg = b.widen.side ?? 1, o1 = (bw(i) / 2) * sg, o2 = (bw(i) / 2 + wt.w) * sg, P4 = [[b.a, o1], [b.b, o1], [b.b, o2], [b.a, o2]].map(([p, o]) => `${p[0] + n[0] * o},${-(p[1] + n[1] * o)}`).join(" ");
-                  const tq = [m[0] + n[0] * (o2 + 10 * k * sg), m[1] + n[1] * (o2 + 10 * k * sg)];
+                  const sg = b.widen.side ?? 1, o1 = (bw(i) / 2) * sg, o2 = (bw(i) / 2 + wt.w) * sg, f0 = Math.max(0, Math.min(L, b.widen.from ?? 0)), f1 = Math.max(f0, Math.min(L, b.widen.to ?? L));
+                  const at = (t) => [b.a[0] + ((b.b[0] - b.a[0]) * t) / L, b.a[1] + ((b.b[1] - b.a[1]) * t) / L], pa = at(f0), pb = at(f1), mm = at((f0 + f1) / 2); // only the widened part
+                  const P4 = [[pa, o1], [pb, o1], [pb, o2], [pa, o2]].map(([p, o]) => `${p[0] + n[0] * o},${-(p[1] + n[1] * o)}`).join(" ");
+                  const tq = [mm[0] + n[0] * (o2 + 10 * k * sg), mm[1] + n[1] * (o2 + 10 * k * sg)];
                   return <g pointerEvents="none"><polygon points={P4} fill="#12b76a" fillOpacity={0.18} stroke="#12b76a" strokeWidth={1 * k} />{txt(tq, wt.name, "#039855", 10, "middle", 700)}</g>; })()}
                 {b.lvl > 0 && txt([m[0] + n[0] * (12 * k + bw(i) / 2), m[1] + n[1] * (12 * k + bw(i) / 2)], `คานกลางชั้น +${(+b.lvl).toFixed(2)}`, "#7a5af8", 10, "middle", 600)}
                 {(() => { const lv = an?.levels?.beams?.[i]; if (!lv || b.lvl > 0 || (!lv.step && Math.abs(lv.top) < 0.005)) return null; const off = 12 * k + bw(i) / 2; // levels: lowered beam / step beam

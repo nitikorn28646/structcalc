@@ -46,9 +46,9 @@ export function WidenTypesCard({ frame, set, res }) {
           <td className="px-1"><button disabled={count(j) > 0} onClick={() => del(j)} className="text-[11px] text-red-600 disabled:opacity-30" title={count(j) ? "มีคานใช้ type นี้อยู่" : "ลบ"}>ลบ</button></td>
         </tr>))}</tbody></table>
       {uses.length > 0 && <>
-        <table className="mt-3 w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">{["ชั้น / คาน", "พอก", "คาน", "น้ำหนักพอก", "ผนัง", "เยื้อง e", "แรงบิด m", "Vu ≤ φVn (กก./ม.)", "ผล"].map((h) => <th key={h} className="px-1 py-1">{h}</th>)}</tr></thead>
+        <table className="mt-3 w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">{["ชั้น / คาน", "พอก", "ยาว", "คาน", "น้ำหนักพอก", "ผนัง", "เยื้อง e", "แรงบิด m", "Vu ≤ φVn (กก./ม.)", "ผล"].map((h) => <th key={h} className="px-1 py-1">{h}</th>)}</tr></thead>
           <tbody>{uses.map((u, q) => { const c = u.check; return (<tr key={q} className="border-t border-gray-100">
-            <td className="px-1 py-0.5">{u.floorName} / {u.i + 1}</td><td className="px-1">{u.wt.name} {fmt(u.wt.w * 100, 0)} ซม.</td><td className="px-1">{u.type?.name} {fmt((u.type?.b ?? 0) * 100, 0)}×{fmt((u.type?.h ?? 0) * 100, 0)}</td>
+            <td className="px-1 py-0.5">{u.floorName} / {u.i + 1}</td><td className="px-1">{u.wt.name} {fmt(u.wt.w * 100, 0)} ซม.</td><td className="px-1">{c ? `${fmt(c.len, 2)} ม.${c.from ? ` (เริ่ม ${fmt(c.from, 2)})` : ""}` : "-"}</td><td className="px-1">{u.type?.name} {fmt((u.type?.b ?? 0) * 100, 0)}×{fmt((u.type?.h ?? 0) * 100, 0)}</td>
             <td className="px-1">{c ? `${fmt(c.qw, 0)} กก./ม.` : "-"}</td><td className="px-1">{c ? `${fmt(c.qWall, 0)} กก./ม.` : "-"}</td><td className="px-1">{c ? `${fmt(c.e, 3)} ม.` : "-"}</td>
             <td className="px-1">{c ? `${fmt(c.m, 0)} กก.-ม./ม.` : "-"}</td><td className="px-1">{c ? `${fmt(c.Vu, 0)} ≤ ${fmt(c.phiVn, 0)}` : "-"}</td>
             <td className={`px-1 font-semibold ${c?.ok ? "text-green-600" : "text-red-600"}`} title={c?.why?.join(" · ")}>{c ? (c.ok ? "ผ่าน" : "ไม่ผ่าน") : "-"}</td></tr>); })}</tbody></table>

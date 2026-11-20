@@ -246,8 +246,8 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
               ผนังบนคานถือว่าผิวนอกเสมอผิวนอกส่วนพอก เยื้องจากแกนคาน e = b/2 + w − t ผนัง/2; แรงบิดต่อเมตร m = q พอก·(b + w)/2 + q ผนัง·e เป็นแรงบิดสมดุล (รับเต็ม ไม่ลดค่า)
               รวมในการตรวจแรงบิดของคาน; รอยต่อแนวดิ่งระหว่างส่วนพอกกับคานตรวจแรงเฉือนผ่านรอยต่อ: Vu = 1.4(q พอก + q ผนัง) ≤ φVn = 0.75·μ·fy·Avf, μ = 1.4,
               Avf = ขาปลอกส่วนพอกที่ข้ามรอยต่อ (2 ขาต่อชุด) ซึ่งโอบเหล็กมุมของคาน และ Vn ≤ min(0.2f′c, 3.3 + 0.08f′c, 11 MPa)·Ac · {WIDEN_REFS}</Note>
-            <Table head={["ชั้น / คาน", "พอก", "คาน", "q พอก (กก./ม.)", "q ผนัง (กก./ม.)", "e (ม.)", "m (กก.-ม./ม.)", "Vu (กก./ม.)", "φVn (กก./ม.)", "ผล"]}
-              rows={uses.map((u) => { const c = u.check; return [`${u.floorName} / ${u.i + 1}`, `${u.wt.name} ${fmt(u.wt.w * 100, 0)} ซม.`, `${u.type?.name}`, c ? fmt(c.qw, 0) : "-", c ? fmt(c.qWall, 0) : "-", c ? fmt(c.e, 3) : "-", c ? fmt(c.m, 0) : "-", c ? fmt(c.Vu, 0) : "-", c ? fmt(c.phiVn, 0) : "-", c ? P("คาน")(c.ok) : "-"]; })} />
+            <Table head={["ชั้น / คาน", "พอก", "ยาว (ม.)", "คาน", "q พอก (กก./ม.)", "q ผนัง (กก./ม.)", "e (ม.)", "m (กก.-ม./ม.)", "Vu (กก./ม.)", "φVn (กก./ม.)", "ผล"]}
+              rows={uses.map((u) => { const c = u.check; return [`${u.floorName} / ${u.i + 1}`, `${u.wt.name} ${fmt(u.wt.w * 100, 0)} ซม.`, c ? `${fmt(c.len, 2)}${c.from ? ` (เริ่ม ${fmt(c.from, 2)})` : ""}` : "-", `${u.type?.name}`, c ? fmt(c.qw, 0) : "-", c ? fmt(c.qWall, 0) : "-", c ? fmt(c.e, 3) : "-", c ? fmt(c.m, 0) : "-", c ? fmt(c.Vu, 0) : "-", c ? fmt(c.phiVn, 0) : "-", c ? P("คาน")(c.ok) : "-"]; })} />
             {secs.slice(0, 6).map((u, q) => <Figure key={q} caption={`${u.wt.name} พอกข้าง ${fmt(u.wt.w * 100, 0)} ซม. บนคาน ${u.type?.name} (${u.n} คาน)`}><WidenSection t={u.type} wt={u.wt} mat={mat} px={180} /></Figure>)}
           </>); })()}
           {(() => { const rows = levelJoints(frame, res); if (!rows.length) return null; const gs = jointGroups(rows); return (<>

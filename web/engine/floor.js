@@ -511,6 +511,13 @@ export function spanReasons(c) {
 // floor.lineLoads = [{ a, b, q kg/m, name, g: SDL | WALL | LL (Load Cases page; none = SP) }] railings, walls typed as kg/m etc.; floor.pointLoads = [{ p, P kg, name }]; panels[key].extra kg/m² (SDL)
 // downLines: line loads handed down by the floor above (stair bottoms) → [{ a, b, q, g, from }]
 // minTypes: { drawnBeamIndex: typeIdx } lightest type allowed (set by the 3D-frame envelope of analyzeFrame)
+// the widened part of a drawn beam in line coordinates: beam.widen.from / to = distances from the beam's start point a (default the whole beam)
+export function widenRange(bm, ln, pt) {
+  const L = Math.hypot(bm.b[0] - bm.a[0], bm.b[1] - bm.a[1]), f = Math.max(0, Math.min(L, bm.widen?.from ?? 0)), g = Math.max(f, Math.min(L, bm.widen?.to ?? L));
+  const ta = (bm.a[0] - ln.A[0]) * ln.u[0] + (bm.a[1] - ln.A[1]) * ln.u[1], tb = (bm.b[0] - ln.A[0]) * ln.u[0] + (bm.b[1] - ln.A[1]) * ln.u[1], dir = tb >= ta ? 1 : -1;
+  const x0 = ta + dir * f, x1 = ta + dir * g, lo = Math.max(Math.min(x0, x1), pt?.t0 ?? -Infinity), hi = Math.min(Math.max(x0, x1), pt?.t1 ?? Infinity);
+  return [lo, Math.max(lo, hi)];
+}
 export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_WALL_TYPES, downLines = [], minTypes = null, colSize = null) {
   const warnings = [], cols = floor.columns ?? [];
   // beams inside the storey (beam.lvl = height above the floor below, m — e.g. a stair landing beam at mid level, user 2026-11-04):
@@ -952,7 +959,8 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
   const widen = (floor.beams ?? []).map((bm, i) => {
     const wd = bm.widen, wt = wd ? (mat.widenTypes ?? [])[wd.type] : null; if (!wt || !(wt.w > 0) || bm.lvl > 0) return null;
     const t = tyOf(i), fc = mat.fcBeam ?? mat.fcPrime, qw = CONC * wt.w * t.h;
-    const lns = flat.filter((l) => l.members.includes(i)), qWall = Math.max(0, ...lns.flatMap((l) => { const pt = l.parts.find((p) => p.i === i); return l.slab.filter((x) => x.g === "WALL" && Math.min(x.b, pt.t1) - Math.max(x.a, pt.t0) > 1e-6).map((x) => x.wa); }));
+    const lns = flat.filter((l) => l.members.includes(i)), rg = lns.map((l) => widenRange(bm, l, l.parts.find((p) => p.i === i))), len = Math.max(0, ...rg.map(([a, b]) => b - a));
+    const qWall = Math.max(0, ...lns.flatMap((l, k) => { const [a0, a1] = rg[k]; return l.slab.filter((x) => x.g === "WALL" && Math.min(x.b, a1) - Math.max(x.a, a0) > 1e-6).map((x) => x.wa); }));
     const tw = Math.max(0.1, ...lns.flatMap((l) => l.slab.filter((x) => x.g === "WALL").map((x) => x.tw ?? 0.1))), e = Number.isFinite(wd.e) ? Math.abs(wd.e) : t.b / 2 + wt.w - tw / 2;
     const st = BARS[wt.st] ?? { A: 0.283, d: 0.6 }, sets = wt.sets ?? 1, s = wt.s ?? 0.15, fyt = String(wt.st).startsWith("RB") ? mat.fys ?? 2400 : mat.fy ?? 4000;
     const Avf = (2 * st.A * sets) / s, Vu = 1.4 * (qw + qWall), phiVn = 0.75 * 1.4 * fyt * Avf, Ac = t.h * 100 * 100;
@@ -969,7 +977,7 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
       !(Vu <= phiVlim + 1e-6) && `Vu เกินขีดจำกัด φ·${vmax.toFixed(1)}·Ac`, !corner && "ส่วนพอกต้องมีเหล็กมุมบนและล่างอย่างน้อยด้านละ 1 เส้น (12.13.3)", !gapOk && `เหล็กยืนส่วนพอกห่าง ${gap.toFixed(2)} > 0.30 ม. — เพิ่มจำนวนเส้น (11.5.6.2)`,
       !AsOk && `เหล็กยืนส่วนพอก ${AsL.toFixed(2)} < ${AsMinL.toFixed(2)} ซม.² (ρ·w·h, 7.12.2.1)`, !sOk && `ระยะปลอกส่วนพอก ${s} > ${sMax.toFixed(2)} ม. (d/2 ≤ 0.30, 11.4.5.1)`].filter(Boolean);
     if (why.length) warnings.push(`คาน ${i + 1} พอกข้าง ${wt.name}: ${why.join(" · ")}`);
-    return { i, name: wt.name, w: wt.w, side: wd.side ?? 1, b: t.b, h: t.h, qw, qWall, e, tw, m: qw * (t.b + wt.w) / 2 + qWall * e, Vu, Avf, fyt, phiVn, vmax, phiVlim, sMax, gap, AsL, AsMinL, sReq: Math.floor(((0.75 * 1.4 * fyt * 2 * st.A * sets) / Math.max(Vu, 1)) * 40) / 40, ok: !why.length, why };
+    return { i, name: wt.name, w: wt.w, side: wd.side ?? 1, len, from: wd.from ?? 0, b: t.b, h: t.h, qw, qWall, e, tw, m: qw * (t.b + wt.w) / 2 + qWall * e, Vu, Avf, fyt, phiVn, vmax, phiVlim, sMax, gap, AsL, AsMinL, sReq: Math.floor(((0.75 * 1.4 * fyt * 2 * st.A * sets) / Math.max(Vu, 1)) * 40) / 40, ok: !why.length, why };
   });
   return { ...result, beamTypeOf, levels, widen, downOn, overlaps, panels, walls, cants, stairs, lineLoads, pointLoads, down, groups, warnings: [...new Set(warnings)], ok: result.spans.every((s) => s.ok) && !result.lines.some((l) => l.error) };
 }
@@ -1089,9 +1097,10 @@ function solveFloor(floor, lines, types, mat, typeOf, warnings, last) {
       for (const pt of ln.parts) {
         const bm = floor.beams[pt.i], wd = bm?.widen, wt = wd ? WT[wd.type] : null; if (!wt || !(wt.w > 0) || bm.lvl > 0) continue;
         const t = types[typeOf.get(pt.i)] ?? types[0], qw = CONC * wt.w * t.h, ew = (t.b + wt.w) / 2;
-        ln.slab.push({ a: pt.t0, b: pt.t1, wa: qw, wb: qw, g: "DL", from: "พอกข้าง" });
-        ln.torsion.push({ a: pt.t0, b: pt.t1, m: qw * ew, mL: 0, compat: false, from: `พอกข้าง ${wt.name}`, widen: true });
-        for (const sl of ln.slab.filter((l) => l.g === "WALL")) { const a = Math.max(sl.a, pt.t0), b = Math.min(sl.b, pt.t1); if (b - a < 1e-6) continue;
+        const [w0, w1] = widenRange(bm, ln, pt); if (w1 - w0 < 1e-6) continue; // a part of the beam only (user 2026-11-20: "อาจไม่ได้พอกทั้งเส้น")
+        ln.slab.push({ a: w0, b: w1, wa: qw, wb: qw, g: "DL", from: "พอกข้าง" });
+        ln.torsion.push({ a: w0, b: w1, m: qw * ew, mL: 0, compat: false, from: `พอกข้าง ${wt.name}`, widen: true });
+        for (const sl of ln.slab.filter((l) => l.g === "WALL")) { const a = Math.max(sl.a, w0), b = Math.min(sl.b, w1); if (b - a < 1e-6) continue;
           const e = Number.isFinite(wd.e) ? Math.abs(wd.e) : t.b / 2 + wt.w - (sl.tw ?? 0.1) / 2;
           ln.torsion.push({ a, b, m: sl.wa * Math.max(0, e), mL: 0, compat: false, from: `${sl.from} บนพอกข้าง`, widen: true }); }
       }

@@ -33,6 +33,11 @@ for (const [j, w] of DEFAULT_WIDEN_TYPES.entries()) { const r = analyzeFrame(mod
   ok(`default ${w.name} (w ${w.w}) meets the detailing rules on B1 20×40`, r.floors[1].widen[0].ok, r.floors[1].widen[0].why.join(" · ")); }
 const r5 = analyzeFrame({ ...model((f) => { f.walls = [wall]; f.beams[0].widen = { type: 0 }; return f; }), widenTypes: [{ ...DEFAULT_WIDEN_TYPES[2], top: "1-DB12", bot: "1-DB12" }] });
 ok("w 0.30 with one bar per face → spacing > 30 cm warned (11.5.6.2)", r5.floors[1].widen[0].why.some((x) => x.includes("11.5.6.2")));
+const r6 = analyzeFrame(model((f) => { f.walls = [wall]; f.beams[0].widen = { type: 0, from: 1, to: 2.5 }; return f; }));
+ok("partial widening 1.0–2.5 m: weight = q·1.5 m, torque over that part only", Math.abs(rz(r6) - rz(r0) - qw * 1.5) < 1e-6 * rz(r0) && Math.abs(r6.floors[1].widen[0].len - 1.5) < 1e-9
+  && Math.abs((r6.floors[1].spans.find((s) => s.members.includes(0)).MtEq ?? 0) - (sp0.MtEq ?? 0) - (m * 1.5) / 2) < 1e-6, `Δ ${(rz(r6) - rz(r0)).toFixed(2)} / ${qw * 1.5}`);
+const r7 = analyzeFrame(model((f) => { f.walls = [wall]; f.beams[0] = { ...f.beams[0], a: [4, 0], b: [0, 0], widen: { type: 0, from: 1, to: 2.5 } }; return f; }));
+ok("same part on a beam drawn the other way (from its own start)", Math.abs(rz(r7) - rz(r6)) < 1e-6 && Math.abs(r7.floors[1].widen[0].len - 1.5) < 1e-9);
 const mdl = widenDetailModel(t, DEFAULT_WIDEN_TYPES[2], mat);
 ok("section drawing finite", mdl.items.every((p) => Object.values(p).every((v) => typeof v !== "number" || Number.isFinite(v))) && mdl.box.every(Number.isFinite));
 const r4 = analyzeFrame(model((f) => ({ ...f, walls: [wall] })));

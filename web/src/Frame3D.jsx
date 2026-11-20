@@ -212,7 +212,8 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                 {on.beam && fl.beams.map((b, i) => { // side widening (พอกข้าง): a strip w wide beside the beam, full depth
                   const wt = b.widen ? (frame.widenTypes ?? DEFAULT_WIDEN_TYPES)[b.widen.type] : null; if (!wt || b.lvl > 0 || b.arc?.s) return null;
                   const t = bt[i].t, L = Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]) || 1, sg = b.widen.side ?? 1, o = sg * (t.b + wt.w) / 2, n = [(-(b.b[1] - b.a[1]) / L) * o, ((b.b[0] - b.a[0]) / L) * o], dzT = an?.levels?.beams?.[i]?.top ?? 0;
-                  return <Box key={`wd${i}`} p={[b.a[0] + n[0], b.a[1] + n[1]]} q={[b.b[0] + n[0], b.b[1] + n[1]]} w={wt.w} z0={Zk + dzT - t.h} h={t.h} color="#a6f4c5" edges="#039855" />; })}
+                  const f0 = Math.max(0, Math.min(L, b.widen.from ?? 0)), f1 = Math.max(f0, Math.min(L, b.widen.to ?? L)), at = (tt) => [b.a[0] + ((b.b[0] - b.a[0]) * tt) / L + n[0], b.a[1] + ((b.b[1] - b.a[1]) * tt) / L + n[1]];
+                  return f1 - f0 > 0.01 ? <Box key={`wd${i}`} p={at(f0)} q={at(f1)} w={wt.w} z0={Zk + dzT - t.h} h={t.h} color="#a6f4c5" edges="#039855" /> : null; })}
                 {on.slab && an?.panels.filter((p) => !p.open && !p.stairWell).map((p) => (
                   <Prism key={p.key} P={insetPolygon(p.P, p.P.map((q, j) => edgeWidth(bw, q, p.P[(j + 1) % p.P.length]) / 2))} z0={p.st === "GS" ? zb + 0.05 - p.t : Zk + (p.dz ?? 0) - p.t} t={p.t} color={SLAB[p.st] ?? SLAB.S} edges="#98a2b3" />
                 ))}

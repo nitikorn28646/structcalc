@@ -784,3 +784,7 @@ src/WidenTypes.jsx: WidenTypesCard (step 7 Type คาน: type table, per-beam 
 พอกข้าง type + side + e, Result (q, e, m, Vu ≤ φVn, s ≤, As). FloorBoard green hatched strip + tag; Frame3D green box; DXF beam sheets + sheet "พอกข้างคาน";
 report beams chapter "พอกข้างคาน (รับผนังก่อ)" (method, refs, table, sections). cli/widen-check.mjs 13/13 (in the gate: weight → 3D ΣRz exact, torque, MtEq
 +m·L/2, shear friction numbers, defaults pass, failing rules). E2E 47/47, regress identical, report-editions ALL OK.
+PARTIAL WIDENING (2026-11-20, user "อาจไม่ได้พอกทั้งเส้น"): beam.widen.from / to = distances from the drawn beam's start a (default whole beam);
+floor.js widenRange(bm, ln, pt) → line coordinates (either drawing direction); weight, torque and the wall counted for the torque / shear friction
+only over that part; an.widen[i].len / from; inspector fields "พอกตั้งแต่ / ถึง" + "พอกทั้งเส้น"; plan strip and 3D box only over that part; tables
+show the length. widen-check 15/15.
