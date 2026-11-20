@@ -10,6 +10,7 @@ import { tiedColumn } from "./column.js";
 import { PILES, pileCap, spreadFooting } from "./footing.js";
 import { punchingFull } from "./footingExtra.js";
 import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
+import { depthJoints } from "./levelDetail.js";
 
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
 export const stackKey = (p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
@@ -545,8 +546,12 @@ export function analyzeFrame(frame) {
       notes.push(`${frame.floors[k].name}: ${note}`);
     }
   }
+  // beams of different depth meeting at a column with level tops (2026-11-20): with lateral loads the deep beam's bottom bars must develop
+  // fy at the face (ACI 318-11 12.11.2) — a hook that does not fit in the column is a real problem (engine/levelDetail.js depthJoints)
+  const depthJ = depthJoints(frame, { floors: g.an, columns: g.cols, lateral });
+  for (const r of depthJ) if (!r.jointOk) g.warnings.push(`${r.floorName}: คานลึกต่างกันที่เสา (${r.p[0].toFixed(2)}, ${r.p[1].toFixed(2)}) ${r.deep?.name}/${r.sh?.name} — มีแรงด้านข้าง เหล็กล่าง ${r.deep?.name} ต้องงอขอยึดในเสา ldh ${r.hook?.ldh ?? "-"} > ${r.hook?.avail ?? 0} ซม. (ACI 318-11 12.11.2): ขยายเสาตามแนวคาน หรือใช้เหล็กล่างเล็กลง`);
   // a type whose bars cannot be read would be checked with no steel at all: say so instead of a silent NG
   for (const t of beamTypes) for (const k of ["top", "bot", "topX", "botX"]) if (t[k] && !parseBars(t[k])) g.warnings.push(`Type คาน ${t.name}: อ่านเหล็ก "${t[k]}" ไม่ได้ (ใช้รูปแบบ เช่น 2-DB12, 3-RB9) — คิดเป็นไม่มีเหล็ก`);
-  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, stability: stability ? { storeys: stability.storeys } : null, analysis: f3 ? "envelope" : "continuous", notes, warnings: [...new Set(g.warnings)],
+  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, depthJoints: depthJ, stability: stability ? { storeys: stability.storeys } : null, analysis: f3 ? "envelope" : "continuous", notes, warnings: [...new Set(g.warnings)],
     ok: g.an.every((a) => a.ok) && stacks.every((s) => s.ok) && footings.every((f) => f.ok) && (!lateral || lateral.ok) };
 }

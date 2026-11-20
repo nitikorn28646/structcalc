@@ -157,6 +157,20 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
   // side widening sections (พอกข้างคาน, user 2026-11-20 "เอามาใส่ในแผ่นเดียวกับแบบขยายหน้าตัดคาน"): one panel per widening type × beam type,
   // placed after the beam types in the same rows (the drawing = engine/widenDetail.js model, its own title + sub under it)
   for (const g of extra.widens ?? []) { const [a, b, c, e] = g.model.box; panels.push({ t: null, model: g.model, cells: [{ model: g.model, tag: g.tag ?? "W" }], w: c - a + 2 * pad, h: e - b + 0.1, std: false }); }
+  // joint details (level steps, depth changes) and their tables (2026-11-20, user "จัดหน้าอย่าให้เปลืองแผ่น ใช้ที่ว่างให้คุ้ม"): panels in the
+  // same packed rows as the sections — no separate sheets; a long table is cut into pieces that each fit a sheet
+  for (const g of [...(extra.groups ?? []), ...(extra.depthGroups ?? [])]) { const [a, b, c, e] = g.model.box; panels.push({ t: null, cells: [{ model: g.model, tag: null }], w: c - a + 2 * pad, h: e - b + 0.05, std: false }); }
+  const tables = [];
+  if (extra.depth?.length) tables.push({ title: "ตารางจุดคานลึกต่างกันที่หัวเสา (หลังคานเท่ากัน)", cols: [0, 0.9, 1.9, 2.9, 3.6, 4.3, 5.3, 6.1], head: ["ชั้น", "ตำแหน่ง", "คานลึก", "คานตื้น", "ท้องต่าง", "เสา (ซม.)", "ldh ต้อง / มี", "วิธี"],
+    rows: extra.depth.map((r) => [r.floorName ?? "", `(${r.p[0].toFixed(2)}, ${r.p[1].toFixed(2)})`, `${r.deep?.name ?? ""} ${Math.round((r.deep?.b ?? 0) * 100)}x${Math.round((r.deep?.h ?? 0) * 100)}`, `${r.sh?.name ?? ""} ${Math.round((r.sh?.b ?? 0) * 100)}x${Math.round((r.sh?.h ?? 0) * 100)}`,
+      `${Math.round(r.dh * 100)} ซม.`, r.along ? (r.along * 100).toFixed(0) : "-", r.hook?.ldh ? `${r.hook.ldh} / ${r.hook.avail}` : "-", r.modeShort ?? r.mode]),
+    ref: "อ้างอิง ACI 318-11 (ฐานของ ว.ส.ท.): 12.12.1 เหล็กบนต่อเนื่อง · 12.11.1 เหล็กล่างเข้าจุดรองรับ ≥ 15 ซม. · 12.11.2 มีแรงด้านข้าง เหล็กล่างยึดเต็มกำลัง · 12.5 ขอมาตรฐาน" });
+  if (extra.joints?.length) tables.push({ title: "ตารางจุดคานต่างระดับ", cols: [0, 0.9, 1.8, 2.4, 3.4, 4.4, 5.2, 6.3], head: ["ชั้น / แนว", "ตำแหน่ง", "ต่าง (ซม.)", "คานตัวสูง", "คานตัวต่ำ", "เสา (ซม.)", "ldh ต้อง / มี (ซม.)", "วิธี"],
+    rows: extra.joints.map((r) => [`${r.floorName} / ${r.line + 1}`, `(${r.p[0].toFixed(2)}, ${r.p[1].toFixed(2)})`, (r.dz * 100).toFixed(0), r.hi?.name ?? "", r.lo?.name ?? "", r.along ? (r.along * 100).toFixed(0) : "-", r.hook?.ldh ? `${r.hook.ldh} / ${r.hook.avail}` : "-", r.mode]),
+    ref: "อ้างอิง ACI 318-11 (ฐานของ ว.ส.ท.): 12.5 ขอมาตรฐาน ldh · 12.12.1 เหล็กโมเมนต์ลบยึดผ่านจุดรองรับ · 12.11.1 เหล็กล่างเข้าจุดรองรับ" });
+  const RH = 0.085, maxRows = Math.floor((BY1 - BY0 - 0.6) / RH) - 6;
+  for (const tb of tables) for (let k = 0; k < tb.rows.length; k += maxRows) { const part = tb.rows.slice(k, k + maxRows), last = k + maxRows >= tb.rows.length;
+    panels.push({ t: null, cells: [{ table: { ...tb, title: k ? `${tb.title} (ต่อ)` : tb.title, rows: part, ref: last ? tb.ref : null }, tag: null }], w: TX - BX0, h: 0.22 + RH * (part.length + 1) + (last ? 0.12 : 0) + 0.06 - tagH, std: false }); }
   // the standard ground beams share one box (as on the user's sheet)
   const sp = panels.filter((x) => x.std); if (sp.length > 1) panels = [{ ...sp[0], cells: sp.flatMap((x) => x.cells), w: sp.reduce((a, x) => a + x.w, 0) - 2 * pad * (sp.length - 1), h: Math.max(...sp.map((x) => x.h)) }, ...panels.filter((x) => !x.std)];
   // rows: as few as the greedy packing needs, then the panels split over them so the row widths are as even as possible (order kept);
@@ -187,8 +201,13 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
       for (const pn of row.panels) {
         const yb = row.y0 + tagH, slot = pn.w / pn.cells.length, tags = {};
         pn.cells.forEach((c, n) => {
+          if (c.table) { const tb = c.table, X0 = X + x + 0.15, th = 0.045; let y = row.y1 - 0.12; // a table across the row
+            d.text(X0, y, 0.06, tb.title, "C-TITLE", 0, 0); y -= 0.12;
+            tb.head.forEach((t, i) => d.text(X0 + tb.cols[i], y, th, t, "C-TEXT", 0, 0)); d.line(X0 - 0.05, y - 0.03, X + x + pn.w - 0.15, y - 0.03, "C-FRAME2"); y -= 0.1;
+            for (const r of tb.rows) { r.forEach((t, i) => d.text(X0 + tb.cols[i], y, th, t, "C-TEXT", 0, 0)); y -= RH; }
+            if (tb.ref) d.text(X0, y - 0.04, 0.04, tb.ref, "C-TEXT", 0, 0); return; }
           if (c.model) { const [a, b, cc, e] = c.model.box, xc = x + slot * (n + 0.5); // a widening section: centred in its slot and in the row height
-            emitModel(d, c.model, X + xc - (a + cc) / 2, yb + (row.h - (e - b)) / 2 - b); (tags[c.tag] ??= []).push(xc); return; }
+            emitModel(d, c.model, X + xc - (a + cc) / 2, yb + (row.h - (e - b)) / 2 - b); if (c.tag) (tags[c.tag] ??= []).push(xc); return; }
           const xc = x + slot * (n + 0.5), gw = groupW(c.t, c.at, c.ext, th), csy = yb + 0.42 + (row.h - 0.8 - c.t.h) / 2;
           section(d, c.t, mat, c.at, c.ext, X + xc - gw / 2, csy, c.title, th, c.sub); (tags[c.tag] ??= []).push(xc);
         });
@@ -207,30 +226,6 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
       notes.forEach((s, i) => { const parts = split2(s, 62); parts.forEach((q, j) => d.text(nx, BY0 + 1.85 - i * 0.16 - j * 0.07, i ? 0.042 : 0.056, q, i ? "C-TEXT" : "C-TITLE", 0, 0)); });
     }
   });
-  // beams at different levels (2026-11-20): one more sheet — the typical joint detail per distinct case (engine/levelDetail.js, drawn
-  // at true size on the 1:25 sheet) side by side, and the table of every joint under them
-  if (extra.joints?.length) {
-    const gs = extra.groups ?? [], AW2 = TX - BX0 - 0.3, rowsN = extra.joints.length, tableH = 0.55 + 0.085 * rowsN;
-    let X = sheets.length * (SW + 0.5), first = true, x = BX0 + 0.15, yTop = BY1 - 0.15, rowH = 0;
-    const newSheet = (t) => { X = sheets.length * (SW + 0.5); frame(d, X, project, t); sheets.push([]); x = BX0 + 0.15; yTop = BY1 - 0.15; rowH = 0; };
-    newSheet(`${title} — คานต่างระดับ`);
-    const bottom = () => BY0 + 0.15 + (first ? tableH : 0);
-    for (const g of gs) { const m = g.model, [a, b, c, e] = m.box, w = c - a, h = e - b;
-      if (x + w > BX0 + 0.15 + AW2 && x > BX0 + 0.2) { x = BX0 + 0.15; yTop -= rowH + 0.15; rowH = 0; }
-      if (yTop - h < bottom()) { if (first) { tableAt(yTop - rowH - 0.2); first = false; } newSheet(`${title} — คานต่างระดับ (ต่อ)`); }
-      emitModel(d, m, X + x - a, yTop - e); x += w + 0.2; rowH = Math.max(rowH, h); }
-    if (first) tableAt(yTop - rowH - 0.3);
-    function tableAt(y0) { // table of every joint
-      let y = y0; const th = 0.045, X0 = X + BX0 + 0.2;
-      d.text(X0, y, 0.06, "ตารางจุดคานต่างระดับ", "C-TITLE", 0, 0); y -= 0.12;
-      const cols = [0, 0.9, 1.8, 2.4, 3.4, 4.4, 5.2, 6.3], head = ["ชั้น / แนว", "ตำแหน่ง", "ต่าง (ซม.)", "คานตัวสูง", "คานตัวต่ำ", "เสา (ซม.)", "ldh ต้อง / มี (ซม.)", "การตรวจ"];
-      head.forEach((t, i) => d.text(X0 + cols[i], y, th, t, "C-TEXT", 0, 0)); d.line(X0 - 0.05, y - 0.03, X + TX - 0.15, y - 0.03, "C-FRAME2"); y -= 0.1;
-      for (const r of extra.joints) {
-        [`${r.floorName} / ${r.line + 1}`, `(${r.p[0].toFixed(2)}, ${r.p[1].toFixed(2)})`, (r.dz * 100).toFixed(0), r.hi?.name ?? "", r.lo?.name ?? "", r.along ? (r.along * 100).toFixed(0) : "-",
-          r.hook?.ldh ? `${r.hook.ldh} / ${r.hook.avail}` : "-", r.mode].forEach((t, i) => d.text(X0 + cols[i], y, th, t, "C-TEXT", 0, 0)); y -= 0.085; }
-      d.text(X0, y - 0.04, 0.04, "อ้างอิง ACI 318-11 (ฐานของ ว.ส.ท.): 12.5 ขอมาตรฐาน ldh · 12.12.1 เหล็กโมเมนต์ลบยึดผ่านจุดรองรับ · 12.11.1 เหล็กล่างเข้าจุดรองรับ ≥ 15 ซม. · 7.1 ขอ 90° ยาว 12db", "C-TEXT", 0, 0);
-    }
-  }
   return { dxf: d.toString(), sheets: sheets.length };
 }
 

@@ -9,9 +9,9 @@ import { beamLayersOf } from "./DesignFigures.jsx";
 import { extraSpec } from "../engine/beamDetail.js";
 import { CalcLink, Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
 import { stairSections } from "./stairSection.js";
-import { LEVEL_REFS, LevelJointTable, JointDetail } from "./LevelJoints.jsx";
+import { LEVEL_REFS, LevelJointTable, JointDetail, DEPTH_REFS, DepthJointTable, DepthDetail } from "./LevelJoints.jsx";
 import { WIDEN_REFS, WidenSection, widenUses, widenSections, sideName, beamWidenModel } from "./WidenTypes.jsx";
-import { levelJoints, jointGroups } from "../engine/levelDetail.js";
+import { levelJoints, jointGroups, depthGroups } from "../engine/levelDetail.js";
 import { stairSvgString } from "./stairSvg.js";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
@@ -277,6 +277,15 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                   return <div key={u.j}><p className="mt-2 text-[10pt]">{wt.name} ({n0(wt.w * 100)} ซม.) ด้าน{sideName(u.side)} · ยาว {fmt(c.len, 2)} ม.{c.from ? ` เริ่ม ${fmt(c.from, 2)} ม. จากต้นคาน` : ""}</p>
                     <Table head={["รายการ", "สูตร", "แทนค่า", "ผล"]} rows={rows} /></div>; })}
               </div>); })}
+          </>); })()}
+          {(() => { const rows = res.depthJoints ?? []; if (!rows.length) return null; const gs = depthGroups(rows); return (<>
+            <Sub>คานลึกต่างกันที่หัวเสา (หลังคานเท่ากัน)</Sub>
+            <Note>คานคนละ type ที่ลึกต่างกันมาบรรจบที่เสาโดยหลังคานอยู่ระดับเดียวกัน — ท้องคานต่างระดับกัน Δh: การวิเคราะห์และการตรวจหน้าตัดแต่ละช่วงใช้ความลึกของ type
+              นั้นเอง; ที่รอยต่อ เหล็กบนต่อเนื่องผ่านเสา (ระดับเดียวกัน) · เหล็กล่างของคานตื้นวิ่งผ่านเสาเข้าคานลึก ≥ ld (อยู่ในความลึกของคานลึก) · เหล็กล่างของคานลึกต่อผ่านไม่ได้
+              จึงงอขอ 90° ขึ้นในเสา: เมื่อเปิดแรงลม / แผ่นดินไหว คานเป็นส่วนของระบบต้านแรงด้านข้าง ต้องยึดให้ได้กำลังครากที่ผิวเสา (ldh ≤ ความลึกเสาตามแนวคาน − 5 ซม.)
+              ถ้าไม่ผ่านแจ้งเป็นคำเตือน; ไม่มีแรงด้านข้าง เหล็กล่างเข้าเสา ≥ 15 ซม. ก็พอ (ข้อ 12.11.1) · {DEPTH_REFS}</Note>
+            <DepthJointTable rows={rows} small />
+            {gs.slice(0, 4).map((g, i) => <Figure key={i} caption={`รายละเอียดคานลึกต่างกันที่หัวเสา — ${g.deep?.name} / ${g.sh?.name} · ท้องต่าง ${fmt(g.dh * 100, 0)} ซม. · เสา ${g.along ? fmt(g.along * 100, 0) : "-"} ซม. (${g.n} จุด)`}><DepthDetail g={g} mat={mat} px={140} /></Figure>)}
           </>); })()}
           {(() => { const rows = levelJoints(frame, res); if (!rows.length) return null; const gs = jointGroups(rows); return (<>
             <Sub>คานต่างระดับ (พื้นลดระดับ)</Sub>

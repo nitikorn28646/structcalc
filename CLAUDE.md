@@ -813,3 +813,12 @@ snap line is now the flush centre line for the wall type being drawn. widen-chec
 WIDENING SECTIONS ON THE BEAM SHEETS (2026-11-20, user): beamSheetsDxf extra.widens [{tag, model}] are panels in the same rows as the beam
 type sections (after the types, model centred in its slot, W-tag bubble) — no separate "พอกข้างคาน" sheet; sheet-1 notes get item 5 (widening
 cast with the beam, stirrups around the beam's corner bars, wall flush, ACI refs) when widenings exist. ezdxf audit 0 errors.
+DEPTH JOINTS (2026-11-20, user "คานคนละ type หลังคานเท่ากัน ท้องคานต่างระดับ — แบบขยาย + เช็คคำนวณ + DXF พร้อมคานต่างระดับ"): engine/levelDetail.js
+depthJoints(frame, res) = two collinear spans meeting end to end at a column, |h1 − h2| ≥ 5 cm, tops level (else it is a step joint): detail =
+top bars continuous, shallow beam's bottom bars through the column into the deep beam ≥ ld, deep beam's bottom bars 90° hook up in the column;
+check: with wind / earthquake on (12.11.2) the deep bottom bars must develop fy → hookFit(bottom bars) ldh ≤ column depth along the beam − 5 cm,
+else NG + warning (frame.js, res.depthJoints); without lateral loads ≥ 15 cm (12.11.1) is enough. depthGroups / depthDetailModel (elevation).
+UI: LevelJoints.jsx DepthJointTable / DepthDetail, LevelJointsCard shows both (step 7 Type คาน); report beams chapter sub "คานลึกต่างกันที่หัวเสา".
+DXF PACKING (user "จัดหน้าอย่าให้เปลืองแผ่น"): beamSheetsDxf puts level-step details, depth details and their tables (cut into sheet-sized
+pieces) as panels in the same packed rows as the beam sections and widenings — no separate joint sheets (_big 6 → 4 sheets, _levels 3 → 2).
+levels-check 23/23.

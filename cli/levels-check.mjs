@@ -3,7 +3,8 @@
 // warnings (depth left, secondary bottom). Loads must not change with levels. node cli/levels-check.mjs
 import { analyzeFrame } from "../web/engine/frame.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, checkSpan, cutType } from "../web/engine/floor.js";
-import { levelJoints, jointGroups, jointDetailModel } from "../web/engine/levelDetail.js";
+import { levelJoints, jointGroups, jointDetailModel, depthJoints, depthGroups, depthDetailModel } from "../web/engine/levelDetail.js";
+import { DEFAULT_LATERAL } from "../web/engine/lateral.js";
 const mat = { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 };
 const Bm = (a, b, x = {}) => ({ a, b, type: 4, ...x }); // fixed type B5 20×50 → self weight independent of the levels
 const xs = [0, 4, 8], ys = [0, 1.5, 5.5];
@@ -64,6 +65,19 @@ ok("3D frame still builds with levels", !r1.frame3d?.error);
 const fm = porch(), rows = levelJoints(fm, r1), gs = jointGroups(rows), mdl = gs.map((g) => jointDetailModel(g, mat));
 const finite = (m) => m.items.every((p) => Object.values(p).every((v) => typeof v !== "number" || Number.isFinite(v)) && (!p.pts || p.pts.flat().every(Number.isFinite))) && m.box.every(Number.isFinite);
 ok("joint table: one row per step joint, detail drawings finite", rows.length === an.levels.steps.length && rows.length >= 2 && mdl.every(finite) && rows.every((r) => r.mode && r.ld > 0), `${rows.length} rows · ${gs.length} details`);
+
+// D: beams of different depth with level tops at a column (user 2026-11-20): B5 20×50 (x 0–4) next to B1 20×40 (x 4–8) on y = 0
+const depthM = (lat) => ({ ...model((f) => { f.beams[bi(f, [4, 0], [8, 0])].type = 0; return f; }), ...(lat ? { lateral: { ...DEFAULT_LATERAL, asked: true, wind: { ...DEFAULT_LATERAL.wind, on: true } } } : {}) });
+const rD = analyzeFrame(depthM(false)), dj = rD.depthJoints.filter((r) => r.floor === 1 && Math.abs(r.p[0] - 4) < 1e-6 && Math.abs(r.p[1]) < 1e-6);
+ok("depth joint found at (4, 0): deep B5, shallow B1, Δh 0.10, tops level", dj.length === 1 && dj[0].deep.name === "B5" && dj[0].sh.name === "B1" && Math.abs(dj[0].dh - 0.1) < 1e-9 && !rD.depthJoints.some((r) => r.dh < 0.05), JSON.stringify(dj[0] && { dh: dj[0].dh, along: dj[0].along, hook: dj[0].hook }));
+const h0 = dj[0].hook, ldh = Math.max((0.075 * 4000 * 1.6) / Math.sqrt(240) * (h0.side ? 0.7 : 1), 8 * 1.6, 15);
+ok("deep bottom bars (DB16) hook: ldh = 0.075·fy·db/√f′c (×0.7) ≥ 8db ≥ 15, available = column − 5 cm", Math.abs(h0.ldh - +ldh.toFixed(1)) < 0.06 && Math.abs(h0.avail - (dj[0].along * 100 - 5)) < 0.06, `${h0.ldh} / ${h0.avail}`);
+ok("no lateral load: hook not required (12.11.1) → joint ok, no warning", dj[0].jointOk && !rD.warnings.some((w) => w.includes("คานลึกต่างกัน")));
+const rDL = analyzeFrame(depthM(true)), djL = rDL.depthJoints.find((r) => r.floor === 1 && Math.abs(r.p[0] - 4) < 1e-6 && Math.abs(r.p[1]) < 1e-6);
+ok("wind on: the deep bottom bars must develop fy (12.11.2) — hook does not fit the 20 cm column → NG + warning", djL && !djL.jointOk && rDL.warnings.some((w) => w.includes("คานลึกต่างกัน") && w.includes("12.11.2")), djL?.mode);
+const dm = depthGroups(rD.depthJoints).map((g) => depthDetailModel(g, mat));
+ok("depth detail drawings finite", dm.length > 0 && dm.every(finite));
+ok("same model without the type change: no depth joint on y = 0", !analyzeFrame(model()).depthJoints.some((r) => r.floor === 1 && Math.abs(r.p[1]) < 1e-6 && Math.abs(r.p[0] - 4) < 1e-6));
 
 console.log(bad ? `levels-check: ${bad} FAIL` : "levels-check: all ok");
 process.exit(bad ? 1 : 0);
