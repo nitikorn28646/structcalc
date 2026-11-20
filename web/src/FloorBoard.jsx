@@ -13,7 +13,7 @@ import { TextSizeControl, useTextScale } from "./uiPrefs.jsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fmt } from "./beamModel.js";
 import { dist, gridAxes, round3, segCross, segDist, stairFromLine } from "./planKit.js";
-import { findOverlaps, GROUPS, STAIR_KINDS, stairRT, wallLoad, wallThick, wallsOf } from "../engine/floor.js";
+import { findOverlaps, GROUPS, STAIR_KINDS, stairRT, wallLoad, wallThick, wallsOf, widensOf } from "../engine/floor.js";
 
 // type colours (user 2026-11-03: different types had the same colour — 8 colours repeated, two blues alike): 12 distinct hues,
 // then more by the golden angle so a long type list does not repeat
@@ -77,6 +77,11 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, wide
   for (let i = 0; i < beams.length; i++) for (let j = i + 1; j < beams.length; j++) { const c = segCross(beams[i].a, beams[i].b, beams[j].a, beams[j].b); if (c) crossings.push(c); }
   const nodeName = (p) => { const i = GX.findIndex((x) => Math.abs(x - p[0]) < 1e-6), j = GY.findIndex((y) => Math.abs(y - p[1]) < 1e-6); return i >= 0 && j >= 0 ? `โหนด ${xName(i)}-${yName(j)}` : "จุดกริด"; };
   const onBeamText = (b, q) => { const d0 = dist(b.a, q), d1 = dist(b.b, q); return `บนคาน · ห่างปลาย ${fmt(Math.min(d0, d1), 2)} ม.`; };
+  // side widening strips (พอกข้าง): their centre lines are snap lines for the wall tool, so a wall can be drawn on the strip (user 2026-11-20)
+  const strips = () => tool !== "wall" ? [] : beams.flatMap((b, i) => b.arc?.s ? [] : widensOf(b).flatMap((wd) => { const wt = (widenTypes ?? [])[wd.type]; if (!wt) return [];
+    const L = dist(b.a, b.b) || 1, n = [-(b.b[1] - b.a[1]) / L, (b.b[0] - b.a[0]) / L], o = (wd.side ?? 1) * (bw(i) / 2 + wt.w / 2), f0 = Math.max(0, Math.min(L, wd.from ?? 0)), f1 = Math.max(f0, Math.min(L, wd.to ?? L));
+    const at = (t) => round3([b.a[0] + ((b.b[0] - b.a[0]) * t) / L + n[0] * o, b.a[1] + ((b.b[1] - b.a[1]) * t) / L + n[1] * o]);
+    return [{ a: at(f0), b: at(f1), name: wt.name }]; }));
   const snap = (raw, from) => {
     let p = raw;
     if (ortho && from) p = Math.abs(raw[0] - from[0]) >= Math.abs(raw[1] - from[1]) ? [raw[0], from[1]] : [from[0], raw[1]];
@@ -84,7 +89,7 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, wide
     if (!snapOn) return free;
     const r = 18 * px(), axis = ortho && from ? (Math.abs(p[1] - from[1]) < 1e-9 ? 1 : 0) : -1, keep = (q) => (axis < 0 ? q : axis === 1 ? [q[0], from[1]] : [from[0], q[1]]);
     const cand = [...cols.map((c) => [c, "เสา"]), ...beams.flatMap((b) => [[b.a, "ปลายคาน"], [b.b, "ปลายคาน"], [[(b.a[0] + b.b[0]) / 2, (b.a[1] + b.b[1]) / 2], "กึ่งกลางคาน"]]),
-      ...crossings.map((c) => [c, "จุดตัดคาน"]), ...walls.flatMap((w) => [[w.a, "ปลายผนัง"], [w.b, "ปลายผนัง"]]), ...(gridOn ? SX.flatMap((x) => SY.map((y) => [[x, y], null])) : [])];
+      ...crossings.map((c) => [c, "จุดตัดคาน"]), ...walls.flatMap((w) => [[w.a, "ปลายผนัง"], [w.b, "ปลายผนัง"]]), ...strips().flatMap((q) => [[q.a, `ปลายพอกข้าง ${q.name}`], [q.b, `ปลายพอกข้าง ${q.name}`]]), ...(gridOn ? SX.flatMap((x) => SY.map((y) => [[x, y], null])) : [])];
     let best = null;
     for (const [c, kind] of cand) { const q = keep(c), d = dist(q, p); if (d < r && dist(q, c) < r && (!best || d < best.d - 1e-9)) best = { d, p: axis < 0 ? c : q, kind: kind ?? nodeName(c) }; }
     if (best) return best;
@@ -92,7 +97,12 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, wide
     if (axis >= 0) { // locked axis meets a beam or a grid line
       for (const b of beams) { const den = axis === 1 ? b.b[1] - b.a[1] : b.b[0] - b.a[0]; if (Math.abs(den) < 1e-9) continue; const t = axis === 1 ? (from[1] - b.a[1]) / den : (from[0] - b.a[0]) / den; if (t >= -1e-6 && t <= 1 + 1e-6) { const q = [b.a[0] + (b.b[0] - b.a[0]) * t, b.a[1] + (b.b[1] - b.a[1]) * t]; take(q, onBeamText(b, q), b); } }
       if (gridOn) for (const v of axis === 1 ? SX : SY) take(axis === 1 ? [v, from[1]] : [from[0], v], "ชนเส้นกริด");
-    } else for (const b of beams) { const s = segDist(p, b.a, b.b); if (s.d < r) take(s.q, onBeamText(b, s.q), b); } // any point on a beam
+      // drawing ALONG a strip (the locked axis lies on it): any point of the strip under the cursor
+      for (const q of strips()) { const sq = segDist(keep(p), q.a, q.b); if (sq.d < 1e-3 && segDist(from, q.a, q.b).d < 1e-3) take(sq.q, `บนพอกข้าง ${q.name}`); }
+      for (const q of strips()) { const den = axis === 1 ? q.b[1] - q.a[1] : q.b[0] - q.a[0]; if (Math.abs(den) < 1e-9) continue; const t = axis === 1 ? (from[1] - q.a[1]) / den : (from[0] - q.a[0]) / den;
+        if (t >= -1e-6 && t <= 1 + 1e-6) take([q.a[0] + (q.b[0] - q.a[0]) * t, q.a[1] + (q.b[1] - q.a[1]) * t], `ชนพอกข้าง ${q.name}`); }
+    } else { for (const b of beams) { const s = segDist(p, b.a, b.b); if (s.d < r) take(s.q, onBeamText(b, s.q), b); } // any point on a beam
+      for (const q of strips()) { const s = segDist(p, q.a, q.b); if (s.d < r * 0.8) take(s.q, `บนพอกข้าง ${q.name}`); } }
     if (hit) return hit;
     return gridOn ? { p: null, kind: "ไม่มีจุดยึด — ปิดกริดเพื่อวาดอิสระ" } : free;
   };
@@ -425,12 +435,12 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, wide
                 {isSel("beam", i) && <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke="#f79009" strokeOpacity={0.45} strokeWidth={14 * k} strokeLinecap="round" />}
                 {/* true width of the designed (or chosen) type, like the columns; never under 4 px; thin centre line on top */}
                 <polyline points={arcPolyline(b.a, b.b, b.arc?.s).map((p) => `${p[0]},${-p[1]}`).join(" ")} fill="none" stroke={color} strokeWidth={Math.max(bw(i), 4 * k)} strokeLinecap="square" strokeOpacity={step === "wall" || step === "slab" ? 0.35 : 0.55} strokeDasharray={b.lvl > 0 ? `${10 * k} ${6 * k}` : undefined} />
-                {(() => { const wt = b.widen ? (widenTypes ?? [])[b.widen.type] : null; if (!wt || b.arc?.s) return null; // side widening: a hatched strip on its side
-                  const sg = b.widen.side ?? 1, o1 = (bw(i) / 2) * sg, o2 = (bw(i) / 2 + wt.w) * sg, f0 = Math.max(0, Math.min(L, b.widen.from ?? 0)), f1 = Math.max(f0, Math.min(L, b.widen.to ?? L));
+                {!b.arc?.s && widensOf(b).map((wd, j) => { const wt = (widenTypes ?? [])[wd.type]; if (!wt) return null; // side widening: a hatched strip on its side (one or more per beam)
+                  const sg = wd.side ?? 1, o1 = (bw(i) / 2) * sg, o2 = (bw(i) / 2 + wt.w) * sg, f0 = Math.max(0, Math.min(L, wd.from ?? 0)), f1 = Math.max(f0, Math.min(L, wd.to ?? L));
                   const at = (t) => [b.a[0] + ((b.b[0] - b.a[0]) * t) / L, b.a[1] + ((b.b[1] - b.a[1]) * t) / L], pa = at(f0), pb = at(f1), mm = at((f0 + f1) / 2); // only the widened part
                   const P4 = [[pa, o1], [pb, o1], [pb, o2], [pa, o2]].map(([p, o]) => `${p[0] + n[0] * o},${-(p[1] + n[1] * o)}`).join(" ");
                   const tq = [mm[0] + n[0] * (o2 + 10 * k * sg), mm[1] + n[1] * (o2 + 10 * k * sg)];
-                  return <g pointerEvents="none"><polygon points={P4} fill="#12b76a" fillOpacity={0.18} stroke="#12b76a" strokeWidth={1 * k} />{txt(tq, wt.name, "#039855", 10, "middle", 700)}</g>; })()}
+                  return <g key={`wd${j}`} pointerEvents="none"><polygon points={P4} fill="#12b76a" fillOpacity={0.18} stroke="#12b76a" strokeWidth={1 * k} />{txt(tq, wt.name, "#039855", 10, "middle", 700)}</g>; })}
                 {b.lvl > 0 && txt([m[0] + n[0] * (12 * k + bw(i) / 2), m[1] + n[1] * (12 * k + bw(i) / 2)], `คานกลางชั้น +${(+b.lvl).toFixed(2)}`, "#7a5af8", 10, "middle", 600)}
                 {(() => { const lv = an?.levels?.beams?.[i]; if (!lv || b.lvl > 0 || (!lv.step && Math.abs(lv.top) < 0.005)) return null; const off = 12 * k + bw(i) / 2; // levels: lowered beam / step beam
                   return txt([m[0] + n[0] * off, m[1] + n[1] * off], `หลังคาน ${lv.top > 0 ? "+" : ""}${lv.top.toFixed(2)}`, "#0e9384", 10, "middle", 600); })()}

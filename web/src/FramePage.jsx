@@ -26,7 +26,7 @@ import { locateWarning } from "./warnLocate.js";
 import { SlabSection, slabRebar } from "./SlabDetail.jsx";
 import LoadCases from "./LoadCases.jsx";
 import { highlight } from "./highlight.js";
-import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, spanReasons, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
+import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, DEFAULT_WALL_TYPES, DEFAULT_LOAD_LIB, GROUPS, OPENINGS, SLAB_KINDS, WALL_MATERIALS, wallTypeW, STAIR_KINDS, parseBars, resolveWall, spanReasons, widensOf, stairLoads, wallLoad, wallsOf } from "../engine/floor.js";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
 import { analyzeFrame, checkEnv, stackKey } from "../engine/frame.js";
 import { designSlabs } from "../engine/slabDesign.js";
@@ -658,20 +658,29 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                     {lv.up > 0 && <> · พื้นอีกข้างสูงกว่าหลังคาน {cm(lv.up)} ซม. (ขอบพื้นฝั่งนั้นวางสูงกว่าคาน — ทำคันคอนกรีตบนคานหรือให้พื้นฝั่งนั้นพาดทางอื่น)</>}
                     {js.map((j) => <span key={`${j.t}`} className="block">ต่างระดับ {cm(j.dz)} ซม. ที่ ({fmt(j.p[0], 2)}, {fmt(j.p[1], 2)}): {j.hi === sel.i ? `เป็นคานตัวสูง — เหล็กบนของคานนี้งอขอ 90° ลงใน${j.col ? "เสา (ถ้าเสายาวไม่พอให้ขอยึด ldh จะตรวจที่หัวเสาด้วย h − " + cm(j.dz) + " ซม. — ดูผลรายช่วง)" : "คาน · ตรวจทั้งช่วงด้วย h − " + cm(j.dz) + " ซม."}` : "เป็นคานตัวต่ำ — เหล็กบนวิ่งผ่านเสาเข้าไปในคานตัวสูงยาว ≥ ld"}{!j.ok ? " · ไม่ผ่าน: ความลึกเหลือไม่พอ" : ""}</span>)}
                   </Result>}</>); })()}
-              {!(beam.lvl > 0) && (() => { const WT = widenTypesOf(frame), wd = beam.widen, c = an.widen?.[sel.i]; return (<>
-                <div className="col-span-2 grid grid-cols-2 gap-3">
-                  <Field label="พอกข้างคาน (รับผนังก่อ)"><Select value={wd ? String(wd.type) : ""} onChange={(v) => setBeam({ widen: v === "" ? undefined : { side: wd?.side ?? 1, ...wd, type: +v } })} options={[["", "ไม่มี"], ...WT.map((t, j) => [String(j), `${t.name} กว้าง ${fmt(t.w * 100, 0)} ซม.`])]} /></Field>
-                  {wd ? <Field label="ด้าน (มองจากต้นคาน → ปลายคาน)"><Select value={String(wd.side ?? 1)} onChange={(v) => setBeam({ widen: { ...wd, side: +v } })} options={[["1", "ซ้าย"], ["-1", "ขวา"]]} /></Field> : <div />}
-                </div>
-                {wd && <>{(() => { const L = Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1]); return (<div className="col-span-2 grid grid-cols-2 gap-3">
-                  <Field label="พอกตั้งแต่ (ม. จากต้นคาน)" unit="m"><NumberInput value={wd.from ?? 0} step="0.1" onChange={(v) => setBeam({ widen: { ...wd, from: v > 0 ? Math.min(v, L) : undefined } })} /></Field>
-                  <Field label={`ถึง (ม. จากต้นคาน, ยาว ${fmt(L, 2)})`} unit="m"><NumberInput value={wd.to ?? +L.toFixed(3)} step="0.1" onChange={(v) => setBeam({ widen: { ...wd, to: Number.isFinite(v) && v < L - 1e-6 ? Math.max(v, wd.from ?? 0) : undefined } })} /></Field>
-                  {(wd.from || wd.to != null) && <button onClick={() => setBeam({ widen: { ...wd, from: undefined, to: undefined } })} className={`${btnGhost} col-span-2`}>พอกทั้งเส้น</button>}</div>); })()}
-                  <Field label="ระยะเยื้องผนังจากแกนคาน e (เว้นว่าง = ผิวนอกเสมอส่วนพอก)" unit="m"><NumberInput value={wd.e ?? ""} step="0.01" onChange={(v) => setBeam({ widen: { ...wd, e: Number.isFinite(v) && v > 0 ? v : undefined } })} /></Field><div />
-                  {c && <Result className="col-span-2">พอกยาว {fmt(c.len, 2)} ม. · น้ำหนักส่วนพอก {fmt(c.qw, 0)} กก./ม. · ผนัง {fmt(c.qWall, 0)} กก./ม. เยื้อง e = {fmt(c.e, 3)} ม. → แรงบิด {fmt(c.m, 0)} กก.-ม./ม. (แรงบิดสมดุล รับเต็ม)
+              {!(beam.lvl > 0) && (() => { const WT = widenTypesOf(frame), list = widensOf(beam), cs = an.widen?.[sel.i] ?? [], L = Math.hypot(beam.b[0] - beam.a[0], beam.b[1] - beam.a[1]);
+                // side widenings (พอกข้าง, user 2026-11-20): one or more per beam — e.g. both sides, or two parts of one side
+                const put = (k, patch) => setBeam({ widen: list.map((x, q) => (q === k ? { ...x, ...patch } : x)) });
+                const del = (k) => { const nl = list.filter((_, q) => q !== k); setBeam({ widen: nl.length ? nl : undefined }); };
+                const add = () => setBeam({ widen: [...list, { type: 0, side: list.length ? -(list[0].side ?? 1) : 1 }] });
+                return (<div className="col-span-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-medium text-gray-700 dark:text-gray-200">พอกข้างคาน (รับผนังก่อ){list.length ? ` · ${list.length} ส่วน` : ""}</span>
+                    <button onClick={add} className={btnGhost}>+ {list.length ? "เพิ่มพอกอีกด้าน / อีกช่วง" : "เพิ่มพอกข้าง"}</button></div>
+                  {list.map((wd, k) => { const c = cs[k]; return (<div key={k} className="space-y-2 rounded-md p-2 ring-1 ring-gray-200 dark:ring-gray-700">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label={`พอกข้าง ${k + 1}`}><Select value={String(wd.type)} onChange={(v) => put(k, { type: +v })} options={WT.map((t, j) => [String(j), `${t.name} กว้าง ${fmt(t.w * 100, 0)} ซม.`])} /></Field>
+                      <Field label="ด้าน (มองจากต้น → ปลายคาน)"><Select value={String(wd.side ?? 1)} onChange={(v) => put(k, { side: +v })} options={[["1", "ซ้าย"], ["-1", "ขวา"]]} /></Field>
+                      <Field label="ตั้งแต่ (ม. จากต้นคาน)" unit="m"><NumberInput value={wd.from ?? 0} step="0.1" onChange={(v) => put(k, { from: v > 0 ? Math.min(v, L) : undefined })} /></Field>
+                      <Field label={`ถึง (คานยาว ${fmt(L, 2)})`} unit="m"><NumberInput value={wd.to ?? +L.toFixed(3)} step="0.1" onChange={(v) => put(k, { to: Number.isFinite(v) && v < L - 1e-6 ? Math.max(v, wd.from ?? 0) : undefined })} /></Field>
+                      <Field label="เยื้องผนัง e (ว่าง = ผิวนอกเสมอพอก)" unit="m"><NumberInput value={wd.e ?? ""} step="0.01" onChange={(v) => put(k, { e: Number.isFinite(v) && v > 0 ? v : undefined })} /></Field>
+                      <div className="flex items-end justify-end gap-1">{(wd.from || wd.to != null) && <button onClick={() => put(k, { from: undefined, to: undefined })} className={btnGhost}>ทั้งเส้น</button>}
+                        <button onClick={() => del(k)} className="rounded-md px-2 py-1 text-[12px] text-red-600 hover:bg-red-50">ลบ</button></div>
+                    </div>
+                    {c && <Result>พอกยาว {fmt(c.len, 2)} ม. · น้ำหนักส่วนพอก {fmt(c.qw, 0)} กก./ม. · ผนัง {fmt(c.qWall, 0)} กก./ม. เยื้อง e = {fmt(c.e, 3)} ม. → แรงบิด {fmt(c.m, 0)} กก.-ม./ม. (แรงบิดสมดุล รับเต็ม)
                     <span className="block">รอยต่อส่วนพอก–คาน: Vu = 1.4(พอก + ผนัง) = {fmt(c.Vu, 0)} ≤ φVn = 0.75·1.4·fy·Avf = {fmt(c.phiVn, 0)} กก./ม. <b className={c.ok ? "text-green-600" : "text-red-600"}>{c.ok ? "ผ่าน" : "ไม่ผ่าน"}</b></span>
                     <span className="block">ปลอกส่วนพอก ≤ {fmt(Math.min(c.sMax, c.sReq), 3)} ม. (d/2 ≤ 0.30 และแรงเฉือนผ่านรอยต่อ) · เหล็กยืน {fmt(c.AsL, 2)} ≥ {fmt(c.AsMinL, 2)} ซม.² ห่าง {fmt(c.gap, 2)} ≤ 0.30 ม.</span>
-                    {c.why.map((w) => <span key={w} className="block text-red-600">• {w}</span>)}</Result>}</>}</>); })()}
+                    {c.why.map((w) => <span key={w} className="block text-red-600">• {w}</span>)}</Result>}
+                  </div>); })}</div>); })()}
               <div className="col-span-2"><Field label="บทบาทที่จุดตัดคาน (ไม่มีเสา)"><Select value={beam.role ?? ""} onChange={(v) => setBeam({ role: v || undefined })} options={[["", "อัตโนมัติ (คานที่มีเสามากกว่า / ช่วงสั้นกว่า = คานหลัก)"], ["main", "คานหลัก — คานอื่นวางบนคานนี้"], ["secondary", "คานซอย — วางบนคานที่ตัดผ่าน"]]} /></Field></div>
               {(() => { const mine = an.lines.filter((l) => l.members.includes(sel.i)), rests = mine.flatMap((l) => l.carriers.map((c) => an.lines.find((o) => o.id === c.host)?.id + 1)).filter(Boolean), carries = an.lines.filter((o) => o.carriers.some((c) => mine.some((l) => l.id === c.host))).map((o) => o.id + 1);
                 return <Result className="col-span-2">{rests.length ? `วางบนแนว ${[...new Set(rests)].join(", ")}` : "วางบนเสา"}{carries.length ? ` · รับแนว ${[...new Set(carries)].join(", ")}` : ""}</Result>; })()}

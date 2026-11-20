@@ -788,3 +788,9 @@ PARTIAL WIDENING (2026-11-20, user "อาจไม่ได้พอกทั�
 floor.js widenRange(bm, ln, pt) → line coordinates (either drawing direction); weight, torque and the wall counted for the torque / shear friction
 only over that part; an.widen[i].len / from; inspector fields "พอกตั้งแต่ / ถึง" + "พอกทั้งเส้น"; plan strip and 3D box only over that part; tables
 show the length. widen-check 15/15.
+WALLS ON THE STRIP + BOTH SIDES (2026-11-20, user "ใส่โหลดผนังวางบนคานที่พอกไม่ได้" / "ถ้า 1 คาน ต้องพอกทั้ง 2 ฝั่ง"): the wall tool snaps to the strip centre lines
+(FloorBoard strips(), also along a strip with ortho on); a wall parallel to a widened beam on its widened side within b/2 + w is a line load on the beam
+with its drawn offset e (ln.slab {e, strip: j}). beam.widen = one object OR a list (floor.js widensOf): e.g. left + right, or two parts of one side;
+each strip weighed and checked on its own (an.widen[i] = array by position, nulls kept), torques of opposite strips ADDED (not cancelled — conservative);
+a wall on the axis goes to the first strip. Inspector: list of strips + "เพิ่มพอกอีกด้าน / อีกช่วง"; plan / 3D / tables / report per strip (column ด้าน).
+widen-check 20/20.
