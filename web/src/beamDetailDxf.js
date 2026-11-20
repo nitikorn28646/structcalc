@@ -154,6 +154,9 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
     const w = cells.reduce((s) => s + cellW(t), 0) + 2 * pad;
     return { t, ext, cells: cells.map((c) => ({ ...c, t, ext })), w, h: t.h + 0.8, std };
   }).filter((x) => x.cells.length);
+  // side widening sections (พอกข้างคาน, user 2026-11-20 "เอามาใส่ในแผ่นเดียวกับแบบขยายหน้าตัดคาน"): one panel per widening type × beam type,
+  // placed after the beam types in the same rows (the drawing = engine/widenDetail.js model, its own title + sub under it)
+  for (const g of extra.widens ?? []) { const [a, b, c, e] = g.model.box; panels.push({ t: null, model: g.model, cells: [{ model: g.model, tag: g.tag ?? "W" }], w: c - a + 2 * pad, h: e - b + 0.1, std: false }); }
   // the standard ground beams share one box (as on the user's sheet)
   const sp = panels.filter((x) => x.std); if (sp.length > 1) panels = [{ ...sp[0], cells: sp.flatMap((x) => x.cells), w: sp.reduce((a, x) => a + x.w, 0) - 2 * pad * (sp.length - 1), h: Math.max(...sp.map((x) => x.h)) }, ...panels.filter((x) => !x.std)];
   // rows: as few as the greedy packing needs, then the panels split over them so the row widths are as even as possible (order kept);
@@ -184,6 +187,8 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
       for (const pn of row.panels) {
         const yb = row.y0 + tagH, slot = pn.w / pn.cells.length, tags = {};
         pn.cells.forEach((c, n) => {
+          if (c.model) { const [a, b, cc, e] = c.model.box, xc = x + slot * (n + 0.5); // a widening section: centred in its slot and in the row height
+            emitModel(d, c.model, X + xc - (a + cc) / 2, yb + (row.h - (e - b)) / 2 - b); (tags[c.tag] ??= []).push(xc); return; }
           const xc = x + slot * (n + 0.5), gw = groupW(c.t, c.at, c.ext, th), csy = yb + 0.42 + (row.h - 0.8 - c.t.h) / 2;
           section(d, c.t, mat, c.at, c.ext, X + xc - gw / 2, csy, c.title, th, c.sub); (tags[c.tag] ??= []).push(xc);
         });
@@ -197,7 +202,8 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
       const ew = ELEVATION_SAMPLE.w, nw = 2.75, ex0 = BX0 + Math.max(0.2, (AW - ew - 0.45 - nw) / 2), xe = elevation(d, X, ex0, BY0 + 0.15), nx = X + xe + 0.45; // elevation + notes centred in the width
       const notes = ["หมายเหตุ", `1. ระยะหุ้มคอนกรีตของคานไม่น้อยกว่า ${mat.cover ?? 3} ซม.`, "2. L = ระยะศูนย์ถึงศูนย์ของที่รองรับ เหล็กเสริมพิเศษบนวัดจากศูนย์เสาแต่ละข้าง เหล็กเสริมพิเศษล่างวางกึ่งกลางช่วง",
         "3. ความยาวเหล็กเสริมพิเศษตามที่ระบุในรูปตัดของแต่ละ type (L/4, L/3, 3L/5, 4L/5 หรือยาวตลอดช่วง ตามผลตรวจระยะตัดเหล็ก)",
-        "4. คานยื่น (A) เหล็กบนทั้งหมดยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลังตามที่ระบุใต้รูปตัด", "5. เหล็กปลอกงอขอ 90° ยาว 6 เท่าของขนาดเหล็ก ไม่น้อยกว่า 7.5 ซม. · ทุกชั้นของเหล็กเสริมมีอย่างน้อย 2 เส้น"];
+        "4. คานยื่น (A) เหล็กบนทั้งหมดยาวตลอดคานยื่น งอขอที่ปลาย และฝากเข้าช่วงหลังตามที่ระบุใต้รูปตัด", "5. เหล็กปลอกงอขอ 90° ยาว 6 เท่าของขนาดเหล็ก ไม่น้อยกว่า 7.5 ซม. · ทุกชั้นของเหล็กเสริมมีอย่างน้อย 2 เส้น",
+        ...(extra.widens?.length ? ["5. พอกข้างคาน (W) หล่อพร้อมคานเต็มความลึก ปลอกส่วนพอกโอบเหล็กมุมของคาน ผิวนอกผนังเสมอผิวนอกส่วนพอก (ACI 318-11 11.6 μ = 1.4 · 11.5.2.1 · 12.13.3)"] : [])];
       notes.forEach((s, i) => { const parts = split2(s, 62); parts.forEach((q, j) => d.text(nx, BY0 + 1.85 - i * 0.16 - j * 0.07, i ? 0.042 : 0.056, q, i ? "C-TEXT" : "C-TITLE", 0, 0)); });
     }
   });
@@ -224,16 +230,6 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
           r.hook?.ldh ? `${r.hook.ldh} / ${r.hook.avail}` : "-", r.mode].forEach((t, i) => d.text(X0 + cols[i], y, th, t, "C-TEXT", 0, 0)); y -= 0.085; }
       d.text(X0, y - 0.04, 0.04, "อ้างอิง ACI 318-11 (ฐานของ ว.ส.ท.): 12.5 ขอมาตรฐาน ldh · 12.12.1 เหล็กโมเมนต์ลบยึดผ่านจุดรองรับ · 12.11.1 เหล็กล่างเข้าจุดรองรับ ≥ 15 ซม. · 7.1 ขอ 90° ยาว 12db", "C-TEXT", 0, 0);
     }
-  }
-  // side widening sections (พอกข้างคาน, 2026-11-20): one more sheet, the section of each widening type × beam type in use, packed
-  if (extra.widens?.length) {
-    let X = sheets.length * (SW + 0.5); frame(d, X, project, `${title} — พอกข้างคาน`); sheets.push([]);
-    let x = BX0 + 0.25, yTop = BY1 - 0.25, rowH = 0;
-    for (const g of extra.widens) { const m = g.model, [a, b, c, e] = m.box, w = c - a, h = e - b;
-      if (x + w > TX - 0.2 && x > BX0 + 0.3) { x = BX0 + 0.25; yTop -= rowH + 0.25; rowH = 0; }
-      if (yTop - h < BY0 + 0.4) { X = sheets.length * (SW + 0.5); frame(d, X, project, `${title} — พอกข้างคาน (ต่อ)`); sheets.push([]); x = BX0 + 0.25; yTop = BY1 - 0.25; rowH = 0; }
-      emitModel(d, m, X + x - a, yTop - e); x += w + 0.3; rowH = Math.max(rowH, h); }
-    d.text(X + BX0 + 0.2, BY0 + 0.15, 0.04, "พอกข้างคานหล่อพร้อมคานเต็มความลึก · ปลอกส่วนพอกโอบเหล็กมุมของคาน · อ้างอิง ACI 318-11 11.6 (แรงเฉือนผ่านรอยต่อ μ = 1.4) · 11.5.2.1 (แรงบิดสมดุล) · 12.13.3", "C-TEXT", 0, 0);
   }
   return { dxf: d.toString(), sheets: sheets.length };
 }

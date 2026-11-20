@@ -810,3 +810,6 @@ worst span at a step joint when the governing span has none. Widening e (user "�
 centre, e = 0.20 instead of the agreed flush 0.25): e = beam.widen.e if typed, else max(drawn offset, b/2 + w − t/2) — a wall drawn inside the
 strip counts flush with its outer face, one drawn past it keeps its real offset (check eSrc set | drawn | flush, eDrawn); the wall tool's strip
 snap line is now the flush centre line for the wall type being drawn. widen-check 24/24.
+WIDENING SECTIONS ON THE BEAM SHEETS (2026-11-20, user): beamSheetsDxf extra.widens [{tag, model}] are panels in the same rows as the beam
+type sections (after the types, model centred in its slot, W-tag bubble) — no separate "พอกข้างคาน" sheet; sheet-1 notes get item 5 (widening
+cast with the beam, stirrups around the beam's corner bars, wall flush, ACI refs) when widenings exist. ezdxf audit 0 errors.
