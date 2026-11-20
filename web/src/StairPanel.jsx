@@ -8,6 +8,7 @@ import { fmt } from "./beamModel.js";
 import { STAIR_KINDS, stairLoads, stairRT } from "../engine/floor.js";
 import { SLAB_BARS } from "../engine/tables.js";
 import { baseLevel, elevations } from "./StoreyTable.jsx";
+import { stairSvgString } from "./stairSvg.js";
 
 // the height a stair climbs (user 2026-11-19: the bottom of a ground-floor stair went down to the column base): st.rise when set (≤ the storey
 // height); else the storey height — except on the lowest floor standing above the ground: from the ground ±0.00 up to that floor
@@ -111,33 +112,19 @@ export function StairInputs({ st, set, H, r0, mat, onLandingBeam, zTop = null, H
   );
 }
 
-// dimensioned side section: steps, waist slab, landing, supports, main bar line
-function Section({ st, g }) {
-  const run = Math.max(g.runNeed, 0.5), land = g.land, W = 360, Hs = 170, H = g.Ra * g.perFlight, sx = (W - 70) / Math.max(run + land, 0.5), sy = (Hs - 50) / Math.max(H, 0.5), s = Math.min(sx, sy);
-  const X = (x) => 30 + x * s, Y = (y) => Hs - 20 - y * s + 0, t = (st.t ?? 0.12), k = g.perFlight;
-  const pts = []; for (let i = 0; i < k; i++) { pts.push([i * g.T, i * g.Ra], [i * g.T, (i + 1) * g.Ra]); if (i < k - 1) pts.push([(i + 1) * g.T, (i + 1) * g.Ra]); }
-  const topEnd = [(k - 1) * g.T + land, k * g.Ra], cosT = g.T / Math.hypot(g.T, g.Ra), tv = t / cosT;
-  const soffit = [[0, -tv], [(k - 1) * g.T, (k - 1) * g.Ra - tv + g.Ra], ...(land ? [[topEnd[0], topEnd[1] - t]] : [])];
-  return (
-    <svg viewBox={`0 0 ${W} ${Hs}`} className="mx-auto max-h-[230px] w-full">
-      <polygon points={[...pts, ...(land ? [[topEnd[0], topEnd[1]]] : []), ...soffit.slice().reverse()].map(([x, y]) => `${X(x)},${Y(y)}`).join(" ")} fill="#eef0f4" stroke="#344054" strokeWidth={1.2} />
-      <polyline points={soffit.map(([x, y]) => `${X(x)},${Y(y + 0.03)}`).join(" ")} fill="none" stroke="#d92d20" strokeWidth={1.6} />
-      <rect x={X(0) - 10} y={Y(0)} width={20} height={14} fill="#98a2b3" /><rect x={X(topEnd[0]) - 10} y={Y(topEnd[1])} width={20} height={14} fill="#98a2b3" />
-      <line x1={X(topEnd[0]) + 18} x2={X(topEnd[0]) + 18} y1={Y(0)} y2={Y(topEnd[1])} stroke="#98a2b3" /><text x={X(topEnd[0]) + 22} y={(Y(0) + Y(topEnd[1])) / 2} fontSize={9} fill="#475467">{fmt(H, 2)} ม.</text>
-      <line x1={X(0)} x2={X((k - 1) * g.T)} y1={Hs - 6} y2={Hs - 6} stroke="#98a2b3" /><text x={(X(0) + X((k - 1) * g.T)) / 2} y={Hs - 9} textAnchor="middle" fontSize={9} fill="#475467">{k - 1} × {fmt(g.T, 2)} = {fmt((k - 1) * g.T, 2)} ม.</text>
-      {land > 0 && <text x={(X((k - 1) * g.T) + X(topEnd[0])) / 2} y={Y(topEnd[1]) - 4} textAnchor="middle" fontSize={9} fill="#475467">ชานพัก {fmt(land, 2)}</text>}
-      <text x={4} y={12} fontSize={9} fill="#344054">ลูกตั้ง {fmt(g.Ra * 100, 1)} · ลูกนอน {fmt(g.T * 100, 0)} · ท้องหนา {fmt(t * 100, 0)} ซม. · <tspan fill="#d92d20">เส้นแดง = เหล็กล่าง</tspan></text>
-    </svg>
-  );
+// drafting section(s) after the user's sheet ST-1 (engine/stairDetail.js): one per flight, SVG from the same primitives as the DXF
+export function StairSectionsView({ secs }) {
+  if (!secs?.length) return null;
+  return <div className="space-y-3">{secs.map((s) => <div key={s.title}><div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: stairSvgString(s.model, { px: 190 }) }} />{s.note && <p className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-[#b54708]">{s.note}</p>}</div>)}</div>;
 }
 
-export function StairDetail({ st, i, H, r0, row }) {
+export function StairDetail({ st, i, H, r0, row, secs, onDxf }) {
   const g = stairGeom(st, H, r0), L = stairLoads(st), r = row?.r;
   const loads = [["ท้องบันได + ขั้น (DL)", L.flight.DL], ["ปูผิว + ราว (SDL)", L.flight.SDL], ["น้ำหนักจร (LL)", L.flight.LL]];
   return (
     <div className="grid min-h-0 gap-3 overflow-auto rounded-xl bg-[#fff] p-3 text-[12px] text-[#344054] ring-1 ring-gray-200 lg:grid-cols-2">
       <div className="lg:col-span-2 flex items-center gap-2"><span className="text-sm font-semibold">บันได {i + 1} — {STAIR_KINDS[st.kind ?? "long"]}</span><span className="text-[#667085]">ช่องบันได {fmt(g.Lr, 2)} × {fmt(g.B, 2)} ม.</span></div>
-      <div className="lg:col-span-2"><Section st={st} g={g} /></div>
+      <div className="lg:col-span-2"><StairSectionsView secs={secs} />{onDxf && <div className="mt-1 text-right"><button onClick={onDxf} className="rounded-md px-2 py-1 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ส่งออก DXF แบบขยายบันได</button></div>}</div>
       <div>
         <p className="mb-1 font-semibold">ตรวจขนาดตามกฎหมาย / ความสะดวก</p>
         <table className="w-full tabular-nums"><tbody>{g.checks.map(([t, ok, v]) => <tr key={t} className="border-b border-[#f2f4f7]"><td className="py-0.5">{t}</td><td className="text-right">{v}<Ok ok={ok} /></td></tr>)}</tbody></table>

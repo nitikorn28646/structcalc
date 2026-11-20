@@ -26,8 +26,8 @@ class Dxf {
   arc(x, y, r, a0, a1, l, color = 0) { this.e.push(`${this.head("ARC", l, color)}\n100\nAcDbCircle\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}\n100\nAcDbArc\n50\n${f(a0)}\n51\n${f(a1)}`); }
   circle(x, y, r, l, color = 0) { this.e.push(`${this.head("CIRCLE", l, color)}\n100\nAcDbCircle\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}`); }
   // polyline; pts [[x, y, bulge]]
-  poly(pts, l, closed = true) {
-    this.e.push(`${this.head("LWPOLYLINE", l, 0)}\n100\nAcDbPolyline\n90\n${pts.length}\n70\n${closed ? 1 : 0}\n43\n0${pts.map(([x, y, b = 0]) => `\n10\n${f(x)}\n20\n${f(y)}${b ? `\n42\n${f(b)}` : ""}`).join("")}`);
+  poly(pts, l, closed = true, w = 0) {
+    this.e.push(`${this.head("LWPOLYLINE", l, 0)}\n100\nAcDbPolyline\n90\n${pts.length}\n70\n${closed ? 1 : 0}\n43\n${w ? f(w) : 0}${pts.map(([x, y, b = 0]) => `\n10\n${f(x)}\n20\n${f(y)}${b ? `\n42\n${f(b)}` : ""}`).join("")}`);
   }
   // h = text height (m); ha 0 left / 1 centre / 2 right, va 0 baseline / 1 bottom / 2 middle / 3 top
   text(x, y, h, s, l = "C-TEXT", ha = 0, va = 0, rot = 0, color = 0, at = null, wf = 1) {
@@ -207,4 +207,46 @@ export function downloadText(text, name, type = "application/dxf") {
   const url = URL.createObjectURL(new Blob([text], { type }));
   try { const a = Object.assign(document.createElement("a"), { href: url, download: name }); document.body.appendChild(a); a.click(); a.remove(); } catch { /* blocked */ }
   window.dispatchEvent(new CustomEvent("structcalc:savefile", { detail: { name, url, text } }));
+}
+
+// stair detail sheets (user 2026-11-19, their sheet ST-1 as the model): the sections of engine/stairDetail.js at 1:25 (true size in
+// metres) on the same A3 frame, packed in rows; a model primitive → DXF entity (dashed lines as dash pieces, no extra LTYPE entries —
+// see the beam sheet note; distribution / corner bars as LWPOLYLINE donuts with a constant width, as on the user's drawing)
+export function stairSheetsDxf(secs, project = {}, title = "แบบขยายบันได") {
+  const d = new Dxf(), AW = TX - BX0 - 0.3, AH = BY1 - BY0 - 0.3, sheets = [];
+  let sh = null, y = 0, rowH = 0, x = 0;
+  for (const s of secs) {
+    const [a, b, c, e] = s.model.box, w = c - a, h = e - b;
+    if (!sh || x + w > AW + 1e-9) { // new row
+      if (sh && y + rowH + h <= AH + 1e-9) { y += rowH; x = 0; rowH = 0; } else { sh = []; sheets.push(sh); y = 0; x = 0; rowH = 0; }
+    }
+    sh.push({ s, x, y, w, h }); x += w + 0.25; rowH = Math.max(rowH, h + 0.25);
+  }
+  sheets.forEach((list, k) => {
+    const X = k * (SW + 0.5);
+    frame(d, X, project, sheets.length > 1 ? `${title} (${k + 1}/${sheets.length})` : title);
+    // the sections of a sheet centred in the drawing area (a stair section at 1:25 often fills a sheet alone)
+    const usedH = Math.max(...list.map((it) => it.y + it.h)), dy = Math.max(0, (AH - usedH) / 2);
+    for (const it of list) {
+      const rowW = Math.max(...list.filter((o) => o.y === it.y).map((o) => o.x + o.w)), dx = Math.max(0, (AW - rowW) / 2);
+      const [a, , , e] = it.s.model.box, ox = X + BX0 + 0.15 + dx + it.x - a, oy = BY1 - 0.15 - dy - it.y - e;
+      emitModel(d, it.s.model, ox, oy);
+    }
+  });
+  return { dxf: d.toString(), sheets: sheets.length };
+}
+function emitModel(d, m, ox, oy) {
+  const P = (p) => [ox + p[0], oy + p[1], p[2] ?? 0];
+  for (const p of m.items) {
+    if (p.t === "line") {
+      if (!p.dash) { d.line(ox + p.x1, oy + p.y1, ox + p.x2, oy + p.y2, p.layer); continue; }
+      const L = Math.hypot(p.x2 - p.x1, p.y2 - p.y1), ux = (p.x2 - p.x1) / (L || 1), uy = (p.y2 - p.y1) / (L || 1);
+      for (let s0 = 0; s0 < L; s0 += 0.2) { const s1 = Math.min(L, s0 + 0.12); d.line(ox + p.x1 + ux * s0, oy + p.y1 + uy * s0, ox + p.x1 + ux * s1, oy + p.y1 + uy * s1, p.layer);
+        if (s1 + 0.04 < L) { const sd = s1 + 0.04; d.line(ox + p.x1 + ux * sd, oy + p.y1 + uy * sd, ox + p.x1 + ux * Math.min(L, sd + 0.005), oy + p.y1 + uy * Math.min(L, sd + 0.005), p.layer); } }
+    } else if (p.t === "poly") d.poly(p.pts.map(P), p.layer, !!p.closed);
+    else if (p.t === "circle") d.circle(ox + p.x, oy + p.y, p.r, p.layer);
+    else if (p.t === "disk") { const r = p.r / 2; d.poly([[ox + p.x - r, oy + p.y, 1], [ox + p.x + r, oy + p.y, 1]], p.layer, true, p.r); }
+    else if (p.t === "tri") d.poly([[ox + p.x, oy + p.y], [ox + p.x - p.s * 0.6, oy + p.y + p.s], [ox + p.x + p.s * 0.6, oy + p.y + p.s]], p.layer, true);
+    else if (p.t === "text") d.text(ox + p.x, oy + p.y, p.h, p.s, p.layer, p.ha ?? 0, p.va ?? 0, p.rot ?? 0);
+  }
 }

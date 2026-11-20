@@ -8,6 +8,8 @@ import { Still3D } from "./Snapshot3D.jsx";
 import { beamLayersOf } from "./DesignFigures.jsx";
 import { extraSpec } from "../engine/beamDetail.js";
 import { CalcLink, Doc, Figure, Item, Note, Sec, Sub, SummaryBox } from "./ReportKit.jsx";
+import { stairSections } from "./stairSection.js";
+import { stairSvgString } from "./stairSvg.js";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { beamSectionModel, columnSectionModel, footingModel, framePlanModel, pileCapModel } from "./drawings.js";
@@ -212,7 +214,8 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
                   const lv = (z) => (Math.abs(z) < 0.005 ? "±0.00" : `${z > 0 ? "+" : "−"}${fmt(Math.abs(z), 2)}`);
                   return [`บันได ${i + 1}`, `${fmt(rise, 2)} ม. (${lv(zTop - rise)} → ${lv(zTop)})`, `${fmt(g.Ra, 3)} × ${g.n}`, fmt(g.T, 3), `${fmt(g.runNeed, 2)} / ${fmt(g.Lr, 2)}`, fmt(g.B, 2), fmt(g.comfort, 3), bad.length ? `ไม่ผ่าน: ${bad.join(", ")}` : "ผ่านทุกข้อ", sup + head + foot];
                 })} />
-                <Note>ความสูงบันได = ที่กำหนด หรือความสูงชั้น (ชั้นล่างสุดที่อยู่เหนือดิน: จากดิน ±0.00) · ลูกตั้งจริง = ความสูงบันได ÷ จำนวนลูกตั้ง · ยาวแนวราบ = ลูกนอน × (ลูกตั้งต่อช่วง − 1) · เกณฑ์: ลูกตั้ง ≤ 0.20 ม. ลูกนอน ≥ 0.22 ม. กว้าง ≥ 0.80 ม. 2R + T = 0.60–0.65 ม. · ท้องบันไดออกแบบเป็นช่วงพาดเต็มช่อง (ตาราง "ออกแบบพื้นและบันได")</Note></>)}
+                <Note>ความสูงบันได = ที่กำหนด หรือความสูงชั้น (ชั้นล่างสุดที่อยู่เหนือดิน: จากดิน ±0.00) · ลูกตั้งจริง = ความสูงบันได ÷ จำนวนลูกตั้ง · ยาวแนวราบ = ลูกนอน × (ลูกตั้งต่อช่วง − 1) · เกณฑ์: ลูกตั้ง ≤ 0.20 ม. ลูกนอน ≥ 0.22 ม. กว้าง ≥ 0.80 ม. 2R + T = 0.60–0.65 ม. · ท้องบันไดออกแบบเป็นช่วงพาดเต็มช่อง (ตาราง "ออกแบบพื้นและบันได")</Note>
+                {an.stairs.map((s0, i) => stairSections(frame, res, k, s0.i ?? i).map((sec) => <Figure key={sec.title} caption={`${sec.title} — เหล็กเสริมจากผลออกแบบท้องบันได${sec.note ? ` · หมายเหตุ: ${sec.note}` : " · คานรับตามแบบโครงสร้าง"}`}><div className="rp-stair" dangerouslySetInnerHTML={{ __html: stairSvgString(sec.model, { px: 120 }) }} /></Figure>))}</>)}
               {o("floors.slabs") && slabs.length > 0 && (<><Sub>ออกแบบพื้นและบันได (โมดูลพื้น WSD)</Sub>
                 <Table head={["แผ่น", "ชนิด", "ช่วง (ม.)", "ขอบต่อเนื่อง", "M สูงสุด (กก.-ม./ม.)", "เหล็กเสริม", "ผล"]}
                   rows={slabs.map((x) => [x.name, x.way ?? ({ C: "พื้นยื่น", ST: "บันได", PS: "PS", GS: "GS" })[x.kind] ?? x.kind, x.S ? `${fmt(x.S, 2)} × ${fmt(x.L, 2)}` : x.L ? fmt(x.L, 2) : "-",

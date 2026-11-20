@@ -6,6 +6,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tip } from "@/components/ui/tooltip";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { StairDetail, StairInputs, stairRiseOf } from "./StairPanel.jsx";
+import { allStairSections, stairSections } from "./stairSection.js";
+import { stairSheetsDxf, downloadText } from "./beamDetailDxf.js";
 import { DesignCriteria } from "./DesignCriteria.jsx";
 import { BeamLoadTable, PanelTable } from "./BulkTables.jsx";
 import { arcGeom, quarterSagitta } from "../engine/arc.js";
@@ -787,7 +789,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     </div>);
   const center = page ? <div className="min-h-0 flex-1 overflow-auto p-1">{page}</div>
     : step === "stair" && stair && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,1fr)_1fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>
-      <StairDetail st={stair} i={sel.i} H={stairRiseOf(frame, cur, stair)} r0={an.stairs?.[sel.i]} row={designSlabs(an, fl, frame.mat).find((x) => x.kind === "ST" && x.si === sel.i)} /></div>
+      <StairDetail st={stair} i={sel.i} H={stairRiseOf(frame, cur, stair)} r0={an.stairs?.[sel.i]} row={designSlabs(an, fl, frame.mat).find((x) => x.kind === "ST" && x.si === sel.i)}
+        secs={stairSections(frame, res, cur, sel.i)} onDxf={() => { const all = allStairSections(frame, res), { dxf } = stairSheetsDxf(all, project ?? {}); downloadText(dxf, `แบบขยายบันได.dxf`); }} /></div>
     : step === "analysis" && sub === "cont" && view === "2d" ? <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(340px,2fr)_3fr] max-xl:grid-rows-[minmax(260px,1fr)_auto]"><div className="flex min-h-0 flex-col overflow-hidden">{boardEl}</div>{lineDiagram}</div>
     : step === "footing" ? view3d
     : view === "3d" ? view3d : view === "split" ? <div className="grid min-h-0 flex-1 grid-cols-2 gap-3"><div className="min-h-0">{boardEl}</div>{view3d}</div> : boardEl;

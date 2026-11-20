@@ -694,3 +694,17 @@ stairRiseOf(frame, k, st) = st.rise when set (≤ storey height), else the store
 use it (H prop); Frame3D Stair zb = top − rise and a straight flight is drawn with its real run (risers − 1) × tread ending at the head edge;
 report stair table column "สูง (ระดับต้น → หัว)"; plan label "ขึ้นจาก ดิน ±0.00" on the lowest floor. Engine loads unchanged (riser / tread only).
 Test project web/public/projects/_stair2.json (git-ignored). stair-check 17/17, regress identical, report-editions ALL OK, E2E 47/47.
+STAIR SECTION DRAWING (2026-11-20, user "เขียนรูปตัดบันไดเเละเหล็กบันไดให้สวยกว่านี้", their sheet ST-1 as the model): engine/stairDetail.js stairDetailModel(o) →
+primitives (line / poly with bulges / circle / disk / tri / text, metres, y up) of one flight: foot support left (beam with stirrup + bars,
+slab break, or ground hatch), flight up to the right, landing slab + landing beam or the head beam + floor slab break; bars as on the sheet:
+main bars (leg + 180° hook in the foot beam, along the soffit, straight past the knee to the landing top, down into the head beam), landing
+bottom bars crossing at the knee (0.75 m along the slope), top bars 0.75 m at the foot / at the head (no landing), step zig-zag bars, a bar at
+every bend, distribution dots; aligned dims (supports / run / landing / overall, tread, riser, waist, soffit, bar lengths, thicknesses, rise),
+dashed levels ▼ with names, leaders with roles (เหล็กเสริมหลัก / บน / ลูกขั้น / กันร้าว / ทุกมุม), note line, title + มาตราส่วน 1:25. Drawing only.
+src/stairSection.js stairSections(frame, res, k, si) = the project data → models: straight = 1 section, landing (U) = ช่วงที่ 1 (foot → landing,
+landing beam = mid beam on the far edge) + ช่วงที่ 2 (landing → START edge beam of this floor); beams found under the edges with their analysed
+type size / bars; bars from the slab design (mainText / tempText); assumed sizes → sec.note (shown in amber, in the report caption);
+side / cant stairs not drawn. ST-n numbered over the project (stairTag). src/stairSvg.js = SVG string (panel px 190, report px 120).
+StairDetail (step 3) shows the sections + "ส่งออก DXF แบบขยายบันได" (beamDetailDxf.js stairSheetsDxf: all stairs, same A3 frame / R2010 writer,
+sections centred on the sheet, at 1:25 usually one per sheet; donuts = LWPOLYLINE const width, dashes as pieces). Report: figures after the
+stair size table. ezdxf audit 0 errors. Not done: plan of the stair (แปลนบันได) with numbered steps.
