@@ -736,3 +736,7 @@ along the beam − 5 cm) → full depth at that face; else the h − dz support 
 full depth; with the porch + top porch at −0.10 and locked types 36/39 (3 step beams: RB6 @0.15 > d/2 at h − 0.10, and the 1.5 m porch side beam
 under the 4.8 m span's M−), auto types 37/39. Frame3D: lowered beams at their top, step beam = full width to the low slab + upstand (b − notch) on
 the high side, slabs at their level. levels-check 18/18, E2E 47/47.
+LEVELS: NO NOTCH BEAMS (2026-11-20, user "ไม่ต้องทำเป็นคานบ่า อันไหนที่แผ่นพื้นวางไปก็ให้ลดระดับลงเลย"): beamLv top = the LOWEST slab beside the beam
+(step always 0 → no hCut from notches; the notch / PS-bearing code stays dormant), lv.up = how much the other slab stands above the beam top
+(inspector note: curb on the beam or let that slab span the other way). Step joints / hook rule unchanged. Plan shows "หลังคาน −0.10" only;
+3D draws plain lowered beams. User's file (both porches −0.10, locked types): 39/39, 8 joints all hooked in the 30×30 columns. levels-check 17/17, E2E 47/47.

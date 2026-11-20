@@ -601,8 +601,10 @@ export function analyzeFloor(floor, types, mat, extra = [], wallTypes = DEFAULT_
     const u = [(b.b[0] - b.a[0]) / L, (b.b[1] - b.a[1]) / L], m = [(b.a[0] + b.b[0]) / 2, (b.a[1] + b.b[1]) / 2];
     const side = (sg) => { const pn = inPanel([m[0] - u[1] * 0.06 * sg, m[1] + u[0] * 0.06 * sg]); return pn && !pn.open && pn.st !== "GS" ? pn : null; };
     const sides = [side(1), side(-1)], zs = sides.filter(Boolean).map((pn) => pn.dz), set = Number.isFinite(b.dz);
-    const top = set ? +b.dz : zs.length ? Math.max(...zs) : 0, low = Math.min(top, ...zs), step = top - low > 0.005 ? +(top - low).toFixed(3) : 0;
-    return { top, low, step, auto: !set, sides: sides.map((pn) => (pn ? { key: pn.key, dz: pn.dz, st: pn.st, dir: pn.dir } : null)), u };
+    // user 2026-11-20: no step (notch) beams — a beam that a lowered slab rests on is lowered whole (top = the lowest slab beside it);
+    // a slab on the other side standing higher is noted (up: the edge of that slab sits that much above the beam top)
+    const top = set ? +b.dz : zs.length ? Math.min(...zs) : 0, up = zs.length && Math.max(...zs) - top > 0.005 ? +(Math.max(...zs) - top).toFixed(3) : 0;
+    return { top, low: top, step: 0, up, auto: !set, sides: sides.map((pn) => (pn ? { key: pn.key, dz: pn.dz, st: pn.st, dir: pn.dir } : null)), u };
   });
   const topOf = (i) => beamLv[i]?.top ?? 0;
   lines.lv = beamLv;

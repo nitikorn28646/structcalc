@@ -648,11 +648,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 const js = (an.levels?.steps ?? []).filter((j) => j.hi === sel.i || j.lo === sel.i), cm = (v) => fmt(v * 100, 0), tb = types[an.beamTypeOf?.[sel.i] ?? beam.type ?? 0];
                 return (<>
                   <Field label="ระดับหลังคาน (เทียบระดับชั้น)" unit="m"><NumberInput value={lv.top} step="0.05" onChange={(v) => setBeam({ dz: Number.isFinite(v) ? v : undefined })} /></Field>
-                  {lv.step > 0 ? <Field label="บ่าฝั่งต่ำ กว้าง" unit="m"><NumberInput value={lv.notchW ?? (tb?.b ?? 0.2) / 2} step="0.025" onChange={(v) => setBeam({ notchW: v > 0 ? v : undefined })} /></Field>
-                    : !lv.auto ? <button onClick={() => setBeam({ dz: undefined })} className={`${btnGhost} self-end`}>ใช้ระดับตามพื้น</button> : <div />}
-                  {(lv.top !== 0 || lv.step > 0 || js.length > 0 || !lv.auto) && <Result className="col-span-2">
+                  {!lv.auto ? <button onClick={() => setBeam({ dz: undefined })} className={`${btnGhost} self-end`}>ใช้ระดับตามพื้น</button> : <div />}
+                  {(lv.top !== 0 || lv.up > 0 || js.length > 0 || !lv.auto) && <Result className="col-span-2">
                     {lv.auto ? "ระดับตามแผ่นพื้นสองข้าง" : "ระดับกำหนดเอง"} · หลังคาน {lv.top > 0 ? "+" : ""}{fmt(lv.top, 2)} ม.
-                    {lv.step > 0 && <> · <b>คานบ่า</b> ต่างระดับ {cm(lv.step)} ซม.: ฝั่งต่ำบากลง {cm(lv.step)} ซม. กว้าง {cm(lv.notchW ?? 0)} ซม. ให้พื้นวาง · ตรวจกำลังด้วยหน้าตัด b × (h − {cm(lv.step)} ซม.)</>}
+                    {lv.up > 0 && <> · พื้นอีกข้างสูงกว่าหลังคาน {cm(lv.up)} ซม. (ขอบพื้นฝั่งนั้นวางสูงกว่าคาน — ทำคันคอนกรีตบนคานหรือให้พื้นฝั่งนั้นพาดทางอื่น)</>}
                     {js.map((j) => <span key={`${j.t}`} className="block">ต่างระดับ {cm(j.dz)} ซม. ที่ ({fmt(j.p[0], 2)}, {fmt(j.p[1], 2)}): {j.hi === sel.i ? `เป็นคานตัวสูง — เหล็กบนของคานนี้งอขอ 90° ลงใน${j.col ? "เสา (ถ้าเสายาวไม่พอให้ขอยึด ldh จะตรวจที่หัวเสาด้วย h − " + cm(j.dz) + " ซม. — ดูผลรายช่วง)" : "คาน · ตรวจทั้งช่วงด้วย h − " + cm(j.dz) + " ซม."}` : "เป็นคานตัวต่ำ — เหล็กบนวิ่งผ่านเสาเข้าไปในคานตัวสูงยาว ≥ ld"}{!j.ok ? " · ไม่ผ่าน: ความลึกเหลือไม่พอ" : ""}</span>)}
                   </Result>}</>); })()}
               <div className="col-span-2"><Field label="บทบาทที่จุดตัดคาน (ไม่มีเสา)"><Select value={beam.role ?? ""} onChange={(v) => setBeam({ role: v || undefined })} options={[["", "อัตโนมัติ (คานที่มีเสามากกว่า / ช่วงสั้นกว่า = คานหลัก)"], ["main", "คานหลัก — คานอื่นวางบนคานนี้"], ["secondary", "คานซอย — วางบนคานที่ตัดผ่าน"]]} /></Field></div>
@@ -691,7 +690,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
               {panel.st === "PS" ? <Field label="ทิศวางแผ่น (ช่วงพาด)"><Select value={panel.dir} onChange={(v) => setPanel({ dir: v })} options={[["x", "แนว X ↔"], ["y", "แนว Y ↕"]]} /></Field> : <div />}
               <Field label="หนา" unit="m"><NumberInput value={panel.t} step="0.01" onChange={(v) => setPanel({ t: v })} /></Field>
               <Field label="ระดับพื้น (เทียบระดับชั้น)" unit="m"><NumberInput value={panel.dz ?? 0} step="0.05" onChange={(v) => setPanel({ dz: Math.abs(v) < 1e-9 ? undefined : v })} /></Field>
-              <p className="col-span-2 -mt-2 text-[11px] text-gray-500">เช่น เฉลียงต่ำกว่าภายใน 10 ซม. = −0.10 · คานรอบแผ่นตามระดับนี้เอง: สองข้างต่ำ = คานต่ำทั้งตัว, สองข้างต่างระดับ = คานบ่า (ตรวจด้วยหน้าตัด h − ระยะต่าง)</p>
+              <p className="col-span-2 -mt-2 text-[11px] text-gray-500">เช่น เฉลียงต่ำกว่าภายใน 10 ซม. = −0.10 · คานที่แผ่นนี้วางอยู่ลดระดับลงทั้งตัวตามนี้เอง (คานติดพื้นสองระดับ ใช้ระดับที่ต่ำกว่า)</p>
               {step === "loads" ? <>
               <Field label="ปูผิว" unit="kg/m²"><NumberInput value={panel.finish} step="10" onChange={(v) => setPanel({ finish: v })} /></Field>
               <Field label="จร" unit="kg/m²"><NumberInput value={panel.live} step="50" onChange={(v) => setPanel({ live: v })} /></Field>

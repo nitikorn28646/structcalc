@@ -1,6 +1,6 @@
-// Levels (user 2026-11-20: porch slab 10 cm below the rooms → beams at different levels): slab level per panel → beam levels, step
-// beams (notch, checked with b × (h − dz)), step joints (higher beam's support checked with h − dz), warnings (depth left, secondary
-// bottom, PS bearing ≥ max(5 cm, ln/180)). Loads must not change with levels. node cli/levels-check.mjs
+// Levels (user 2026-11-20: porch slab 10 cm below the rooms → the beams it rests on lowered whole, no notch beams): slab level per panel →
+// beam levels (lowest slab beside it), step joints (higher beam's support checked with h − dz unless its top bars hook in the column),
+// warnings (depth left, secondary bottom). Loads must not change with levels. node cli/levels-check.mjs
 import { analyzeFrame } from "../web/engine/frame.js";
 import { DEFAULT_BEAM_TYPES, DEFAULT_COLUMN_TYPES, checkSpan, cutType } from "../web/engine/floor.js";
 const mat = { fcPrime: 240, F: 0.45, capFc: true, fy: 4000, fys: 2400, Es: 2040000, cover: 3 };
@@ -30,19 +30,19 @@ const r1 = analyzeFrame(porch()), an = r1.floors[1], f2 = porch().floors[1], lv 
 const L = (a, b) => lv[bi(f2, a, b)];
 ok("porch front beam lowered", L([0, 0], [4, 0]).top === -0.1 && !L([0, 0], [4, 0]).step);
 ok("porch end beam lowered", L([0, 0], [0, 1.5]).top === -0.1 && !L([0, 0], [0, 1.5]).step);
-ok("porch/room beam = step beam 0.10", L([0, 1.5], [4, 1.5]).top === 0 && L([0, 1.5], [4, 1.5]).step === 0.1);
-ok("porch/side bay beam = step beam 0.10", L([4, 0], [4, 1.5]).step === 0.1, JSON.stringify(L([4, 0], [4, 1.5])));
-const j0 = an.levels.steps.find((j) => j.p[0] === 0 && j.p[1] === 1.5);
-ok("step joint at (0, 1.5), higher = the room beam", j0 && j0.dz === 0.1 && j0.hi === bi(f2, [0, 1.5], [0, 5.5]) && j0.col && j0.ok);
-const spStep = an.spans.find((s) => s.members.includes(bi(f2, [0, 1.5], [4, 1.5]))), spHi = an.spans.find((s) => s.members.includes(bi(f2, [0, 1.5], [0, 5.5])));
-ok("step beam span checked with h − 0.10 (whole span)", spStep.hCut === 0.1);
-ok("higher beam span, 20 cm column: hook does not fit → support checked with h − 0.10", spHi.stepSup?.length && !spHi.hCut && spHi.check.step?.cut === 0.1 && spHi.check.stepHook?.[0]?.ok === false, JSON.stringify(spHi.check.stepHook));
-// a 40 × 40 column: the higher beam's DB16 top bars hook in it (ldh 0.7 × 0.075·4000·1.6/√240 = 21.7 ≤ 35 cm) → full depth kept
+ok("porch/room beam lowered whole (no notch)", L([0, 1.5], [4, 1.5]).top === -0.1 && !L([0, 1.5], [4, 1.5]).step && L([0, 1.5], [4, 1.5]).up === 0.1);
+ok("porch/side bay beam lowered whole", L([4, 0], [4, 1.5]).top === -0.1 && !L([4, 0], [4, 1.5]).step);
+ok("room beams stay at 0", L([0, 1.5], [0, 5.5]).top === 0 && L([4, 1.5], [8, 1.5]).top === 0);
+const j0 = an.levels.steps.find((j) => j.p[0] === 0 && j.p[1] === 1.5), j1 = an.levels.steps.find((j) => j.p[0] === 4 && j.p[1] === 1.5);
+ok("step joints at (0, 1.5) and (4, 1.5), higher = the room beams", j0?.hi === bi(f2, [0, 1.5], [0, 5.5]) && j1?.hi === bi(f2, [4, 1.5], [8, 1.5]) && j0.col && j0.ok && j0.dz === 0.1);
+ok("no span checked with a notch", !an.spans.some((s) => s.hCut));
+const spHi = an.spans.find((s) => s.members.includes(bi(f2, [0, 1.5], [0, 5.5])));
+ok("higher beam span, 20 cm column: hook does not fit → support checked with h − 0.10", spHi.stepSup?.length && spHi.check.step?.cut === 0.1 && spHi.check.stepHook?.[0]?.ok === false, JSON.stringify(spHi.check.stepHook));
+const t5 = DEFAULT_BEAM_TYPES[4], c0 = checkSpan(t5, { ...spHi, stepSup: null }, mat), cc = checkSpan(cutType(t5, 0.1), { ...spHi, stepSup: null, Mpos: 0 }, mat);
+ok("joint check = full-depth check and the h − 0.10 support check", Math.abs(spHi.check.util - Math.max(c0.util, cc.util)) < 1e-9 || spHi.check.util >= Math.max(c0.util, cc.util) - 1e-9);
 const big = [{ name: "C40", levels: [0, 1, 2].map(() => ({ level: "-", Bx: 40, By: 40, n: 8, mainBar: "DB 16", tieBar: "RB 9", s: 0.15 })) }];
 const rB = analyzeFrame({ ...porch(), colTypes: big }), spB = rB.floors[1].spans.find((s) => s.members.includes(bi(f2, [0, 1.5], [0, 5.5])));
 ok("higher beam span, 40 cm column: hooked → full depth", spB.check.stepHook?.[0]?.ok === true && !spB.check.step, JSON.stringify(spB.check.stepHook));
-const t5 = DEFAULT_BEAM_TYPES[4], full = checkSpan(t5, { ...spStep, hCut: 0 }, mat), cut = checkSpan(cutType(t5, 0.1), { ...spStep, hCut: 0 }, mat), used = checkSpan(t5, spStep, mat);
-ok("cut check = check with the type 10 cm shallower", Math.abs(used.util - cut.util) < 1e-12 && cut.util >= full.util - 1e-12, `util full ${full.util.toFixed(3)} · cut ${cut.util.toFixed(3)}`);
 const rz = (r) => r.frame3d.base.reduce((s, b) => s + b.R[2], 0);
 ok("weight unchanged by levels (3D ΣRz, fixed types)", Math.abs(rz(r1) - rz(r0)) < 1e-6 * rz(r0), `${rz(r0).toFixed(1)} / ${rz(r1).toFixed(1)} kg`);
 ok("accumulated column loads ≥ the weight", base(r1) >= rz(r1) - 1);
@@ -54,12 +54,6 @@ ok("step deeper than the beam allows → warned", r2.floors[1].levels.steps.some
 // D: a secondary beam lower and deeper than the beam carrying it → warned
 const r3 = analyzeFrame(model((f) => { f.beams.push(Bm([2, 1.5], [2, 5.5], { type: 4, dz: -0.1 })); f.beams = f.beams.map((b, i) => (i < f.beams.length - 1 ? { ...b, type: 0 } : b)); return f; }));
 ok("secondary bottom below the main beam bottom → warned", r3.warnings.some((w) => w.includes("ท้องคานซอยต่ำกว่าท้องคานหลัก")));
-
-// E: precast planks spanning Y on the porch: step beam (0,1.5)–(4,1.5) carries them on its notch; default notch b/2 = 0.10 passes, 0.03 fails
-const r4 = analyzeFrame(porch(-0.1, { kind: "PS", dir: "y" }));
-ok("PS bearing on the notch b/2 = 10 cm → no warning", !r4.warnings.some((w) => w.includes("วางได้")));
-const r5 = analyzeFrame(model((f) => { f.panels = { "2.00,0.75": { dz: -0.1, kind: "PS", dir: "y" } }; f.beams[bi(f, [0, 1.5], [4, 1.5])].notchW = 0.03; return f; }));
-ok("PS bearing on a 3 cm notch → warned (≥ 5 cm, ACI 318-11 16.6.2.2)", r5.warnings.some((w) => w.includes("ฝั่งต่ำบนบ่า วางได้ 3.0 ซม.")));
 
 // F: a level set by hand on a beam overrides the slabs
 const r6 = analyzeFrame(model((f) => { f.beams[bi(f, [4, 1.5], [8, 1.5])].dz = -0.05; return f; }));
