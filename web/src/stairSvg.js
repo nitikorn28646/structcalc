@@ -35,7 +35,7 @@ export function stairSvgString(model, { px = 190, mono = false } = {}) {
     else if (p.t === "tri") out.push(`<path d="M${X(p.x)} ${Y(p.y)} l${(-p.s * k * 0.6).toFixed(2)} ${(-p.s * k).toFixed(2)} h${(p.s * k * 1.2).toFixed(2)} Z" fill="${c}"/>`);
     else if (p.t === "text") {
       const anchor = ["start", "middle", "end"][p.ha ?? 0], base = ["alphabetic", "text-after-edge", "central", "hanging"][p.va ?? 0];
-      out.push(`<text x="${X(p.x)}" y="${Y(p.y)}" font-size="${(p.h * k * 1.25).toFixed(2)}" text-anchor="${anchor}" dominant-baseline="${base}" fill="${c}"${p.rot ? ` transform="rotate(${(-p.rot).toFixed(2)} ${X(p.x)} ${Y(p.y)})"` : ""}${p.layer === "C-TITLE" ? ' font-weight="700"' : ""}>${esc(p.s)}</text>`);
+      out.push(`<text x="${X(p.x)}" y="${Y(p.y)}" font-size="${(p.h * k * 1.25).toFixed(2)}" text-anchor="${anchor}" dominant-baseline="${base}" fill="${c}" stroke="#fff" stroke-width="${(p.h * k * 0.22).toFixed(2)}" paint-order="stroke" stroke-linejoin="round"${p.rot ? ` transform="rotate(${(-p.rot).toFixed(2)} ${X(p.x)} ${Y(p.y)})"` : ""}${p.layer === "C-TITLE" ? ' font-weight="700"' : ""}>${esc(p.s)}</text>`);
     }
   }
   const w = ((x1 - x0) * k).toFixed(0), h = ((y1 - y0) * k).toFixed(0);

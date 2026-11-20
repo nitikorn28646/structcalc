@@ -48,7 +48,10 @@ export function jointDetailModel(r, mat = {}, o = {}) {
     text((x1 + x2) / 2, y + (above ? 0.015 : -0.015), TH * 0.9, label, "C-DIM", 1, above ? 1 : 3); };
   const dimV = (x, y1, y2, label) => { line(x, y1, x, y2, "C-DIM"); for (const y of [y1, y2]) { line(x - 0.03, y, x + 0.03, y, "C-DIM"); line(x - 0.012, y - 0.012, x + 0.012, y + 0.012, "C-DIM"); }
     text(x - 0.015, (y1 + y2) / 2, TH * 0.9, label, "C-DIM", 1, 1, 90); };
-  const leader = (bx, by, tx, ty, s, ha = 0) => { const w = String(s).length * TH * 0.55 + 0.03, ex = ha === 0 ? tx + w : tx - w; poly([[bx, by], [tx, ty], [ex, ty]], "C-TEXT"); text(ha === 0 ? tx + 0.015 : tx - 0.015, ty + 0.01, TH, s, "C-TEXT", ha, 1); };
+  // leader: a dot on the bar, straight up / down to the text level, then the underline the text sits on (no slanted lines crossing)
+  const leader = (bx, by, ty, s, ha = 0, s2 = "") => { const w = Math.max(String(s).length, String(s2).length * 0.9) * TH * 0.52 + 0.03, ex = ha === 0 ? bx + w : bx - w;
+    P.push({ t: "disk", x: bx, y: by, r: 0.008, layer: "C-TEXT" }); poly([[bx, by], [bx, ty], [ex, ty]], "C-TEXT");
+    text(ha === 0 ? bx + 0.015 : bx - 0.015, ty + 0.012, TH, s, "C-TEXT", ha, 1); if (s2) text(ha === 0 ? bx + 0.015 : bx - 0.015, ty - 0.015, TH * 0.82, s2, "C-DIM", ha, 3); };
 
   const c = r.along ?? 0.25, h1 = r.hi?.h ?? 0.4, h2 = r.lo?.h ?? 0.4, dz = r.dz, cv = (mat.cover ?? 3) / 100 + 0.01, Lb = 1.3;
   const dbH = (BARS[r.hiBar?.bar]?.d ?? 1.2) / 100, dbL = (BARS[r.loBar?.bar]?.d ?? 1.2) / 100, botH = -h1, botL = -dz - h2, same = Math.abs(botH - botL) < 0.005;
@@ -74,20 +77,20 @@ export function jointDetailModel(r, mat = {}, o = {}) {
     bar([[c + Lb - 0.05, botL + cv], [0.05, botL + cv], [0.05, botL + cv + Math.max(12 * dbL, 0.1)]], dbL, "C-BAR-EXTRA");
   }
   // dimensions
-  dimH(0, c, yLo - 0.12, `เสา ${cm(c)} ซม.`, false);
+  dimH(0, c, Math.min(yLo, botH - 0.3) - 0.12, `เสา ${cm(c)} ซม.`, false);
   dimH(0, xh, 0.12, `ldh ≥ ${cm(ldh)} ซม.${r.hook?.ok ? "" : " (ไม่พอ)"}`);
-  dimH(-Math.min(ld, Lb - 0.1), 0, yl - 0.2, `≥ ld ${cm(ld)} ซม.`, false);
+  { const xl = -Math.min(ld, Lb - 0.1), yd = botH - 0.16; line(xl, yl - 0.02, xl, yd - 0.03, "C-DIM", true); line(0, botH - 0.02, 0, yd - 0.03, "C-DIM"); dimH(xl, 0, yd, `≥ ld ${cm(ld)} ซม.`, false); }
   dimV(-Lb - 0.15, botH, 0, `${cm(h1)}`); dimV(c + Lb + 0.15, botL, -dz, `${cm(h2)}`); dimV(c + Lb + 0.32, -dz, 0, `Δ ${cm(dz)}`);
   line(c + 0.05, 0, c + Lb + 0.36, 0, "C-DIM", true);
   // labels
   const nH = (b) => (b ? `${b.n}-${b.bar} มม.` : "เหล็กบน");
-  leader(-0.6, -cv, -0.75, yHi + 0.15, `เหล็กบน ${r.hi?.name ?? ""} ${nH(parseBars(r.hi?.top))} งอขอ 90° ฝังในเสา ยาว ≥ ldh (ACI 318-11 12.5)`, 0);
-  leader(c + 0.7, yl, c + 0.55, yHi + 0.32, `เหล็กบน ${r.lo?.name ?? ""} ${nH(parseBars(r.lo?.top))} วิ่งผ่านเสาเข้าคานตัวสูง ≥ ld (12.12.1)`, 0);
-  leader(c + 0.8, botL + cv, c + 0.95, yLo - 0.32, `เหล็กล่างเข้าเสา ≥ 15 ซม.${same ? " ต่อเนื่องผ่านเสา" : " งอขอขึ้น"} (12.11.1)`, 0);
-  text(-Lb, 0.03, TH, `${r.hi?.name ?? ""} ${cm(r.hi?.b ?? 0.2)}×${cm(h1)} หลังคาน ${r.hiTop > 0 ? "+" : ""}${f2(r.hiTop)}`, "C-TEXT", 0, 0);
-  text(c + Lb, -dz + 0.03, TH, `${r.lo?.name ?? ""} ${cm(r.lo?.b ?? 0.2)}×${cm(h2)} หลังคาน ${r.loTop > 0 ? "+" : ""}${f2(r.loTop)}`, "C-TEXT", 2, 0);
-  const title = o.title ?? "รายละเอียดคานต่างระดับที่หัวเสา", yT = yLo - 0.45;
+  leader(-0.85, -cv, yHi + 0.12, `เหล็กบน ${r.hi?.name ?? ""} ${nH(parseBars(r.hi?.top))}`, 0, "งอขอ 90° ฝังในเสา ≥ ldh (ACI 318-11 12.5)");
+  leader(c + 0.85, yl, yHi + 0.12, `เหล็กบน ${r.lo?.name ?? ""} ${nH(parseBars(r.lo?.top))}`, 0, "วิ่งผ่านเสาเข้าคานตัวสูง ≥ ld (12.12.1)");
+  leader(c + Lb - 0.12, botL + cv, Math.min(yLo, botH - 0.3) - 0.3, "เหล็กล่างเข้าเสา ≥ 15 ซม.", 0, same ? "ต่อเนื่องผ่านเสา (12.11.1)" : "งอขอขึ้นในเสา (12.11.1)");
+  text(-Math.min(Math.max(r.ld ?? 0.3, 0.3), Lb - 0.1) - 0.05, botH - 0.035, TH, `${r.hi?.name ?? ""} ${cm(r.hi?.b ?? 0.2)}×${cm(h1)} หลังคาน ${r.hiTop > 0 ? "+" : ""}${f2(r.hiTop)}`, "C-TEXT", 2, 3); // ends left of the ld extension line
+  text(c + 0.05, botL - 0.035, TH, `${r.lo?.name ?? ""} ${cm(r.lo?.b ?? 0.2)}×${cm(h2)} หลังคาน ${r.loTop > 0 ? "+" : ""}${f2(r.loTop)}`, "C-TEXT", 0, 3);
+  const title = o.title ?? "รายละเอียดคานต่างระดับที่หัวเสา", yT = Math.min(yLo, botH - 0.3) - 0.55;
   text(c / 2, yT, TH * 1.4, title, "C-TITLE", 1, 0);
   text(c / 2, yT - 0.12, TH * 0.9, `${o.sub ?? ""}มาตราส่วน 1:20`, "C-TEXT", 1, 0);
-  return { items: P, box: [-Lb - 0.45, yT - 0.2, c + Lb + 1.6, yHi + 0.45] };
+  return { items: P, box: [-Lb - 0.45, yT - 0.2, c + Lb + 0.75, yHi + 0.3] };
 }
