@@ -27,7 +27,8 @@ export function extraSpec(ti, spans) {
     else if (c?.bot && !c.bot.notNeeded && c.bot.len > 0) { const edge = Math.min(c.bot.start, s.len - c.bot.end); botR = Math.max(botR, 1 - (2 * edge) / s.len); }
   }
   const pick = (r, steps) => steps.find(([v]) => r <= v + EPS)?.[1] ?? null;
-  const top = pick(topR, TOP_STEPS), bot = pick(botR, BOT_STEPS);
+  // every span needs them over the whole span → the label is "ยาวตลอดช่วง" (was the first fraction when all spans were full)
+  const top = n && topFull === n ? null : pick(topR, TOP_STEPS), bot = n && botFull === n ? null : pick(botR, BOT_STEPS);
   return {
     top: top ?? "ยาวตลอดช่วง", bot: bot ?? "ยาวตลอดช่วง", topFull, botFull, cant, spans: n,
     // some spans need the extras over the whole span while the type label is a fraction: the label says so (cut-off table has each span)
@@ -36,6 +37,8 @@ export function extraSpec(ti, spans) {
   };
 }
 
+// extra bars that run the whole span for every span of the type (label "ยาวตลอดช่วง" without a footnote)
+export const fullExtras = (ext) => ({ top: ext?.top === "ยาวตลอดช่วง" && !ext?.topNote, bot: ext?.bot === "ยาวตลอดช่วง" && !ext?.botNote });
 const barTxt = (s) => { const b = parseBars(s); return b ? `${b.n}-${b.bar} มม.` : null; };
 const stTxt = (t, s) => `${t.stSets ?? 1}ป-${t.st} มม. @ ${Number(s).toFixed(2)} ม.`;
 
@@ -51,9 +54,12 @@ export function sectionNotes(t, at, ext = { top: "L/4", bot: "3L/5" }) {
   // a type without extra bars (GB, GB-A …): one section "ตลอดคาน" (user 2026-11-18)
   if (at === "all") { add(barTxt(t.top), "top"); add(stTxt(t, Math.min(t.sSup, t.sMid)), "st"); add(barTxt(t.bot), "bot"); return out; }
   add(barTxt(t.top), "top");
-  if (at === "sup") add(xt(t.topX, ext.top, ext.topNote), "top", true);
+  // extras running the whole span (every span of the type needs it, user 2026-11-20: "บอกยาวตลอดช่วง แต่กลางคานไม่มี") are drawn and
+  // noted in BOTH sections
+  const fx = fullExtras(ext);
+  if (at === "sup" || fx.top) add(xt(t.topX, ext.top, ext.topNote), "top", true);
   add(stTxt(t, at === "sup" ? t.sSup : t.sMid), "st");
-  if (at === "mid") add(xt(t.botX, ext.bot, ext.botNote), "bot", true);
+  if (at === "mid" || fx.bot) add(xt(t.botX, ext.bot, ext.botNote), "bot", true);
   add(barTxt(t.bot), "bot");
   return out;
 }

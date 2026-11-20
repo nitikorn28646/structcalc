@@ -753,3 +753,7 @@ table of every joint + references; overflow to "(ต่อ)" sheets). Report: be
 leaders crossed (the extra bar's note pointed at the inner bar from a row below the corner bar's) → beamDetailDxf section + Details BeamDetail
 order each face "extras first" on the OUTER row (above the top face / below the bottom face) so the inner leader climbs over the corner bar.
 Joint detail label "มาตราส่วน 1:25" (drawn at true size on the 1:25 sheet; was 1:20).
+FULL-LENGTH EXTRAS IN BOTH SECTIONS (2026-11-20, user "บอกยาวตลอดช่วง แต่กลางคานไม่มีเส้นบน"): beamDetail.js fullExtras(ext) = label "ยาวตลอดช่วง"
+without a footnote (every span of the type) → sectionNotes / beamDetailDxf section / Details BeamDetail draw + note the extra top bars at mid-span
+too (and full bottom extras at the support); extraSpec: all spans full → label "ยาวตลอดช่วง" (was the first fraction L/4 + note). Drawing only —
+checkSpan mid-span still counts only the through top bars (conservative). E2E 47/47.

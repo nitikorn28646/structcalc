@@ -4,7 +4,7 @@
 // (spread footing or pile cap: plan + section). Shared between the design step and the report.
 import { barLayout } from "./drawings.js";
 import { barLayers, faceBars, parseBars, stLabel } from "../engine/floor.js";
-import { sectionNotes, extraFootnote } from "../engine/beamDetail.js";
+import { fullExtras, sectionNotes, extraFootnote } from "../engine/beamDetail.js";
 import { BARS, STIRRUPS, SLAB_BARS } from "../engine/tables.js";
 import { PILES } from "../engine/footing.js";
 import { fmt } from "./beamModel.js";
@@ -54,7 +54,7 @@ const barNote = (l) => [l?.main?.n ? `${l.main.n}-${l.main.bar.replace(" ", "")}
 export function BeamDetail({ t, mat, at = "sup", ext, className = "" }) {
   const id = ++uid, B = t.b * 100, H = t.h * 100, cover = mat.cover ?? 3, sd = STIRRUPS[t.st]?.d ?? (t.st === "RB 9" ? 0.9 : 0.6);
   const lay = (m, x) => barLayers(t.b, mat, t.st, parseBars(m), parseBars(x));
-  const top = at !== "mid" ? lay(t.top, t.topX) : lay(t.top), bot = at !== "mid" ? lay(t.bot) : lay(t.bot, t.botX); // "cant" = cantilever root = support bars
+  const fx = fullExtras(ext), top = at !== "mid" || fx.top ? lay(t.top, t.topX) : lay(t.top), bot = at === "mid" || (at === "sup" && fx.bot) ? lay(t.bot, t.botX) : lay(t.bot); // "cant" = cantilever root = support bars; full-length extras in both sections
   // drawing y down: barLayout gives y up from the bottom face
   const bars = [...barLayout(B, H, cover, sd, top, true), ...barLayout(B, H, cover, sd, bot, false)];
   const notes = sectionNotes(t, at, ext), lone = top.odd || bot.odd ? "⚠ เหล็กชั้นที่ 2 เหลือเส้นเดียว — เสริมจริงไม่ได้ (ต้อง ≥ 2 เส้นต่อชั้น)" : "", foot = [lone, extraFootnote(at, ext)].filter(Boolean).join("  ");
