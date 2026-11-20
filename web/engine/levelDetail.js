@@ -91,6 +91,6 @@ export function jointDetailModel(r, mat = {}, o = {}) {
   text(c + 0.05, botL - 0.035, TH, `${r.lo?.name ?? ""} ${cm(r.lo?.b ?? 0.2)}×${cm(h2)} หลังคาน ${r.loTop > 0 ? "+" : ""}${f2(r.loTop)}`, "C-TEXT", 0, 3);
   const title = o.title ?? "รายละเอียดคานต่างระดับที่หัวเสา", yT = Math.min(yLo, botH - 0.3) - 0.55;
   text(c / 2, yT, TH * 1.4, title, "C-TITLE", 1, 0);
-  text(c / 2, yT - 0.12, TH * 0.9, `${o.sub ?? ""}มาตราส่วน 1:20`, "C-TEXT", 1, 0);
+  text(c / 2, yT - 0.12, TH * 0.9, `${o.sub ?? ""}มาตราส่วน ${o.scale ?? "1:25"}`, "C-TEXT", 1, 0); // drawn at true size on the 1:25 sheet (user 2026-11-20)
   return { items: P, box: [-Lb - 0.45, yT - 0.2, c + Lb + 0.75, yHi + 0.3] };
 }

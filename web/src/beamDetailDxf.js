@@ -71,7 +71,10 @@ function section(d, t, mat, at, ext, ox, oy, title, th = 0.035, sub = "") {
   const topBars = bars.filter((b) => b.y > H / 2), botBars = bars.filter((b) => b.y <= H / 2);
   const pick = (list, extra, outer) => { const c = list.filter((b) => !!b.special === extra), k = c.length ? c : list; return k.reduce((a, b) => (Math.abs(b.y - outer) < Math.abs(a.y - outer) - 0.1 || (Math.abs(b.y - a.y) < 0.1 && b.x > a.x) ? b : a), k[0]); };
   const tops = notes.filter((n) => n.side === "top"), bots = notes.filter((n) => n.side === "bot"), st = notes.find((n) => n.side === "st");
-  const rows = [...tops.map((n, i) => ({ n, y: oy + t.h - th * 0.6 - i * lh })), ...(st ? [{ n: st, y: oy + t.h / 2 }] : []), ...bots.map((n, i) => ({ n, y: oy + th * 0.6 + (bots.length - 1 - i) * lh }))];
+  // leaders never cross (user 2026-11-20): on each face the note of the INNER bar (extra bars, picked further from the corner) takes the
+  // outer row — above the top face / below the bottom face — so its leader climbs over the corner bar instead of running past it
+  const outerFirst = (list) => [...list.filter((n) => n.extra), ...list.filter((n) => !n.extra)];
+  const rows = [...outerFirst(tops).map((n, i) => ({ n, y: oy + t.h + th * 1.3 - i * lh })), ...(st ? [{ n: st, y: oy + t.h / 2 }] : []), ...outerFirst(bots).map((n, i) => ({ n, y: oy - th * 1.3 + i * lh }))];
   for (const { n, y } of rows) {
     const b = n.side === "st" ? null : pick(n.side === "top" ? topBars : botBars, n.extra, n.side === "top" ? H : 0);
     const from = b ? [ox + m(b.x), oy + m(b.y)] : [x1, oy + t.h / 2];
@@ -199,7 +202,7 @@ export function beamSheetsDxf(itemsIn, mat, project = {}, title = "แบบข�
     }
   });
   // beams at different levels (2026-11-20): one more sheet — the typical joint detail per distinct case (engine/levelDetail.js, drawn
-  // at true size, 1:20 note) side by side, and the table of every joint under them
+  // at true size on the 1:25 sheet) side by side, and the table of every joint under them
   if (extra.joints?.length) {
     const gs = extra.groups ?? [], AW2 = TX - BX0 - 0.3, rowsN = extra.joints.length, tableH = 0.55 + 0.085 * rowsN;
     let X = sheets.length * (SW + 0.5), first = true, x = BX0 + 0.15, yTop = BY1 - 0.15, rowH = 0;

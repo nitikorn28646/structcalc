@@ -60,12 +60,14 @@ export function BeamDetail({ t, mat, at = "sup", ext, className = "" }) {
   const notes = sectionNotes(t, at, ext), lone = top.odd || bot.odd ? "⚠ เหล็กชั้นที่ 2 เหลือเส้นเดียว — เสริมจริงไม่ได้ (ต้อง ≥ 2 เส้นต่อชั้น)" : "", foot = [lone, extraFootnote(at, ext)].filter(Boolean).join("  ");
   const fs = Math.max(3.4, Math.max(B, H) / 8.5), M = fs * 4, lh = fs * 1.45, tx = M + B + fs * 2.4;
   const longest = Math.max(...notes.map((n) => n.text.length)), W = tx + longest * fs * 0.52 + fs;
-  const Hh = H + 2 * M + (foot ? fs * 1.8 : 0), Y = (y) => M + H - y;
+  const Hh = H + 2 * M + (foot ? fs * 2.4 : 0), Y = (y) => M + H - y;
   const topBar = bars.filter((b) => b.y > H / 2), botBar = bars.filter((b) => b.y <= H / 2), s = at === "mid" ? t.sMid : at === "all" ? Math.min(t.sSup, t.sMid) : t.sSup;
   // the bar a note points at: through → the right-most ordinary bar of the outer layer, extra → a right-most extra bar
   const pick = (list, extra) => { const c = list.filter((b) => !!b.special === extra), k = c.length ? c : list; return k.reduce((a, b) => (Math.abs(b.y - (list === topBar ? H : 0)) < Math.abs(a.y - (list === topBar ? H : 0)) - 0.1 || (Math.abs(b.y - a.y) < 0.1 && b.x > a.x) ? b : a), k[0]); };
   const tops = notes.filter((n) => n.side === "top"), bots = notes.filter((n) => n.side === "bot"), st = notes.find((n) => n.side === "st");
-  const rows = [...tops.map((n, i) => ({ n, y: M + fs * 0.4 + i * lh })), ...(st ? [{ n: st, y: M + H / 2 }] : []), ...bots.map((n, i) => ({ n, y: M + H - fs * 0.4 - (bots.length - 1 - i) * lh }))];
+  // leaders never cross (user 2026-11-20): the note of the inner (extra) bar takes the outer row, above the top / below the bottom face
+  const outerFirst = (list) => [...list.filter((n) => n.extra), ...list.filter((n) => !n.extra)];
+  const rows = [...outerFirst(tops).map((n, i) => ({ n, y: M - fs * 1.1 + i * lh })), ...(st ? [{ n: st, y: M + H / 2 }] : []), ...outerFirst(bots).map((n, i) => ({ n, y: M + H + fs * 1.1 - i * lh }))];
   return (
     <svg viewBox={`0 0 ${W} ${Hh}`} className={className}>
       <Defs id={id} />
@@ -82,7 +84,7 @@ export function BeamDetail({ t, mat, at = "sup", ext, className = "" }) {
       })}
       <Dim size={fs} x1={M} y1={M - fs * 1.6} x2={M + B} y2={M - fs * 1.6} label={fmt(B / 100, 2)} />
       <Dim size={fs} x1={M - fs * 1.5} y1={M} x2={M - fs * 1.5} y2={M + H} label={fmt(H / 100, 2)} />
-      {foot && <Txt x={M} y={M + H + fs * 1.9} s={foot} a="start" size={fs * 0.8} c={lone ? "#b42318" : DIM} />}
+      {foot && <Txt x={M} y={M + H + fs * 2.7} s={foot} a="start" size={fs * 0.8} c={lone ? "#b42318" : DIM} />}
     </svg>
   );
 }
