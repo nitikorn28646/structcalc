@@ -11,6 +11,7 @@ import { PILES, pileCap, spreadFooting } from "./footing.js";
 import { punchingFull } from "./footingExtra.js";
 import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
 import { depthJoints, levelJoints } from "./levelDetail.js";
+import { plantedColumns } from "./plantedCol.js";
 
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
 export const stackKey = (p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
@@ -561,8 +562,12 @@ export function analyzeFrame(frame) {
   const depthJ = depthJoints(frame, { floors: g.an, columns: g.cols, lateral });
   for (const r of levelJoints(frame, { floors: g.an, columns: g.cols })) if (!r.lapOk) g.warnings.push(`${r.floorName}: คานต่างระดับที่ (${r.p[0].toFixed(2)}, ${r.p[1].toFixed(2)}) ต่าง ${Math.round(r.dz * 100)} ซม. — เหล็กบนที่ระดับคานตัวต่ำทาบกับเหล็กบนคานตัวสูงแบบไม่สัมผัส ต้องห่างกัน ≤ 15 ซม. และ ≤ ระยะทาบ/5 (ACI 318-11 12.14.2.3): ลดความต่างระดับ`);
   for (const r of depthJ) if (!r.jointOk) g.warnings.push(`${r.floorName}: คานลึกต่างกันที่เสา (${r.p[0].toFixed(2)}, ${r.p[1].toFixed(2)}) ${r.deep?.name}/${r.sh?.name} — มีแรงด้านข้าง เหล็กล่าง ${r.deep?.name} ต้องงอขอยึดในเสา ldh ${r.hook?.ldh ?? "-"} > ${r.hook?.avail ?? 0} ซม. (ACI 318-11 12.11.2): ขยายเสาตามแนวคาน หรือใช้เหล็กล่างเล็กลง`);
+  // columns standing on a beam (2026-11-21): width / bars inside the beam cage, anchorage of the column bars in the beam, bearing, carrying
+  // span (engine/plantedCol.js) — the point load itself is already in the beam design
+  const planted = plantedColumns(frame, { floors: g.an, columns: g.cols });
+  for (const r of planted) if (!r.ok) g.warnings.push(`เสาตั้งบนคาน ${r.stack} (${r.floorName}) บน${r.hostName}${r.beamName ? ` คาน ${r.beamName}` : ""}: ${r.why.join(" · ")}`);
   // a type whose bars cannot be read would be checked with no steel at all: say so instead of a silent NG
   for (const t of beamTypes) for (const k of ["top", "bot", "topX", "botX"]) if (t[k] && !parseBars(t[k])) g.warnings.push(`Type คาน ${t.name}: อ่านเหล็ก "${t[k]}" ไม่ได้ (ใช้รูปแบบ เช่น 2-DB12, 3-RB9) — คิดเป็นไม่มีเหล็ก`);
-  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, depthJoints: depthJ, stability: stability ? { storeys: stability.storeys } : null, analysis: f3 ? "envelope" : "continuous", notes, warnings: [...new Set(g.warnings)],
-    ok: g.an.every((a) => a.ok) && stacks.every((s) => s.ok) && footings.every((f) => f.ok) && (!lateral || lateral.ok) };
+  return { floors: g.an, columns: g.cols, stacks, footings, frame3d: f3, lateral, depthJoints: depthJ, planted, stability: stability ? { storeys: stability.storeys } : null, analysis: f3 ? "envelope" : "continuous", notes, warnings: [...new Set(g.warnings)],
+    ok: g.an.every((a) => a.ok) && stacks.every((s) => s.ok) && footings.every((f) => f.ok) && (!lateral || lateral.ok) && planted.every((r) => r.ok) };
 }

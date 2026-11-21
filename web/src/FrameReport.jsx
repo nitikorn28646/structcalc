@@ -12,6 +12,8 @@ import { stairSections } from "./stairSection.js";
 import { LEVEL_REFS, LevelJointTable, JointDetail, DEPTH_REFS, DepthJointTable, DepthDetail } from "./LevelJoints.jsx";
 import { WIDEN_REFS, WidenSection, widenUses, widenSections, sideName, beamWidenModel } from "./WidenTypes.jsx";
 import { levelJoints, jointGroups, depthGroups } from "../engine/levelDetail.js";
+import { plantedGroups } from "../engine/plantedCol.js";
+import { PLANTED_REFS, PlantedTable, PlantedDetail } from "./PlantedCols.jsx";
 import { stairSvgString } from "./stairSvg.js";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
@@ -286,6 +288,26 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
               ถ้าไม่ผ่านแจ้งเป็นคำเตือน; ไม่มีแรงด้านข้าง เหล็กล่างเข้าเสา ≥ 15 ซม. ก็พอ (ข้อ 12.11.1) · {DEPTH_REFS}</Note>
             <DepthJointTable rows={rows} small />
             {gs.slice(0, 4).map((g, i) => <Figure key={i} caption={`รายละเอียดคานลึกต่างกันที่หัวเสา — ${g.deep?.name} / ${g.sh?.name} · ท้องต่าง ${fmt(g.dh * 100, 0)} ซม. · เสา ${g.along ? fmt(g.along * 100, 0) : "-"} ซม. (${g.n} จุด)`}><DepthDetail g={g} mat={mat} px={140} /></Figure>)}
+          </>); })()}
+          {(() => { const rows = res.planted ?? []; if (!rows.length) return null; const gs = plantedGroups(rows); return (<>
+            <Sub>เสาตั้งบนคาน</Sub>
+            <Note>เสาที่ไม่มีเสาต่อลงไปข้างล่างตั้งอยู่บนคาน: แรงทั้งหมดของเสา (สะสมจากชั้นบน + น้ำหนักเสา) ลงคานรับเป็นแรงจุด และคานรับถูกออกแบบด้วยแรงนั้นแล้ว
+              (โมเมนต์ แรงเฉือน — ไม่ลดแรงเฉือนที่ระยะ d เมื่อมีแรงจุดใกล้ที่รองรับ — ระยะแอ่น และแรงบิดจากโมเมนต์โคนเสาในโครง 3 มิติ) · ที่จุดวางเสาตรวจเพิ่ม: เสากว้างไม่เกินคาน,
+              เหล็กเสาอยู่ในปลอกคาน (ดัดเยื้อง 1:6 ได้), เหล็กเสาฝังในคานยาวพอรับแรงอัด (ขอไม่ช่วยรับแรงอัด), มีแรงดึงต้องงอขอให้ยาว ≥ ldh, แรงกดบนคาน ≤ 0.25f′c · {PLANTED_REFS}</Note>
+            <PlantedTable rows={rows} small />
+            {rows.filter((r) => r.beam).map((r, i) => <div key={i}><p className="mt-2 text-[10pt]">เสา {r.stack} ({r.floorName}) บนคาน {r.beamName} ที่{r.hostName}</p>
+              <Table head={["รายการ", "สูตร", "แทนค่า", "ผล"]} rows={[
+                ["แรงจากเสา", "P = แรงสะสมที่โคนเสา", "", `${fmt(r.P, 0)} กก.`],
+                ["ความกว้างเสา", "เสาด้านขวางคาน ≤ b คาน", `${r.colPerp} ≤ ${fmt(r.beam.b * 100, 0)} ซม.`, r.widthOk ? "✓" : "✕"],
+                ["เหล็กเสาในปลอกคาน", "n·db + (n − 1)·max(1.5db, 4) ≤ b − 2(c + dst)", `${r.nAcross}×${fmt(r.db, 1)} + ${r.nAcross - 1}×${fmt(Math.max(1.5 * r.db, 4), 1)} = ${fmt(r.needIn, 1)} ≤ ${fmt(r.inner, 1)} ซม.`, `${r.barsIn ? "✓" : "✕"}${r.crank > 0.001 ? ` ดัดเข้า ${fmt(r.crank, 1)} ซม.` : ""}`],
+                ["ระยะฝังที่มี", "h − c − dst − db ล่าง", `${fmt(r.beam.h * 100, 0)} − ${fmt(frame.mat.cover ?? 3, 1)} − ${fmt(r.dst, 1)} − ${fmt(r.dbBot, 1)}`, `${fmt(r.avail, 1)} ซม.`],
+                ["ระยะฝังรับแรงอัด (12.3.2)", "ldc = max(0.075·fy·db/√f′c, 0.00427·fy·db, 20)", `max(0.075 × ${fmt(frame.mat.fy ?? 4000, 0)} × ${fmt(r.db, 1)} / √${fmt(r.fcB, 0)}, 0.00427 × ${fmt(frame.mat.fy ?? 4000, 0)} × ${fmt(r.db, 1)}, 20)`, `${fmt(r.ldc, 1)} ${r.compOk ? "≤" : ">"} ${fmt(r.avail, 1)} ${r.compOk ? "✓" : "✕"}`],
+                ["แรงดึงในเสา / ขอ (12.5)", "ldh = 0.075·fy·db/√f′c (× 0.7) ≥ 8db ≥ 15", r.tension ? `T ${fmt(r.T, 0)} กก.${r.momTension ? " · โมเมนต์โคนเสานอกเคิร์น" : ""}` : "ไม่มีแรงดึง", r.tension ? `${fmt(r.ldh, 1)} ${r.hookOk ? "≤" : ">"} ${fmt(r.avail, 1)} ${r.hookOk ? "✓" : "✕"}` : "-"],
+                ["แรงกดบนคาน", "f = P / (Bx·By) ≤ 0.25f′c", `${fmt(r.P, 0)} / ${fmt(r.A1, 0)} = ${fmt(r.fbr, 1)} ≤ ${fmt(r.fAllow, 1)}`, r.AsDowel > 0 ? `เหล็กเสารับส่วนเกิน ${fmt(r.AsDowel, 2)} ≤ ${fmt(r.Ast, 2)} ซม.² ${r.bearOk ? "✓" : "✕"}` : "✓"],
+                ["คานรับที่จุดวางเสา", "แรงเฉือนที่เสา · แรงบิดออกแบบ", `V ${fmt(r.Vcol, 0)} กก.${r.nearSupport ? " (ห่างที่รองรับ < 2h)" : ""} · Mt ${fmt(r.Mt, 0)} กก.-ม.`, r.spOk ? "ช่วงคานผ่าน ✓" : "ช่วงคานไม่ผ่าน ✕"],
+                ...(r.bent ? [["เหล็กคอม้า (เสริม, 11.4.7.4)", "n·Ab·fs·sin45° ≥ P·max(a, L − a)/L ≤ 0.795√f′c·b·d", `${r.bent.n} × ${fmt(r.bent.A, 3)} × ${fmt(r.bent.fs, 0)} × 0.707 · P × ${fmt(r.bent.share, 2)} = ${fmt(r.bent.Pside, 0)}`, `${r.bent.n}-${r.bent.bar} รับ ${fmt(r.bent.cap, 0)} กก. ${r.bent.ok ? "✓" : "(ปลอกคานรับส่วนที่เหลือ)"} · ปลายบน ${fmt(r.bent.ltop, 2)} ม.`]] : []),
+                ["ผล", "", r.why.length ? r.why.join(" · ") : "ตามเกณฑ์ทุกข้อ", P("คาน")(r.ok)]]} /></div>)}
+            {gs.slice(0, 4).map((g, i) => <Figure key={i} caption={`รายละเอียดเสาตั้งบนคาน — เสา ${g.lv.Bx}×${g.lv.By} ${g.lv.n}-${g.lv.mainBar} บน ${g.beamName} (${g.n} จุด)`}><PlantedDetail g={g} mat={frame.mat} px={150} /></Figure>)}
           </>); })()}
           {(() => { const rows = levelJoints(frame, res); if (!rows.length) return null; const gs = jointGroups(rows); return (<>
             <Sub>คานต่างระดับ (พื้นลดระดับ)</Sub>

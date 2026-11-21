@@ -855,3 +855,17 @@ arrow labelled "→ เสา / → คาน / → ไม่มีที่ร�
 dropped the whole roof load (_u3w: 13.75 t) — engine/frame.js roofLinkFloor(frame) = the linked index or the top floor (+ warning), used by
 gravity, loadArrows, App roof points, RoofLinkCard, Frame3D; StoreyTable add / delete floor re-indexes roofLink. loadarrows-check 1437 (stale link
 test included). E2E 47/47, regress identical.
+COLUMNS ON BEAMS (2026-11-21, user "เสาตั้งบนคาน มีการคำนวณ และรู้แบบการเสริมเหล็กหรือยัง" + their own detail with คอม้า bars): the load path existed
+(frame.js extra → point load on the beam line, designed in the span; 3D frame joins the column to the beam). NEW engine/plantedCol.js
+plantedColumns(frame, res) → res.planted (frame.js; NG → warning + res.ok false; StatusSummary item cat เสา "เสาตั้งบนคาน …"): per column of floor k
+with no column of floor k−1 under it — width (column side across ≤ beam b), bars inside the beam stirrups (n·db + (n − 1)·max(1.5db, 4) ≤ b − 2(c + dst);
+bars a little outside are cranked 1:6, ACI 7.8.1), straight embedment h − c − dst − db,bot ≥ ldc = max(0.075·fy·db/√f′c, 0.00427·fy·db, 20 cm) (12.3.2;
+hook does not count, 12.5.5), tension (3D N < 0, lateral combos, or base moment outside the kern) → hook ldh ≤ embedment (12.5.2/12.5.3a), bearing
+P/(Bx·By) ≤ 0.25f′c beam else column bars as dowels at 0.4fy, f′c col ≤ 1.4 f′c beam (10.12), carrying span ok, V at the column; คอม้า bent-up bars
+(user's detail): 45°, flat = column + 0.40 m, top legs ≥ max(0.30 m, ld top), n·Ab·fs·sin45 ≥ P·max(a, L − a)/L ≤ 0.795√f′c·b·d (11.4.7.4), fewest DB12
+→ DB16 → DB20 fitting the cage, else the strongest set that fits (rest by stirrups) — SUPPLEMENTARY, not counted in the beam check. Torsion from the
+column base = the 3D frame (envelope mode); no invented emin torque. plantedDetailModel = elevation (beam bars + closer stirrups over column + 2d,
+column bars to the bottom bars with 90° hooks along the beam, crank, ties continuing through the beam, คอม้า, dims, labels); src/PlantedCols.jsx
+(table + details) in step 7 Type คาน and Type เสา; DXF beam sheets (details + table packed in the rows, ezdxf 0 errors); report beams chapter
+"เสาตั้งบนคาน" (worked rows formula / substituted / result per column + figures). cli/planted-check.mjs 23/23 (in the gate). Yasothon regress identical
+(no planted columns); _big 8.00,7.00 on the 8 m transfer girder NG only because that girder span fails; _roof3 3 planted, all pass.
