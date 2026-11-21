@@ -8,14 +8,14 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { StairDetail, StairInputs, stairRiseOf } from "./StairPanel.jsx";
 import { allStairSections, stairSections } from "./stairSection.js";
 import { stairSheetsDxf, downloadText } from "./beamDetailDxf.js";
-import { DesignCriteria } from "./DesignCriteria.jsx";
+import { DesignCriteria, StandardPanel } from "./DesignCriteria.jsx";
 import { BeamLoadTable, PanelTable } from "./BulkTables.jsx";
 import { arcGeom, quarterSagitta } from "../engine/arc.js";
 import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
-import { BrickWall, Building2, Columns3, Grid3x3, Layers, Plus, Ruler, Trash2, TriangleAlert } from "lucide-react";
+import { BrickWall, Building2, Columns3, Grid3x3, Layers, Plus, Ruler, Table2, Trash2, TriangleAlert, Wand2 } from "lucide-react";
 import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { fmt } from "./beamModel.js";
 import { beamCost, generateBeamTypes, pruneUnusedTypes } from "../engine/beamTypes.js";
@@ -45,7 +45,7 @@ import { levelJoints, jointGroups, depthGroups } from "../engine/levelDetail.js"
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
 import WallTypesPanel from "./WallTypesPanel.jsx";
 import LoadLibPanel from "./LoadLibPanel.jsx";
-import { Badge as KBadge, DelButton, List, Note, Notice, Panel as SidePanel, Result, Row, Section, btnCls, btnGhost } from "./PanelKit.jsx";
+import { Badge as KBadge, DelButton, List, Note, Notice, Panel as SidePanel, Result, Row, Section, btnCls, btnGhost, btnMain, smallNum } from "./PanelKit.jsx";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, SVGRenderer]);
 
@@ -141,37 +141,40 @@ function AutoBeamTypes({ frame, set, res }) {
   const apply = (r) => { const pr0 = pruneUnusedTypes({ ...frame, beamTypes: r.g.beamTypes, floors: r.g.floors }), pr = finalizeGenerated(frame, { ...r.g, beamTypes: pr0.beamTypes, floors: pr0.floors }); set("beamTypes", pr.beamTypes); set("floors", pr.floors); set("beamAutoK", pr.beamTypes.length); setMsg({ ok: r.ok === r.total, text: `ใช้ ${pr.beamTypes.length} type (จากการขอ ${(r.ks ?? [r.k]).join(", ")}) · ค่าคาน ≈ ${Math.round(r.cost).toLocaleString()} บาท` }); };
   const okRows = (scan?.rows ?? []).filter((r) => r.ok === r.total), cheapest = okRows.reduce((a, r) => (!a || r.cost < a.cost ? r : a), null);
   const fewest = okRows.filter((r) => cheapest && r.cost <= cheapest.cost * 1.03).reduce((a, r) => (!a || r.n < a.n || (r.n === a.n && r.cost < a.cost) ? r : a), null); // within 3 % of the cheapest, fewest types
+  const c = beamCounts(frame);
   return (
-    <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-white/[0.03]">
+    <SidePanel title="จัด type คานอัตโนมัติ" icon={Wand2} action={<span className="text-[12px] font-normal text-gray-500">ค่าคานตอนนี้ ≈ <b className="tabular-nums text-gray-800">{Math.round(cost).toLocaleString()}</b> บาท</span>}
+      hint="แต่ละช่วงหาหน้าตัดที่ผ่านตามวิธีเลือก แล้วแบ่งกลุ่ม type ของกลุ่ม = หน้าตัดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2 … ตามขนาด · คานยื่นใช้ชื่อ B1A (เหล็กบนยาวตลอด) · ทุกคานล็อค type หลังจัด · ย้อนกลับได้ Ctrl+Z">
       <div className="flex flex-wrap items-center gap-2">
-        <button disabled={busy || (scan && !scan.done)} onClick={compare} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50 disabled:opacity-60">{scan && !scan.done ? `กำลังเทียบ… (ลอง ${scan.k}/10)` : "เทียบจำนวน type (1–10)"}</button>
-        <button disabled={busy} onClick={() => run(Math.max(nNow, k0) + 1, true)} className="rounded-lg bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600 disabled:opacity-60">{busy ? "กำลังจัด type…" : `เพิ่ม type คานอัตโนมัติ (มี ${nNow} → ลอง ${nNow + 1})`}</button>
-        <span className="flex items-center gap-1 text-[12px] text-gray-600">หรือกำหนด<input type="number" min={1} max={20} value={want} onChange={(e) => setWant(Math.max(1, Math.min(20, Math.round(Number(e.target.value) || 1))))} className="h-8 w-14 rounded border border-gray-300 bg-transparent px-1 text-right" />type
-          <button disabled={busy} onClick={() => run(want)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50 disabled:opacity-60">จัด {want} type</button></span>
-        {k0 > 0 && <button disabled={busy} onClick={() => run(nNow)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50 disabled:opacity-60">↻ จัดใหม่ ({nNow} type)</button>}
-        <label className="flex items-center gap-1 text-[12px] text-gray-600" title="เพิ่มเหล็กก่อน (ค่าเริ่มต้น): เริ่ม 20×40 เสริมเหล็ก DB12 → DB16 → DB20 จนเต็ม 2 ชั้น (ระยะแอ่นก็แก้ด้วยเหล็ก) ไม่ผ่านจริงจึงขยับหน้าตัดถัดไปที่เล็กที่สุด · 20×40 ก่อน: ใช้ 20×40 ถ้าผ่าน ไม่ผ่าน → หน้าตัดที่ถูกที่สุดที่ผ่าน (ลึกขั้น 10 ซม., กว้าง 20/25/30; ขั้น 5 ซม. เมื่อไม่มีตัวผ่าน) · ตามลำดับเดิม: 20×40, 20×50, 20×60, 30×60… ตัวแรกที่ผ่าน">วิธีเลือก
-          <select value={frame.beamAutoMode ?? "steel"} onChange={(e) => set("beamAutoMode", e.target.value)} className="h-7 rounded-md border border-gray-300 bg-transparent px-1 text-[12px] dark:border-gray-700">
+        <button disabled={busy} onClick={() => run(Math.max(nNow, k0) + 1, true)} className={`${btnMain} py-1.5`}><Wand2 className="h-3.5 w-3.5" />{busy ? "กำลังจัด type…" : `เพิ่ม type คานอัตโนมัติ (มี ${nNow} → ลอง ${nNow + 1})`}</button>
+        <span className="flex items-center gap-1.5 text-[12px] text-gray-600">หรือกำหนด<input type="number" min={1} max={20} value={want} onChange={(e) => setWant(Math.max(1, Math.min(20, Math.round(Number(e.target.value) || 1))))} className={`${smallNum} !w-14`} />type
+          <button disabled={busy} onClick={() => run(want)} className={`${btnCls} py-1.5`}>จัด {want} type</button></span>
+        {k0 > 0 && <button disabled={busy} onClick={() => run(nNow)} className={`${btnGhost} py-1.5`}>↻ จัดใหม่ ({nNow} type)</button>}
+        <button disabled={busy || (scan && !scan.done)} onClick={compare} className={`${btnCls} py-1.5`}>{scan && !scan.done ? `กำลังเทียบ… (ลอง ${scan.k}/10)` : "เทียบจำนวน type (1–10)"}</button>
+        <label className="ml-auto flex items-center gap-1.5 text-[12px] text-gray-600" title="เพิ่มเหล็กก่อน (ค่าเริ่มต้น): เริ่ม 20×40 เสริมเหล็ก DB12 → DB16 → DB20 จนเต็ม 2 ชั้น (ระยะแอ่นก็แก้ด้วยเหล็ก) ไม่ผ่านจริงจึงขยับหน้าตัดถัดไปที่เล็กที่สุด · 20×40 ก่อน: ใช้ 20×40 ถ้าผ่าน ไม่ผ่าน → หน้าตัดที่ถูกที่สุดที่ผ่าน (ลึกขั้น 10 ซม., กว้าง 20/25/30; ขั้น 5 ซม. เมื่อไม่มีตัวผ่าน) · ตามลำดับเดิม: 20×40, 20×50, 20×60, 30×60… ตัวแรกที่ผ่าน">วิธีเลือก
+          <select value={frame.beamAutoMode ?? "steel"} onChange={(e) => set("beamAutoMode", e.target.value)} className="h-8 rounded-md border border-gray-300 bg-transparent px-1.5 text-[12px]">
             <option value="steel">เพิ่มเหล็กก่อนขยายหน้าตัด</option><option value="cost">20×40 ก่อน แล้วถูกที่สุด</option><option value="habit">ตามลำดับเดิม (เริ่ม 20×40)</option></select></label>
-        <span className="text-[12px] text-gray-500">ค่าคานตอนนี้ ≈ {Math.round(cost).toLocaleString()} บาท</span>
       </div>
-      <p className="mt-1.5 text-[11px] text-gray-500">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ถูกที่สุดที่ผ่าน (กว้าง 0.20 / 0.30 ม. ลึก 0.30–0.80 ม. ทีละ 10 ซม. เหล็ก ≤ 2 ชั้น) เรียงตามราคาแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดถูกที่สุดที่ผ่านทุกช่วงในกลุ่ม · ตั้งชื่อ B1, B2, … เรียงตามขนาดคาน (ตัด type ที่ไม่มีคานใช้) · คานยื่นใช้ type ที่เหล็กหัวเสาพอ ชื่อ B1A (เหล็กบนยาวตลอด) · แทนที่ type คานทั้งหมดและตั้งทุกคานเป็นอัตโนมัติ (ย้อนกลับได้ Ctrl+Z) · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p>
-      {(() => { const c = beamCounts(frame); return (
-        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-2 py-1.5 text-[12px] text-gray-600 dark:bg-white/[0.03]">
-          <span title="ล็อค = type ที่ได้จากการจัดอัตโนมัติ ตรึงไว้ แก้เหล็กของ type แล้วคานไม่ย้ายไป type อื่น · กำหนดเอง = เลือกเองที่คาน · อัตโนมัติ = โปรแกรมเลือกใหม่ทุกครั้งที่คำนวณ">คาน: ล็อค {c.lock} · กำหนดเอง {c.hand} · อัตโนมัติ {c.auto}</span>
-          {c.auto > 0 && <button onClick={() => { const L = lockBeams(frame, res); set("floors", L.floors); setMsg({ ok: true, text: `ล็อค type คาน ${L.n} ตัวตามที่เป็นอยู่ — แก้เหล็กของ type ใดก็ได้ คานยังอยู่ type เดิม (ไม่ผ่านจะขึ้นแดงพร้อม type ที่ผ่าน)` }); }} className="rounded-md px-2 py-0.5 font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ล็อค type ทุกคานตามที่เป็นอยู่</button>}
-          {c.lock > 0 && <button onClick={() => { const U = unlockBeams(frame); set("floors", U.floors); setMsg({ ok: true, text: `ปลดล็อค ${U.n} คาน — โปรแกรมจะเลือก type ที่เบาที่สุดที่ผ่านให้ใหม่ทุกครั้ง (คานที่กำหนดเองคงเดิม)` }); }} className="rounded-md px-2 py-0.5 font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">ปลดล็อค ให้โปรแกรมเลือกใหม่</button>}
-          {c.hand > 0 && <button onClick={() => { const fl2 = frame.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map(({ autoLock, ...b }) => ({ ...b, type: null })) })); set("floors", fl2); setMsg({ ok: true, text: `ทุกคาน (${c.hand + c.lock + c.auto}) กลับเป็นอัตโนมัติ — กดจัด type อีกครั้งเพื่อจัดใหม่ทั้งหมด (ย้อนกลับได้ Ctrl+Z)` }); }} title="คานที่กำหนดเองจะถูกเก็บไว้ตอนจัด type อัตโนมัติ — กดปุ่มนี้ก่อนถ้าต้องการจัดใหม่ทั้งหมด" className="rounded-md px-2 py-0.5 font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50">ให้ทุกคานเป็นอัตโนมัติ</button>}
-          <span className="text-[11px] text-gray-400">กำหนด type ให้หลายคาน: ลากกรอบ / Ctrl + คลิกคานบนแปลน แล้วเลือก "ใช้ type กับคานที่เลือก"</span>
-        </div>); })()}
-      {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
-      {scan?.rows.length > 0 && (<div className="mt-2 overflow-x-auto"><table className="w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">
-        <th className="py-1 pr-2">ขอ</th><th className="pr-2">ได้ (type)</th><th className="pr-2">ขนาด</th><th className="pr-2 text-right">ช่วงบน 20×40</th><th className="pr-2 text-right">ผ่าน</th><th className="pr-2 text-right">ค่าคาน ≈ บาท</th><th></th></tr></thead>
-        <tbody>{scan.rows.map((r) => (<tr key={r.k} className={`border-t border-gray-100 dark:border-gray-800 ${r === fewest ? "bg-brand-50 dark:bg-brand-500/10" : ""}`}>
-          <td className="py-1 pr-2">{(r.ks ?? [r.k]).join(", ")}</td><td className="pr-2">{r.n}</td><td className="pr-2">{r.sizes}</td><td className="pr-2 text-right">{r.n2040}/{r.total}</td>
-          <td className={`pr-2 text-right ${r.ok === r.total ? "text-green-600" : "text-red-600"}`}>{r.ok}/{r.total}</td><td className="pr-2 text-right">{Math.round(r.cost).toLocaleString()}</td>
-          <td className="text-right">{r === fewest && <span className="mr-2 text-[11px] text-brand-600">แนะนำ</span>}{r === cheapest && r !== fewest && <span className="mr-2 text-[11px] text-gray-500">ถูกสุด</span>}<button onClick={() => apply(r)} className="rounded-md px-2 py-0.5 text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ใช้ชุดนี้</button></td></tr>))}</tbody></table>
-        <p className="mt-1 text-[11px] text-gray-500">"ขอ" = จำนวนกลุ่มตอนเริ่ม · ขอต่างกันแต่ได้ชุดเดียวกันรวมเป็นแถวเดียว · แนะนำ = ผ่านทุกช่วง จำนวน type น้อยที่สุดที่ราคาไม่เกินชุดถูกสุด 3 %</p></div>)}
-    </div>
+      {msg && <div className="mt-2"><Notice kind={msg.ok ? "ok" : "bad"}>{msg.text}</Notice></div>}
+      {scan?.rows.length > 0 && (<div className="mt-3 overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-[12px] tabular-nums"><thead><tr className="bg-gray-50 text-left text-[11px] text-gray-500 dark:bg-white/[0.03]">
+        <th className="px-2 py-1.5">ขอ</th><th className="px-2">ได้ (type)</th><th className="px-2">ขนาด</th><th className="px-2 text-right">ช่วงบน 20×40</th><th className="px-2 text-right">ผ่าน</th><th className="px-2 text-right">ค่าคาน ≈ บาท</th><th></th></tr></thead>
+        <tbody>{scan.rows.map((r) => (<tr key={r.k} className={`border-t border-gray-100 ${r === fewest ? "bg-brand-50 dark:bg-brand-500/10" : ""}`}>
+          <td className="px-2 py-1">{(r.ks ?? [r.k]).join(", ")}</td><td className="px-2">{r.n}</td><td className="px-2">{r.sizes}</td><td className="px-2 text-right">{r.n2040}/{r.total}</td>
+          <td className={`px-2 text-right ${r.ok === r.total ? "text-green-600" : "text-red-600"}`}>{r.ok}/{r.total}</td><td className="px-2 text-right">{Math.round(r.cost).toLocaleString()}</td>
+          <td className="px-2 text-right">{r === fewest && <span className="mr-2 text-[11px] text-brand-600">แนะนำ</span>}{r === cheapest && r !== fewest && <span className="mr-2 text-[11px] text-gray-500">ถูกสุด</span>}<button onClick={() => apply(r)} className={btnCls}>ใช้ชุดนี้</button></td></tr>))}</tbody></table></div>)}
+      {scan?.rows.length > 0 && <Note>"ขอ" = จำนวนกลุ่มตอนเริ่ม · ขอต่างกันแต่ได้ชุดเดียวกันรวมเป็นแถวเดียว · แนะนำ = ผ่านทุกช่วง จำนวน type น้อยที่สุดที่ราคาไม่เกินชุดถูกสุด 3 %</Note>}
+      <Section title="คานในโครงการ" className="!mt-4"><List>
+        <Row title={`ล็อค ${c.lock} · กำหนดเอง ${c.hand} · อัตโนมัติ ${c.auto}`} rowTitle="ล็อค = type ที่ได้จากการจัดอัตโนมัติ ตรึงไว้ แก้เหล็กของ type แล้วคานไม่ย้ายไป type อื่น · กำหนดเอง = เลือกเองที่คาน · อัตโนมัติ = โปรแกรมเลือกใหม่ทุกครั้งที่คำนวณ"
+          sub={'กำหนด type ให้หลายคาน: ลากกรอบ / Ctrl + คลิกคานบนแปลน แล้วเลือก "ใช้ type กับคานที่เลือก"'}
+          tail={<span className="flex flex-wrap justify-end gap-1.5">
+            {c.auto > 0 && <button onClick={() => { const L = lockBeams(frame, res); set("floors", L.floors); setMsg({ ok: true, text: `ล็อค type คาน ${L.n} ตัวตามที่เป็นอยู่ — แก้เหล็กของ type ใดก็ได้ คานยังอยู่ type เดิม (ไม่ผ่านจะขึ้นแดงพร้อม type ที่ผ่าน)` }); }} className={btnCls}>ล็อค type ทุกคานตามที่เป็นอยู่</button>}
+            {c.lock > 0 && <button onClick={() => { const U = unlockBeams(frame); set("floors", U.floors); setMsg({ ok: true, text: `ปลดล็อค ${U.n} คาน — โปรแกรมจะเลือก type ที่เบาที่สุดที่ผ่านให้ใหม่ทุกครั้ง (คานที่กำหนดเองคงเดิม)` }); }} className={btnGhost}>ปลดล็อค ให้โปรแกรมเลือกใหม่</button>}
+            {c.hand > 0 && <button onClick={() => { const fl2 = frame.floors.map((fl) => ({ ...fl, beams: (fl.beams ?? []).map(({ autoLock, ...b }) => ({ ...b, type: null })) })); set("floors", fl2); setMsg({ ok: true, text: `ทุกคาน (${c.hand + c.lock + c.auto}) กลับเป็นอัตโนมัติ — กดจัด type อีกครั้งเพื่อจัดใหม่ทั้งหมด (ย้อนกลับได้ Ctrl+Z)` }); }} title="คานที่กำหนดเองจะถูกเก็บไว้ตอนจัด type อัตโนมัติ — กดปุ่มนี้ก่อนถ้าต้องการจัดใหม่ทั้งหมด" className={btnGhost}>ให้ทุกคานเป็นอัตโนมัติ</button>}
+          </span>} />
+      </List></Section>
+      <details className="mt-2 text-[11px] text-gray-500"><summary className="cursor-pointer text-gray-400 hover:text-gray-600">วิธีที่โปรแกรมจัด type และราคาที่ใช้เทียบ</summary>
+        <p className="mt-1 leading-relaxed">กดทีละครั้ง เพิ่มทีละ 1 type แล้วจัดทุก type ใหม่จากแรงจริง: แต่ละช่วงหาหน้าตัดที่ผ่านตามวิธีเลือก (กว้าง 0.20 / 0.25 / 0.30 ม. ลึก 0.30–0.80 ม. เหล็ก ≤ 2 ชั้น) เรียงแล้วแบ่งกลุ่มจำนวนใกล้กัน type ของกลุ่ม = หน้าตัดที่ผ่านทุกช่วงในกลุ่ม · ตัด type ที่ไม่มีคานใช้ · ราคาเทียบ: คอนกรีต 2,500 บ./ม³ เหล็ก 28 บ./กก. แบบ 350 บ./ม²</p></details>
+    </SidePanel>
   );
 }
 
@@ -189,55 +192,58 @@ function AutoColTypes({ frame, set, res }) {
     } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(false); }
   }, 30); };
   return (
-    <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-white/[0.03]">
+    <SidePanel title="จัด type เสาอัตโนมัติ" icon={Wand2} action={<span className="text-[12px] font-normal text-gray-500">เสาผ่านตอนนี้ <b className={`tabular-nums ${nOk === res.columns.length ? "text-green-600" : "text-red-600"}`}>{nOk}/{res.columns.length}</b></span>}
+      hint="แต่ละต้นหาหน้าตัดถูกสุดที่ผ่านทุกชั้น (เสาจัตุรัส 20–50 ซม. · 4/6/8/12 เส้น DB12 → DB16 → DB20 · ρ 1–2.5 % · ปลอก RB6/RB9 ระยะห่างสุดที่ผ่าน 16db/48dt) แล้วแบ่งกลุ่ม type = หน้าตัดที่ผ่านทุกต้นในกลุ่มของแต่ละชั้น · แทนที่ type เสาเดิมทั้งหมด (แก้ต่อในตารางได้)">
       <div className="flex flex-wrap items-center gap-2">
-        <button disabled={busy} onClick={() => run((k0 || nNow) + (k0 ? 1 : 0) || 1)} className="rounded-lg bg-brand-500 px-3 py-1.5 text-[12px] font-medium text-[#fff] hover:bg-brand-600 disabled:opacity-60">{busy ? "กำลังจัด…" : k0 ? `เพิ่ม type เสาอัตโนมัติ (+1 → ${k0 + 1})` : "สร้าง type เสาอัตโนมัติ"}</button>
-        <span className="flex items-center gap-1 text-[12px] text-gray-600">หรือกำหนด<input type="number" min={1} max={12} value={want} onChange={(e) => setWant(Math.max(1, Math.min(12, Math.round(Number(e.target.value) || 1))))} className="h-7 w-14 rounded border border-gray-300 bg-transparent px-1 text-right" />type
-          <button disabled={busy} onClick={() => run(want)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50 disabled:opacity-60">จัด {want} type</button></span>
-        <span className="text-[12px] text-gray-500">เสาผ่านตอนนี้ {nOk}/{res.columns.length}</span>
+        <button disabled={busy} onClick={() => run((k0 || nNow) + (k0 ? 1 : 0) || 1)} className={`${btnMain} py-1.5`}><Wand2 className="h-3.5 w-3.5" />{busy ? "กำลังจัด…" : k0 ? `เพิ่ม type เสาอัตโนมัติ (+1 → ${k0 + 1})` : "สร้าง type เสาอัตโนมัติ"}</button>
+        <span className="flex items-center gap-1.5 text-[12px] text-gray-600">หรือกำหนด<input type="number" min={1} max={12} value={want} onChange={(e) => setWant(Math.max(1, Math.min(12, Math.round(Number(e.target.value) || 1))))} className={`${smallNum} !w-14`} />type
+          <button disabled={busy} onClick={() => run(want)} className={`${btnCls} py-1.5`}>จัด {want} type</button></span>
       </div>
-      <p className="mt-1.5 text-[11px] text-gray-500">แต่ละต้นหาหน้าตัดถูกสุดที่ผ่านทุกชั้น (เสาสี่เหลี่ยมจัตุรัส 20–50 ซม. · 4/6/8/12 เส้น DB12 → DB16 → DB20 · ρ 1–2.5 % · ปลอก RB6/RB9 ระยะห่างสุดที่ผ่าน 16d<sub>b</sub>/48d<sub>t</sub>) แล้วแบ่งเสาเป็นกลุ่มตามขนาดที่ต้องการ type = หน้าตัดที่ผ่านทุกต้นในกลุ่มของแต่ละชั้น · แทนที่ type เสาเดิมทั้งหมด (แก้ต่อในตารางได้)</p>
-      {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
-    </div>
+      {msg && <div className="mt-2"><Notice kind={msg.ok ? "ok" : "bad"}>{msg.text}</Notice></div>}
+    </SidePanel>
   );
 }
 
 // deleteBeamType: engine/beamAssign.js (names of the other types no longer shift)
 
-function TypeTable({ types, setTypes, an, delType, res, cur = 0, frame = null, onRenumber = null }) {
+function TypeTable({ types, setTypes, an, delType, res, cur = 0, frame = null, onRenumber = null, head = null }) {
   const set = (i, k, v) => setTypes(types.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const used = (i) => an?.spans.filter((s) => s.typeIdx === i) ?? [];
-  const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] tabular-nums";
+  const cell = "h-7 w-full rounded-md border border-gray-300 bg-transparent px-1.5 text-[12px] tabular-nums";
   const bars = (i, k) => <input defaultValue={types[i][k]} key={types[i][k]} onBlur={(e) => set(i, k, e.target.value.trim())}
     className={`${cell} ${types[i][k] && !parseBars(types[i][k]) ? "border-red-400 text-red-600" : ""}`} placeholder="—" />;
-  const num = (i, k, step) => <input type="number" step={step} defaultValue={types[i][k]} key={types[i][k]} onBlur={(e) => set(i, k, Number(e.target.value))} className={`${cell} compact-num`} />;
+  const num = (i, k, step) => <input type="number" step={step} defaultValue={types[i][k]} key={types[i][k]} onBlur={(e) => set(i, k, Number(e.target.value))} className={`${cell} compact-num text-right`} />;
+  const nAll = (i) => (res ? res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0) : used(i).length);
   return (
-    <div className="overflow-auto text-[12px]">
+    <SidePanel title={`ตาราง Type คาน (${types.length})`} icon={Table2}
+      action={<span className="flex gap-1.5">{onRenumber && <button onClick={onRenumber} title="เรียง type ตามขนาด (b × h) แล้วตั้งชื่อ B1, B2 … ใหม่ตามลำดับ — คานยังใช้หน้าตัดเดิมทุกตัว (ชื่อที่ตั้งเองไม่เปลี่ยน)" className={btnGhost}>เรียงชื่อใหม่ตามขนาด</button>}
+        <button onClick={() => setTypes([...types, { ...types[types.length - 1], name: nextTypeName(types), manual: true, auto: undefined, big: undefined }])} className={btnCls}><Plus className="h-3.5 w-3.5" />เพิ่ม type</button></span>}>
+      {head && <div className="mb-3 rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/[0.03]">{head}</div>}
+      <div className="overflow-auto rounded-lg border border-gray-200 text-[12px]">
       <table className="w-full border-collapse">
-        <thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">
-          {["Type", "โปรแกรมเลือก", "b (ม.)", "h (ม.)", "บน ตลอด", "บน เสริม L/4", "ล่าง ตลอด", "ล่าง เสริม 3L/5", "ปลอก", "ชุด", "@หัวเสา", "@กลาง", "ใช้", "", ""].map((h, j) => <th key={j} className="px-1 py-1 font-medium">{h}</th>)}
+        <thead><tr className="bg-gray-50 text-left text-[11px] text-gray-500 dark:bg-white/[0.03]">
+          {["Type", "เลือกอัตโนมัติ", "b (ม.)", "h (ม.)", "บน ตลอด", "บน เสริม L/4", "ล่าง ตลอด", "ล่าง เสริม 3L/5", "ปลอก", "ชุด", "@หัวเสา", "@กลาง", "ใช้ (ช่วง)", ""].map((h, j) => <th key={j} className="whitespace-nowrap px-1.5 py-1.5 font-medium">{h}</th>)}
         </tr></thead>
         <tbody>{types.map((t, i) => (
-          <tr key={i} className="border-b border-gray-100">
-            <td className="px-1"><span className="mr-1 inline-block h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }} />
-              <input defaultValue={t.name} key={t.name} onBlur={(e) => set(i, "name", e.target.value.trim() || t.name)} className={`${cell} !w-12 font-semibold`} />{t.big && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700" title="คานใหญ่พิเศษ: เกินกรอบปกติ (กว้าง 0.30 / ลึก 0.80 ม.) ใช้เฉพาะช่วงที่หน้าตัดปกติรับไม่ได้">ใหญ่พิเศษ</span>}</td>
-            <td className="px-1 text-center" title="ติ๊ก = โปรแกรมเลือก type นี้ให้คานอัตโนมัติได้ · ไม่ติ๊ก = ใช้เฉพาะคานที่คุณกำหนดเอง (type ที่สร้างเองเริ่มแบบไม่ติ๊ก)"><input type="checkbox" checked={!t.manual} onChange={(e) => set(i, "manual", !e.target.checked || undefined)} /></td>
-            <td className="px-1 w-16">{num(i, "b", 0.05)}</td><td className="px-1 w-16">{num(i, "h", 0.05)}</td>
-            <td className="px-1">{bars(i, "top")}</td><td className="px-1">{bars(i, "topX")}</td><td className="px-1">{bars(i, "bot")}</td><td className="px-1">{bars(i, "botX")}</td>
-            <td className="px-1 w-20"><select value={t.st} onChange={(e) => set(i, "st", e.target.value)} className={cell}>{["RB 6", "RB 9", "DB 10", "DB 12"].map((s) => <option key={s}>{s}</option>)}</select></td>
-            <td className="px-1 w-14"><select value={t.stSets ?? 1} onChange={(e) => set(i, "stSets", Number(e.target.value))} className={cell} title="จำนวนชุดปลอก (2 = ปลอก 2 ชุดซ้อน)"><option value={1}>1</option><option value={2}>2</option></select></td>
-            <td className="px-1 w-16">{num(i, "sSup", 0.025)}</td><td className="px-1 w-16">{num(i, "sMid", 0.025)}</td>
-            <td className="px-1 text-gray-500" title="จำนวนช่วงทุกชั้น (ในวงเล็บ = ชั้นที่เลือกอยู่)">{res ? res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0) : used(i).length} ช่วง{res && <span className="text-gray-400"> ({used(i).length})</span>}</td>
-            <td><button onPointerEnter={() => frame && highlight({ floor: cur, segs: (frame.floors[cur]?.beams ?? []).filter((_, m) => (an?.beamTypeOf?.[m] ?? frame.floors[cur].beams[m].type) === i).map((b) => [b.a, b.b]) })} onPointerLeave={() => highlight(null)} className="mr-1 text-[11px] text-brand-600 hover:underline" title="ชี้เพื่อดูคานชั้นนี้ที่ใช้ type นี้บนแปลน">ดูคาน</button></td>
-            <td><button onClick={() => delType(i)} disabled={types.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></td>
+          <tr key={i} className="border-t border-gray-100">
+            <td className="px-1.5 py-1"><div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }} />
+              <input defaultValue={t.name} key={t.name} onBlur={(e) => set(i, "name", e.target.value.trim() || t.name)} className={`${cell} !w-14 font-semibold`} />{t.big && <span className="whitespace-nowrap rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700" title="คานใหญ่พิเศษ: เกินกรอบปกติ (กว้าง 0.30 / ลึก 0.80 ม.) ใช้เฉพาะช่วงที่หน้าตัดปกติรับไม่ได้">ใหญ่พิเศษ</span>}</div></td>
+            <td className="px-1.5 text-center" title="ติ๊ก = โปรแกรมเลือก type นี้ให้คานอัตโนมัติได้ · ไม่ติ๊ก = ใช้เฉพาะคานที่คุณกำหนดเอง (type ที่สร้างเองเริ่มแบบไม่ติ๊ก)"><input type="checkbox" className="accent-[#465fff]" checked={!t.manual} onChange={(e) => set(i, "manual", !e.target.checked || undefined)} /></td>
+            <td className="w-16 px-1.5">{num(i, "b", 0.05)}</td><td className="w-16 px-1.5">{num(i, "h", 0.05)}</td>
+            <td className="px-1.5">{bars(i, "top")}</td><td className="px-1.5">{bars(i, "topX")}</td><td className="px-1.5">{bars(i, "bot")}</td><td className="px-1.5">{bars(i, "botX")}</td>
+            <td className="w-20 px-1.5"><select value={t.st} onChange={(e) => set(i, "st", e.target.value)} className={cell}>{["RB 6", "RB 9", "DB 10", "DB 12"].map((s) => <option key={s}>{s}</option>)}</select></td>
+            <td className="w-14 px-1.5"><select value={t.stSets ?? 1} onChange={(e) => set(i, "stSets", Number(e.target.value))} className={cell} title="จำนวนชุดปลอก (2 = ปลอก 2 ชุดซ้อน)"><option value={1}>1</option><option value={2}>2</option></select></td>
+            <td className="w-16 px-1.5">{num(i, "sSup", 0.025)}</td><td className="w-16 px-1.5">{num(i, "sMid", 0.025)}</td>
+            <td className="whitespace-nowrap px-1.5 tabular-nums" title="จำนวนช่วงทุกชั้น (ในวงเล็บ = ชั้นที่เลือกอยู่) · ชี้ = ดูคานชั้นนี้ที่ใช้ type นี้บนแปลน"
+              onPointerEnter={() => frame && highlight({ floor: cur, segs: (frame.floors[cur]?.beams ?? []).filter((_, m) => (an?.beamTypeOf?.[m] ?? frame.floors[cur].beams[m].type) === i).map((b) => [b.a, b.b]) })} onPointerLeave={() => highlight(null)}>
+              <b className={nAll(i) ? "text-gray-800" : "font-normal text-gray-400"}>{nAll(i)}</b>{res && <span className="text-gray-400"> ({used(i).length})</span>} <span className="cursor-help text-[11px] text-brand-600">ดูคาน</span></td>
+            <td className="px-1.5"><button onClick={() => delType(i)} disabled={types.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></td>
           </tr>))}</tbody>
-      </table>
-      {onRenumber && <button onClick={onRenumber} title="เรียง type ตามขนาด (b × h) แล้วตั้งชื่อ B1, B2 … ใหม่ตามลำดับ — คานยังใช้หน้าตัดเดิมทุกตัว (ชื่อที่ตั้งเองไม่เปลี่ยน)" className="mr-2 mt-2 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50">เรียงชื่อใหม่ตามขนาด</button>}
-      <button onClick={() => setTypes([...types, { ...types[types.length - 1], name: nextTypeName(types), manual: true, auto: undefined, big: undefined }])} className="mt-2 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่ม type</button>
-      <p className="mt-2 text-[11px] text-gray-400">ใส่เหล็กแบบ 2-DB16 · เว้นว่าง = ไม่มี · "ตลอด" = เหล็กวิ่งตลอดคาน, เสริม L/4 = เหล็กบนเพิ่มที่หัวเสา, เสริม 3L/5 = เหล็กล่างเพิ่มกลางคาน ·
-        คาน "อัตโนมัติ" ได้ type ที่เบาที่สุดที่ผ่าน (เฉพาะ type ที่ติ๊ก "โปรแกรมเลือก") · คานที่ล็อค / กำหนดเอง ไม่ย้าย type เอง ไม่ผ่านจะขึ้นแดงพร้อม type ที่ผ่าน ·
-        type ที่เพิ่มเองไม่ถูกเลือกอัตโนมัติ — ใช้กับคานที่เลือกบนแปลน · ลบ type แล้วชื่อ type อื่นไม่เปลี่ยน · คานที่วาดเป็นเส้นเดียวใช้ type เดียวทุกช่วง</p>
-    </div>
+      </table></div>
+      <Note>ใส่เหล็กแบบ 2-DB16 · เว้นว่าง = ไม่มี · "ตลอด" = เหล็กวิ่งตลอดคาน, เสริม L/4 = เหล็กบนเพิ่มที่หัวเสา, เสริม 3L/5 = เหล็กล่างเพิ่มกลางคาน ·
+        คาน "อัตโนมัติ" ได้ type ที่เบาที่สุดที่ผ่าน (เฉพาะ type ที่ติ๊ก "เลือกอัตโนมัติ") · คานที่ล็อค / กำหนดเอง ไม่ย้าย type เอง ไม่ผ่านจะขึ้นแดงพร้อม type ที่ผ่าน ·
+        type ที่เพิ่มเองไม่ถูกเลือกอัตโนมัติ — ใช้กับคานที่เลือกบนแปลน · ลบ type แล้วชื่อ type อื่นไม่เปลี่ยน · คานที่วาดเป็นเส้นเดียวใช้ type เดียวทุกช่วง</Note>
+    </SidePanel>
   );
 }
 
@@ -253,44 +259,46 @@ export function deleteColType(frame, i) {
 }
 
 // column types (C1, C2, …) with one section per level, bottom up
-function ColTypeTable({ types, setTypes, res, floors, delType }) {
+function ColTypeTable({ types, setTypes, res, floors, delType, head = null }) {
   const setLv = (i, j, k, v) => setTypes(types.map((t, a) => (a !== i ? t : { ...t, levels: t.levels.map((lv, b) => (b === j ? { ...lv, [k]: v } : lv)) })));
-  const cell = "h-7 w-full rounded border border-gray-300 bg-transparent px-1 text-[12px] tabular-nums";
-  const num = (i, j, k, step) => <input type="number" step={step} defaultValue={types[i].levels[j][k]} key={types[i].levels[j][k]} onBlur={(e) => setLv(i, j, k, Number(e.target.value))} className={`${cell} compact-num`} />;
+  const cell = "h-7 w-full rounded-md border border-gray-300 bg-transparent px-1.5 text-[12px] tabular-nums";
+  const num = (i, j, k, step) => <input type="number" step={step} defaultValue={types[i].levels[j][k]} key={types[i].levels[j][k]} onBlur={(e) => setLv(i, j, k, Number(e.target.value))} className={`${cell} compact-num text-right`} />;
   const sel = (i, j, k, opts) => <select value={types[i].levels[j][k]} onChange={(e) => setLv(i, j, k, e.target.value)} className={cell}>{opts.map((o) => <option key={o}>{o}</option>)}</select>;
   // levels follow the project floors (user 2026-11-04: the type had 3 levels, the project 4 floors → the top level was used twice, unseen)
   const short = types.filter((t) => t.levels.length < floors.length);
   const fit = () => setTypes(types.map((t) => (t.levels.length >= floors.length ? t : { ...t, levels: [...t.levels, ...floors.slice(t.levels.length).map((f) => ({ ...t.levels.at(-1), level: f.name }))] })));
   return (
-    <div className="space-y-4 overflow-auto text-[12px]">
-      {short.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] text-[#b54708]">
-        <span>โครงการมี {floors.length} ชั้น ({floors.map((f) => f.name).join(" · ")}) แต่ type {short.map((t) => `${t.name} มี ${t.levels.length} ระดับ`).join(", ")} — ชั้นที่เกินใช้ระดับบนสุดของ type ซ้ำ</span>
-        <button onClick={fit} className="rounded-md bg-[#b54708] px-2 py-0.5 font-medium text-white hover:opacity-90">เพิ่มระดับให้ครบทุกชั้น (คัดลอกระดับบน)</button></div>}
+    <SidePanel title={`ตาราง Type เสา (${types.length})`} icon={Table2}
+      action={<button onClick={() => setTypes([...types, { ...types.at(-1), name: `C${types.length + 1}` }])} className={btnCls}><Plus className="h-3.5 w-3.5" />เพิ่ม type เสา</button>}>
+      {head && <div className="mb-3 rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/[0.03]">{head}</div>}
+      {short.length > 0 && <div className="mb-3"><Notice kind="warn" action={<button onClick={fit} className="whitespace-nowrap rounded-md bg-[#b54708] px-2 py-0.5 text-[12px] font-medium text-white hover:opacity-90">เพิ่มระดับให้ครบทุกชั้น (คัดลอกระดับบน)</button>}>
+        โครงการมี {floors.length} ชั้น ({floors.map((f) => f.name).join(" · ")}) แต่ type {short.map((t) => `${t.name} มี ${t.levels.length} ระดับ`).join(", ")} — ชั้นที่เกินใช้ระดับบนสุดของ type ซ้ำ</Notice></div>}
+      <div className="grid gap-3">
       {types.map((t, i) => (
-        <div key={i}>
-          <div className="mb-1 flex items-center gap-2 font-semibold"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }} />
+        <div key={i} className="overflow-hidden rounded-lg border border-gray-200 text-[12px]">
+          <div className="flex items-center gap-2 bg-gray-50 px-2.5 py-1.5 dark:bg-white/[0.03]"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }} />
             <input defaultValue={t.name} key={t.name} onBlur={(e) => setTypes(types.map((x, a) => (a === i ? { ...x, name: e.target.value.trim() || x.name } : x)))} className={`${cell} !w-14 font-semibold`} />
-            <span className="font-normal text-gray-500">ใช้ {res.stacks.filter((s) => s.typeIdx === i).length} ต้น</span>
-            <button onClick={() => delType(i)} disabled={types.length < 2} className="ml-auto text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></div>
+            <span className="text-gray-500">ใช้ <b className="text-gray-800">{res.stacks.filter((s) => s.typeIdx === i).length}</b> ต้น</span>
+            <button onClick={() => setTypes(types.map((x, a) => (a === i ? { ...x, levels: [...x.levels, { ...x.levels.at(-1), level: floors[x.levels.length]?.name ?? `ชั้น ${x.levels.length}` }] } : x)))} className="ml-auto text-[12px] font-medium text-brand-600 hover:underline">+ เพิ่มระดับ</button>
+            <button onClick={() => delType(i)} disabled={types.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบ type"><Trash2 className="h-3.5 w-3.5" /></button></div>
           <table className="w-full border-collapse">
-            <thead><tr className="border-b border-gray-200 text-left text-[11px] text-gray-500">{["ระดับ (ล่าง → บน)", "ใช้ใต้ชั้น", "Bx (ซม.)", "By (ซม.)", "จำนวนเหล็ก", "เหล็กยืน", "ปลอก", "@ (ม.)", ""].map((h) => <th key={h} className="px-1 py-1 font-medium">{h}</th>)}</tr></thead>
+            <thead><tr className="text-left text-[11px] text-gray-500">{["ระดับ (ล่าง → บน)", "ใช้ใต้ชั้น", "Bx (ซม.)", "By (ซม.)", "จำนวน", "เหล็กยืน", "ปลอก", "@ (ม.)", ""].map((h) => <th key={h} className="whitespace-nowrap px-1.5 py-1 font-medium">{h}</th>)}</tr></thead>
             <tbody>{t.levels.map((lv, j) => (
-              <tr key={j} className="border-b border-gray-100">
-                <td className="px-1"><input defaultValue={lv.level} key={lv.level} onBlur={(e) => setLv(i, j, "level", e.target.value)} className={cell} /></td>
-                <td className={`px-1 ${j >= floors.length ? "text-gray-300" : j === t.levels.length - 1 && floors.length > t.levels.length ? "font-medium text-[#b54708]" : "text-gray-500"}`}>{j >= floors.length ? "ไม่มีชั้นนี้ (ไม่ใช้)" : j === t.levels.length - 1 ? floors.slice(j).map((f) => f.name).join(", ") : floors[j].name}</td>
-                <td className="px-1 w-16">{num(i, j, "Bx", 5)}</td><td className="px-1 w-16">{num(i, j, "By", 5)}</td><td className="px-1 w-16">{num(i, j, "n", 2)}</td>
-                <td className="px-1 w-20">{sel(i, j, "mainBar", ["DB 12", "DB 16", "DB 20", "DB 25"])}</td><td className="px-1 w-20">{sel(i, j, "tieBar", ["RB 6", "RB 9", "DB 10"])}</td>
-                <td className="px-1 w-16">{num(i, j, "s", 0.025)}</td>
-                <td><button onClick={() => setTypes(types.map((x, a) => (a === i ? { ...x, levels: x.levels.filter((_, b) => b !== j) } : x)))} disabled={t.levels.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button></td>
+              <tr key={j} className="border-t border-gray-100">
+                <td className="px-1.5 py-1"><input defaultValue={lv.level} key={lv.level} onBlur={(e) => setLv(i, j, "level", e.target.value)} className={cell} /></td>
+                <td className={`whitespace-nowrap px-1.5 ${j >= floors.length ? "text-gray-300" : j === t.levels.length - 1 && floors.length > t.levels.length ? "font-medium text-[#b54708]" : "text-gray-500"}`}>{j >= floors.length ? "ไม่มีชั้นนี้ (ไม่ใช้)" : j === t.levels.length - 1 ? floors.slice(j).map((f) => f.name).join(", ") : floors[j].name}</td>
+                <td className="w-16 px-1.5">{num(i, j, "Bx", 5)}</td><td className="w-16 px-1.5">{num(i, j, "By", 5)}</td><td className="w-14 px-1.5">{num(i, j, "n", 2)}</td>
+                <td className="w-20 px-1.5">{sel(i, j, "mainBar", ["DB 12", "DB 16", "DB 20", "DB 25"])}</td><td className="w-20 px-1.5">{sel(i, j, "tieBar", ["RB 6", "RB 9", "DB 10"])}</td>
+                <td className="w-16 px-1.5">{num(i, j, "s", 0.025)}</td>
+                <td className="px-1.5"><button onClick={() => setTypes(types.map((x, a) => (a === i ? { ...x, levels: x.levels.filter((_, b) => b !== j) } : x)))} disabled={t.levels.length < 2} className="text-gray-400 hover:text-red-500 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button></td>
               </tr>))}</tbody>
           </table>
-          <button onClick={() => setTypes(types.map((x, a) => (a === i ? { ...x, levels: [...x.levels, { ...x.levels.at(-1), level: floors[x.levels.length]?.name ?? `ชั้น ${x.levels.length}` }] } : x)))} className="mt-1 text-[12px] text-brand-500">+ เพิ่มระดับ</button>
         </div>
       ))}
-      <button onClick={() => setTypes([...types, { ...types.at(-1), name: `C${types.length + 1}` }])} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่ม type เสา</button>
-      <p className="text-[11px] text-gray-400">ระดับที่ k ใช้กับเสาใต้ชั้นที่ k (นับจากล่าง) · ชั้นที่เกินจำนวนระดับใช้ระดับบนสุด · ตรวจด้วยวิธีหน่วยแรงใช้งาน (โมดูลเสา) ที่ระยะเยื้องศูนย์ขั้นต่ำ max(2.5 ซม., 0.1·ด้านแคบ),
-        โครงไม่เซ k = 1 · ระยะปลอกต้องไม่เกิน 16 เท่าเหล็กยืน / 48 เท่าเหล็กปลอก / ด้านแคบ · อัตโนมัติ = type เบาที่สุดที่ผ่านทุกชั้นของต้นนั้น</p>
-    </div>
+      </div>
+      <Note>ระดับที่ k ใช้กับเสาใต้ชั้นที่ k (นับจากล่าง) · ชั้นที่เกินจำนวนระดับใช้ระดับบนสุด · ตรวจด้วยวิธีหน่วยแรงใช้งาน (โมดูลเสา) ที่ระยะเยื้องศูนย์ขั้นต่ำ max(2.5 ซม., 0.1·ด้านแคบ),
+        โครงไม่เซ k = 1 · ระยะปลอกต้องไม่เกิน 16 เท่าเหล็กยืน / 48 เท่าเหล็กปลอก / ด้านแคบ · อัตโนมัติ = type เบาที่สุดที่ผ่านทุกชั้นของต้นนั้น</Note>
+    </SidePanel>
   );
 }
 
@@ -452,29 +460,38 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
             ghost={cur > 0 ? frame.floors[cur - 1].columns : []} onCopyBelow={step === "frame" ? copyBelow : null} compact={step === "analysis"} onDxf={() => downloadDxf(framePlanModel(fl, an, types, colsHere, { widenTypes: widenTypesOf(frame) }), `${frame.frameNo}-${fl.name}`)} colInfo={boardStep === "cols" ? fl.columns.map((_, i) => { const c = colAt(i); return c && { ok: c.ok, text: `${cTypes[c.typeIdx]?.name} ${fmt(c.Pbot / 1000, 1)}ต`, color: TYPE_COLORS[c.typeIdx % TYPE_COLORS.length] }; }) : null} />);
   // click a beam / column in 3D = select it (its floor becomes the current one) — user 2026-11-04
   const pick3d = (h) => { if (h.floor !== cur) set("cur", h.floor); setSel({ kind: h.kind, i: h.i }); };
-  const view3d = <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} onPick={pick3d} selected={sel && (sel.kind === "beam" || sel.kind === "column") ? { floor: cur, ...sel } : null} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
-  const coverFields = COVERS.map(([k, label, def]) => <Field key={k} label={label} unit="cm"><NumberInput value={frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : k === "coverPier" ? frame.mat.coverCol ?? frame.mat.cover : def)} step="0.5" onChange={(v) => setMat(k, v)} /></Field>);
-  const coverBar = (keys, extra = null) => <div className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]"><span className="pb-2 text-xs font-medium text-gray-500">คอนกรีตหุ้ม</span>{coverFields.filter((_, i) => keys.includes(COVERS[i][0]))}{extra}</div>;
+  const view3d = <Frame3D loadsOn={step === "loads"} frame={frame} res={res} cur={cur} roof={roof} dark={dark} onPick={pick3d} selected={sel && (sel.kind === "beam" || sel.kind === "column") ? { floor: cur, ...sel } : null} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
+  // covers / bar spacing as one compact line (PanelKit look): label, small number, unit — inside the panel it belongs to
+  const covVal = (k, def) => frame.mat[k] ?? (k === "coverCol" ? frame.mat.cover : k === "coverPier" ? frame.mat.coverCol ?? frame.mat.cover : def);
+  const covIn = (k, label, def, title) => <label key={k} className="flex items-center gap-1.5 whitespace-nowrap" title={title}>{label}
+    <input type="number" step="0.5" value={covVal(k, def) ?? ""} onChange={(e) => setMat(k, e.target.value === "" ? 0 : Number(e.target.value))} className={`${smallNum} !w-16`} /><span className="text-gray-400">ซม.</span></label>;
+  const coverInline = (keys, extra = null) => <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-gray-600"><span className="text-[11px] font-semibold text-gray-500">คอนกรีตหุ้ม</span>
+    {COVERS.filter(([k]) => keys.includes(k)).map(([k, label, def]) => covIn(k, label, def))}{extra}</div>;
+  const coverBar = (keys, extra = null) => <div className="mb-3 rounded-lg border border-gray-200 bg-white px-3 py-2 dark:bg-white/[0.03]">{coverInline(keys, extra)}</div>;
   // minimum clear spacing between beam bars: bars that do not fit in a layer go to the next layer (design + drawings)
-  const clearField = <><Field label="ระยะห่างเหล็กคานขั้นต่ำ (ช่องว่าง)" unit="cm"><NumberInput value={frame.mat.barClear ?? 3.5} step="0.5" onChange={(v) => setMat("barClear", v)} /></Field>
-    <span className="pb-2 text-[11px] text-gray-400">ใช้ค่ามากกว่าระหว่างค่านี้กับขนาดเหล็ก · เกินความกว้างคาน → ขึ้นชั้นที่ 2 (ห่างชั้น 2.5 ซม.)</span></>;
+  const clearField = <><span className="h-4 w-px bg-gray-200" />{covIn("barClear", "ช่องว่างเหล็กคานขั้นต่ำ", 3.5, "ใช้ค่ามากกว่าระหว่างค่านี้กับขนาดเหล็ก · เกินความกว้างคาน → ขึ้นชั้นที่ 2 (ห่างชั้น 2.5 ซม.)")}</>;
   const slabRows = step === "design" && sub === "slabs" ? designSlabs(an, fl, frame.mat) : [];
   const page = step === "project" ? (
-    <div className="grid max-w-6xl gap-4 xl:grid-cols-[1.3fr_1fr]">
-      <DesignCriteria frame={frame} set={set} setMat={setMat} defaults={DEFAULT_FRAME} onNotice={setCritMsg} />
-      <div className="space-y-4">{critMsg && <p className="rounded-lg bg-green-50 px-3 py-2 text-[12px] text-green-700">{critMsg}</p>}
+    <div className="grid max-w-[1500px] gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+      <DesignCriteria frame={frame} set={set} setMat={setMat} />
+      <div className="space-y-4">
+      <SidePanel title="ข้อมูลโครงการ" icon={Building2} action={<button onClick={onProjectInfo} className={btnCls}>แก้ข้อมูลโครงการ</button>}>
+        <List>
+          {[["ชื่อโครงการ", project.name], ["เจ้าของ", project.owner], ["ที่ตั้ง", project.location], ["วิศวกร", project.engineer]].map(([t, v]) =>
+            <Row key={t} title={t} sub={v || "ยังไม่ได้กรอก"} />)}
+        </List>
+        <Note>มาตรฐาน: วิธีหน่วยแรงใช้งาน (WSD) ว.ส.ท. / ACI 318 · กฎกระทรวง พ.ศ. 2566 (fc ≤ 65 ksc) · โครงหลังคาเหล็ก ASD (AISC / ว.ส.ท.) · สร้างจากล่างขึ้นบน (ขั้น 1–5) คำนวณจากบนลงล่าง (ขั้น 6–8) · ย้อนกลับได้ด้วย ↶ ↷ หรือ Ctrl+Z / Ctrl+Y</Note>
+      </SidePanel>
       <LateralChoice frame={frame} set={set} />
-      <Card title="ข้อมูลโครงการและมาตรฐาน" icon={Building2}>
-        <div className="space-y-2 text-[13px] text-gray-600">
-          <p>ชื่อโครงการ เจ้าของ ที่ตั้ง วิศวกร — แก้ที่ <button onClick={onProjectInfo} className="font-medium text-brand-500">ข้อมูลโครงการ</button></p>
-          <p>มาตรฐาน: วิธีหน่วยแรงใช้งาน (WSD) ว.ส.ท. / ACI 318 · กฎกระทรวง พ.ศ. 2566 (fc ≤ 65 ksc) · โครงหลังคาเหล็ก ASD (AISC / ว.ส.ท.)</p>
-          <p>ลำดับงาน: สร้างจากล่างขึ้นบน (ขั้น 1–5) · คำนวณจากบนลงล่าง (ขั้น 6–8) · ทุกการแก้ไขย้อนกลับได้ด้วยปุ่ม ↶ ↷ หรือ Ctrl+Z / Ctrl+Y</p>
-        </div>
-      </Card>
+      {critMsg && <Notice>{critMsg}</Notice>}
+      <StandardPanel frame={frame} set={set} defaults={DEFAULT_FRAME} onNotice={setCritMsg} />
       </div>
     </div>
-  ) : step === "design" && sub === "types" ? <div>{coverBar(["cover"], clearField)}<AutoBeamTypes frame={frame} set={set} res={res} /><TypeTable res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} cur={cur} frame={frame} onRenumber={() => { const r = renumberTypes(frame); set("beamTypes", r.beamTypes); set("floors", r.floors); }} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} /><BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} project={project} joints={lvJ} widens={widenSections(widenUses(frame, res))} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} /><LevelJointsCard rows={lvJ.rows} groups={lvJ.groups} depth={lvJ.depth} dgroups={lvJ.dgroups} mat={frame.mat} /><WidenTypesCard frame={frame} set={set} res={res} /></div>
-    : step === "design" && sub === "ctypes" ? <div>{coverBar(["coverCol", "coverPier"])}<AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} delType={(i) => { const r = deleteColType(frame, i); set("colTypes", r.colTypes); set("colPick", r.colPick); }} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
+  ) : step === "design" && sub === "types" ? <div className="space-y-4"><AutoBeamTypes frame={frame} set={set} res={res} />
+      <TypeTable head={coverInline(["cover"], clearField)} res={res} types={types} setTypes={(v) => set("beamTypes", v)} an={an} cur={cur} frame={frame} onRenumber={() => { const r = renumberTypes(frame); set("beamTypes", r.beamTypes); set("floors", r.floors); }} delType={(i) => { const r = deleteBeamType(frame, i); set("beamTypes", r.beamTypes); set("floors", r.floors); }} />
+      <BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} project={project} joints={lvJ} widens={widenSections(widenUses(frame, res))} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} />
+      <LevelJointsCard rows={lvJ.rows} groups={lvJ.groups} depth={lvJ.depth} dgroups={lvJ.dgroups} mat={frame.mat} /><WidenTypesCard frame={frame} set={set} res={res} /></div>
+    : step === "design" && sub === "ctypes" ? <div className="space-y-4"><AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable head={coverInline(["coverCol", "coverPier"])} types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} delType={(i) => { const r = deleteColType(frame, i); set("colTypes", r.colTypes); set("colPick", r.colPick); }} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /></div>
     : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "slabs" ? (() => {
       // every slab / cantilever slab / stair: this floor or all floors, bars by position, section drawing; row → flashes on the plan
@@ -487,7 +504,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       const inp = "h-7 w-16 rounded border border-gray-300 bg-transparent px-1";
       return (
       <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3">{coverBar(["coverSlab"])}
+      <div className="flex flex-wrap items-center gap-3"><div className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 dark:bg-white/[0.03]">{coverInline(["coverSlab"])}</div>
         <div className="inline-flex rounded-lg p-0.5 text-[12px] ring-1 ring-gray-200">{[[false, `ชั้นนี้ (${fl.name})`], [true, "ทุกชั้น"]].map(([v, t]) => <button key={t} onClick={() => setSlabAll(v)} className={`rounded-md px-2.5 py-1 ${slabAll === v ? "bg-brand-500 text-[#fff]" : "text-gray-600 hover:bg-gray-50"}`}>{t}</button>)}</div>
         <label className="flex items-center gap-1 text-[12px] text-gray-600"><input type="checkbox" checked={slabAllRows} onChange={(e) => setSlabAllRows(e.target.checked)} />แสดง GS / PS ด้วย</label>
         <span className="text-[12px] text-gray-500">ผ่าน {rows.filter((x) => x.r && x.ok).length}/{rows.filter((x) => x.r).length} · ชี้แถว = กระพริบบนแปลน / 3D · คลิกแถว = ไปชั้นนั้น</span></div>
@@ -664,10 +681,10 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
                 const del = (k) => { const nl = list.filter((_, q) => q !== k); setBeam({ widen: nl.length ? nl : undefined }); };
                 const add = () => setBeam({ widen: [...list, { type: 0, side: list.length ? -(list[0].side ?? 1) : 1 }] });
                 return (<div className="col-span-2 space-y-2">
-                  <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-medium text-gray-700 dark:text-gray-200">พอกข้างคาน (รับผนังก่อ){list.length ? ` · ${list.length} ส่วน` : ""}</span>
+                  <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-medium text-gray-700">พอกข้างคาน (รับผนังก่อ){list.length ? ` · ${list.length} ส่วน` : ""}</span>
                     <button onClick={add} className={btnGhost}>+ {list.length ? "เพิ่มพอกอีกด้าน / อีกช่วง" : "เพิ่มพอกข้าง"}</button></div>
                   {list.length > 0 && <WidenBeamSection frame={frame} an={an} i={sel.i} beam={beam} width={300} />}
-                  {list.map((wd, k) => { const c = cs[k]; return (<div key={k} className="space-y-2 rounded-md p-2 ring-1 ring-gray-200 dark:ring-gray-700">
+                  {list.map((wd, k) => { const c = cs[k]; return (<div key={k} className="space-y-2 rounded-md p-2 ring-1 ring-gray-200">
                     <div className="grid grid-cols-2 gap-2">
                       <Field label={`พอกข้าง ${k + 1}`}><Select value={String(wd.type)} onChange={(v) => put(k, { type: +v })} options={WT.map((t, j) => [String(j), `${t.name} กว้าง ${fmt(t.w * 100, 0)} ซม.`])} /></Field>
                       <Field label="ด้าน (มองจากต้น → ปลายคาน)"><Select value={String(wd.side ?? 1)} onChange={(v) => put(k, { side: +v })} options={[["1", "ซ้าย"], ["-1", "ขวา"]]} /></Field>
@@ -847,13 +864,13 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
           {!(boardOnly && !page) && <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-1.5">{tabsBar}</div>}
           <div className={`relative flex min-h-0 flex-1 flex-col ${focus ? "p-1.5" : "p-2"}`}>{overlapBar}{center}
             {dTab === "warn" && ( // warnings float over the plan (user 2026-11-04: the side panel made the plan smaller)
-              <div className="absolute right-4 top-4 z-30 flex max-h-[60%] w-[min(460px,60%)] flex-col rounded-xl border border-gray-200 bg-white/95 shadow-lg backdrop-blur dark:border-gray-700 dark:bg-gray-900/95">
-                <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-1.5 text-[13px] font-semibold text-gray-800 dark:border-gray-700 dark:text-gray-100">⚠ คำเตือน ({res.warnings.length})
+              <div className="absolute right-4 top-4 z-30 flex max-h-[60%] w-[min(460px,60%)] flex-col rounded-xl border border-gray-200 bg-white/95 shadow-lg backdrop-blur">
+                <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-1.5 text-[13px] font-semibold text-gray-800">⚠ คำเตือน ({res.warnings.length})
                   <span className="text-[11px] font-normal text-gray-400">ชี้ = กระพริบบนแปลน · คลิก = ค้างไว้</span>
                   <button onClick={() => { setDrawer(null); setPinW(null); highlight(null); }} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">ปิด ✕</button></div>
                 <div className="min-h-0 flex-1 overflow-auto p-2">{warnList}
-                  {(res.notes ?? []).length > 0 && <div className="mt-2 border-t border-gray-200 pt-1.5 dark:border-gray-700"><p className="mb-0.5 text-[11px] font-semibold text-gray-500">หมายเหตุ ({res.notes.length}) — ตรวจแล้วไม่เป็นปัญหา แต่ต้องทำตามในแบบ</p>
-                    {res.notes.map((w) => { const at = locateWarning(w, frame, res); return <p key={w} onMouseEnter={() => at && highlight(at)} onMouseLeave={() => highlight(pinW ? locateWarning(pinW, frame, res) : null)} className={`rounded px-1 py-0.5 text-[12px] text-gray-600 dark:text-gray-300 ${at ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5" : ""}`}>{at?.p || at?.segs?.length ? "⌖ " : ""}{w}</p>; })}</div>}
+                  {(res.notes ?? []).length > 0 && <div className="mt-2 border-t border-gray-200 pt-1.5"><p className="mb-0.5 text-[11px] font-semibold text-gray-500">หมายเหตุ ({res.notes.length}) — ตรวจแล้วไม่เป็นปัญหา แต่ต้องทำตามในแบบ</p>
+                    {res.notes.map((w) => { const at = locateWarning(w, frame, res); return <p key={w} onMouseEnter={() => at && highlight(at)} onMouseLeave={() => highlight(pinW ? locateWarning(pinW, frame, res) : null)} className={`rounded px-1 py-0.5 text-[12px] text-gray-600 ${at ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5" : ""}`}>{at?.p || at?.segs?.length ? "⌖ " : ""}{w}</p>; })}</div>}
                 </div>
               </div>)}
           </div>

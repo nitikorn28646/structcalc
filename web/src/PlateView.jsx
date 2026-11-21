@@ -1,7 +1,8 @@
 ﻿// Wall-plate (อะเส) tab: plan with every span coloured by its section, span table with own sizes, per-wall column count.
 import { useEffect, useRef, useState } from "react";
 import { Columns3, Plus, Ruler, Trash2, Wand2 } from "lucide-react";
-import { Badge, Card, Field, NumberInput, Select } from "./ui.jsx";
+import { Badge, Field, NumberInput, Select } from "./ui.jsx";
+import { List, Note, Panel, Row, Section, SetRow, btnCls, btnGhost } from "./PanelKit.jsx";
 import { fmt } from "./beamModel.js";
 import { plateSizes, plateText } from "./drawings.js";
 import { SectionSelect } from "./RoofPage.jsx";
@@ -18,38 +19,33 @@ export const platesOf = (dz) => {
 export function PlateInputs({ d, setD, g, plates, sizes, setInner, onAutoInner, drawn, cols }) {
   const div = (i) => d.plateDiv?.[i];
   const setDiv = (i, v) => { const p = { ...d.plateDiv }; if (v) p[i] = Math.max(1, Math.round(v)); else delete p[i]; setD("plateDiv", p); };
+  const inner = plates.filter((m) => m.inner), innerList = () => inner.map((x) => ({ a: [x.p[0], x.p[1]], b: [x.q[0], x.q[1]] }));
   return (<>
-    <Card title="อะเส — ค่าตั้งต้น" icon={Ruler}>
+    <Panel title="อะเส — ค่าตั้งต้น" icon={Ruler} hint="อะเสส่วนใหญ่ถูกบังคับด้วยระยะแอ่นตัว · ต่อเนื่อง = แนวที่ต่อเต็มหน้าตัดผ่านหัวเสา วิเคราะห์เป็นคานต่อเนื่องจริง (แนวที่มีช่วงเดียวคิดช่วงเดี่ยว) · วางบนคาน คสล. = รับแรงข้ามแค่ระยะพุก">
       <div className="grid grid-cols-2 gap-3">
-        {/* only used when neither columns nor plates are drawn: each wall edge is cut into equal spans ≤ this (an assumed column spacing) */}
-        {!drawn && !cols ? <Field label="ระยะเสาสมมติ (ยังไม่วางเสา)" unit="m"><NumberInput value={d.plateSpan} step="0.1" onChange={(v) => setD("plateSpan", v)} /></Field> : null}
-        <Field label="เดี่ยว / คู่"><Select value={d.counts.plate} onChange={(v) => setD("counts", { ...d.counts, plate: Number(v) })} options={[[1, "เดี่ยว"], [2, "คู่"]]} /></Field>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3">
         <div className="col-span-2"><Field label="การรองรับอะเส"><Select value={d.plateSupport ?? "cont"} onChange={(v) => setD("plateSupport", v)}
           options={[["cont", "คานต่อเนื่องผ่านเสา (วิเคราะห์จริง)"], ["span", "ช่วงเดี่ยวระหว่างเสา (wL²/8)"], ["beam", "วางบนคาน คสล. ตลอดแนว (ช่วง = ระยะพุก)"], ["rc", "ไม่มีอะเสเหล็ก — จันทันวางบนคาน RB โดยตรง"]]} /></Field></div>
         {d.plateSupport === "beam" && <Field label="ระยะพุกยึด" unit="m"><NumberInput value={d.plateAnchor ?? 1.0} step="0.1" onChange={(v) => setD("plateAnchor", v)} /></Field>}
         <Field label="ระยะแอ่นตัวยอมให้"><Select value={d.plateDefl ?? 360} onChange={(v) => setD("plateDefl", Number(v))} options={[[360, "L/360"], [240, "L/240 (ไม่มีฝ้าแขวน)"]]} /></Field>
+        {/* only used when neither columns nor plates are drawn: each wall edge is cut into equal spans ≤ this (an assumed column spacing) */}
+        {!drawn && !cols ? <Field label="ระยะเสาสมมติ (ยังไม่วางเสา)" unit="m"><NumberInput value={d.plateSpan} step="0.1" onChange={(v) => setD("plateSpan", v)} /></Field> : null}
+        <Field label="เดี่ยว / คู่"><Select value={d.counts.plate} onChange={(v) => setD("counts", { ...d.counts, plate: Number(v) })} options={[[1, "เดี่ยว"], [2, "คู่"]]} /></Field>
+        <div className="col-span-2"><Field label="หน้าตัดตั้งต้นทุกช่วง"><SectionSelect value={d.pick.plate} onChange={(v) => setD("pick", { ...d.pick, plate: v })} /></Field></div>
       </div>
-      <p className="mt-1 text-[11px] text-gray-400">อะเสส่วนใหญ่ถูกบังคับด้วยระยะแอ่นตัว · ต่อเนื่อง = แนวอะเสที่ต่อเชื่อมเต็มหน้าตัดผ่านหัวเสา วิเคราะห์เป็นคานต่อเนื่องจริง (M+ กลางช่วง, M− หัวเสา, ระยะแอ่นจริง) แนวที่มีช่วงเดียวคิดช่วงเดี่ยว · วางบนคาน คสล. = รับแรงข้ามแค่ระยะพุก</p>
-      <div className="mt-3"><Field label="หน้าตัดตั้งต้นทุกช่วง"><SectionSelect value={d.pick.plate} onChange={(v) => setD("pick", { ...d.pick, plate: v })} /></Field></div>
-      <div className="mt-3 space-y-1">
-        <div className="text-[11px] text-gray-400">ขนาดที่ใช้ในแปลน</div>
+      {sizes.length > 0 && <Section title="ขนาดที่ใช้ในแปลน" className="!mt-4"><List>
         {sizes.map((s) => (
-          <div key={s.k} className="flex items-center gap-2 text-[13px]">
-            <i className="h-1.5 w-6 rounded-full" style={{ background: s.color }} />
-            <span className="font-medium">{plateText(s)}</span>
-            <span className="ml-auto text-gray-400">{plates.filter((m) => sizeOf(sizes, m) === s).map((m) => m.tag).join(", ")}</span>
-          </div>
+          <Row key={s.k} lead={<i className="h-1.5 w-6 shrink-0 rounded-full" style={{ background: s.color }} />} title={plateText(s)}
+            sub={plates.filter((m) => sizeOf(sizes, m) === s).map((m) => m.tag).join(", ")} />
         ))}
-      </div>
-    </Card>
-    <Card title="ไทป์อะเส" icon={Ruler}>
-      <div className="space-y-1.5 text-[13px]">
+      </List></Section>}
+    </Panel>
+    <Panel title="ไทป์อะเส" icon={Ruler} hint={d.plateTypes?.length ? "แต่ละช่วงเลือกไทป์ในตาราง · อัตโนมัติ = ไทป์ที่เบาที่สุดที่ผ่าน" : "ยังไม่มีไทป์: แต่ละช่วงเลือกหน้าตัดเองได้ทุกขนาด"}
+      action={<button onClick={() => { const n = (d.plateTypes ?? []).length; setD("plateTypes", [...(d.plateTypes ?? []), { name: `AS${n + 1}`, pick: n ? "C:125x50x20x2.3" : "C:150x50x20x2.3", count: 2 }]); }} className={btnCls}><Plus className="h-3.5 w-3.5" />เพิ่มไทป์</button>}>
+      {(d.plateTypes ?? []).length > 0 && <List>
         {(d.plateTypes ?? []).map((t, i) => {
           const upd = (patch) => setD("plateTypes", d.plateTypes.map((x, j) => (j === i ? { ...x, ...patch } : x)));
           return (
-            <div key={i} className="grid grid-cols-[52px_1fr_58px_18px] items-center gap-1">
+            <li key={i} className="grid grid-cols-[52px_1fr_62px_18px] items-center gap-1.5 px-2.5 py-1.5">
               <input value={t.name} onChange={(e) => upd({ name: e.target.value })} className={`${inputCls} !h-8 !px-1.5 text-center font-semibold`} />
               <select value={t.pick} onChange={(e) => upd({ pick: e.target.value })} className={`${inputCls} !h-8 !px-1.5 text-[12px]`}>
                 {Object.entries(SECTION_TYPES).map(([ty, label]) => (
@@ -62,59 +58,51 @@ export function PlateInputs({ d, setD, g, plates, sizes, setInner, onAutoInner, 
                 for (const [id, v] of Object.entries(d.memberType ?? {})) if (v !== i) mt[id] = v > i ? v - 1 : v; // keep assignments pointing at the right type
                 setD({ plateTypes: left, memberType: mt });
               }}><Trash2 className="h-3.5 w-3.5" /></button>
-            </div>
+            </li>
           );
         })}
-        <button onClick={() => { const n = (d.plateTypes ?? []).length; setD("plateTypes", [...(d.plateTypes ?? []), { name: `AS${n + 1}`, pick: n ? "C:125x50x20x2.3" : "C:150x50x20x2.3", count: 2 }]); }}
-          className="inline-flex w-full items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่มไทป์</button>
-        <p className="text-[11px] text-gray-400">{d.plateTypes?.length ? "แต่ละช่วงเลือกไทป์ในตาราง · อัตโนมัติ = ไทป์ที่เบาที่สุดที่ผ่าน" : "ยังไม่มีไทป์: แต่ละช่วงเลือกหน้าตัดเองได้ทุกขนาด"}</p>
-      </div>
-    </Card>    <Card title="อะเสช่วงใน (รับดั้ง)" icon={Columns3}>
-      <div className="space-y-1.5 text-[13px]">
-        {plates.filter((m) => m.inner).map((m, k) => {
+      </List>}
+    </Panel>
+    <Panel title="อะเสช่วงใน (รับดั้ง)" icon={Columns3} hint={'วาด / แก้ง่ายกว่าในแท็บ "วาดแปลน" · รับน้ำหนักดั้งเป็นแรงจุด'}>
+      {inner.length > 0 && <List>
+        <li className="grid grid-cols-[28px_1fr_1fr_1fr_1fr_18px] gap-1 px-2.5 py-1 text-[11px] text-gray-400"><span /><span>X1</span><span>Y1</span><span>X2</span><span>Y2</span><span /></li>
+        {inner.map((m, k) => {
           const ln = { a: [m.p[0], m.p[1]], b: [m.q[0], m.q[1]] };
-          const edit = (end, i, v) => setInner(plates.filter((x) => x.inner).map((x, j) => {
+          const edit = (end, i, v) => setInner(inner.map((x, j) => {
             const o = { a: [x.p[0], x.p[1]], b: [x.q[0], x.q[1]] };
             if (j === k) o[end] = end === "a" ? (i ? [o.a[0], v] : [v, o.a[1]]) : (i ? [o.b[0], v] : [v, o.b[1]]);
             return o;
           }));
           return (
-            <div key={m.id} className="grid grid-cols-[26px_1fr_1fr_1fr_1fr_18px] items-center gap-1">
-              <span className="font-semibold" style={{ color: m.color }}>{m.tag}</span>
+            <li key={m.id} className="grid grid-cols-[28px_1fr_1fr_1fr_1fr_18px] items-center gap-1 px-2.5 py-1.5">
+              <span className="text-[12px] font-semibold" style={{ color: m.color }}>{m.tag}</span>
               {[["a", 0], ["a", 1], ["b", 0], ["b", 1]].map(([e, i]) => (
                 <NumberInput key={e + i} className="compact-num !h-8 text-[12px]" value={+ln[e][i].toFixed(2)} step="0.1" onChange={(v) => edit(e, i, v)} />
               ))}
               <button title="ลบ" className="text-gray-400 hover:text-red-500"
-                onClick={() => setInner(plates.filter((x) => x.inner && x.id !== m.id).map((x) => ({ a: [x.p[0], x.p[1]], b: [x.q[0], x.q[1]] })))}><Trash2 className="h-3.5 w-3.5" /></button>
-            </div>
+                onClick={() => setInner(inner.filter((x) => x.id !== m.id).map((x) => ({ a: [x.p[0], x.p[1]], b: [x.q[0], x.q[1]] })))}><Trash2 className="h-3.5 w-3.5" /></button>
+            </li>
           );
         })}
-        <div className="grid grid-cols-[26px_1fr_1fr_1fr_1fr_18px] gap-1 text-[10px] text-gray-400"><span /><span>X1</span><span>Y1</span><span>X2</span><span>Y2</span><span /></div>
-        <div className="flex gap-2 pt-1">
-          <button onClick={() => { const c = g.pts.reduce((s, p) => [s[0] + p[0] / g.pts.length, s[1] + p[1] / g.pts.length], [0, 0]);
-            setInner([...plates.filter((x) => x.inner).map((x) => ({ a: [x.p[0], x.p[1]], b: [x.q[0], x.q[1]] })), { a: [+(c[0] - 1).toFixed(2), +c[1].toFixed(2)], b: [+(c[0] + 1).toFixed(2), +c[1].toFixed(2)] }]); }}
-            className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่ม</button>
-          <button onClick={onAutoInner}
-            className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50"><Wand2 className="h-3.5 w-3.5" />วางตามดั้งอัตโนมัติ</button>
-        </div>
-        <p className="text-[11px] text-gray-400">วาด/แก้ง่ายกว่าในแท็บ "วาดแปลน" · รับน้ำหนักดั้งเป็นแรงจุด</p>
+      </List>}
+      <div className={`${inner.length ? "mt-3 " : ""}grid grid-cols-2 gap-2`}>
+        <button onClick={() => { const c = g.pts.reduce((s, p) => [s[0] + p[0] / g.pts.length, s[1] + p[1] / g.pts.length], [0, 0]);
+          setInner([...innerList(), { a: [+(c[0] - 1).toFixed(2), +c[1].toFixed(2)], b: [+(c[0] + 1).toFixed(2), +c[1].toFixed(2)] }]); }} className={`${btnCls} justify-center py-1.5`}><Plus className="h-3.5 w-3.5" />เพิ่ม</button>
+        <button onClick={onAutoInner} className={`${btnGhost} py-1.5`}><Wand2 className="h-3.5 w-3.5" />วางตามดั้งอัตโนมัติ</button>
       </div>
-    </Card>
-    {drawn ? <p className="px-1 text-[12px] text-gray-500">อะเสแบ่งช่วงตามเสาที่วาดในแท็บ "วาดแปลน"</p> : <Card title="จำนวนช่วงต่อแนวผนัง" icon={Columns3}>
-      <div className="space-y-1.5 text-[13px]">
+    </Panel>
+    {drawn ? <Note className="px-1">อะเสแบ่งช่วงตามเสาที่วาดในแท็บ "วาดแปลน"</Note> : <Panel title="จำนวนช่วงต่อแนวผนัง" icon={Columns3} hint="ใส่จำนวนช่วงตามตำแหน่งเสาจริง · ลบค่า (0) เพื่อกลับไปแบ่งตามระยะเสา">
+      <List>
         {g.pts.map((p, k) => {
           const q = g.pts[(k + 1) % g.pts.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]), n = plates.filter((m) => m.edge === k + 1).length;
           return (
-            <div key={k} className="grid grid-cols-[52px_1fr_64px] items-center gap-2">
-              <span className="text-gray-500">ขอบ {k + 1}</span>
-              <span className="tabular-nums text-gray-600">{fmt(L, 2)} ม. · {n}×{fmt(L / n, 2)}</span>
+            <SetRow key={k} label={`ขอบ ${k + 1}`} sub={`${fmt(L, 2)} ม. · ${n} × ${fmt(L / n, 2)} ม.`} unit="ช่วง">
               <NumberInput className="compact-num !h-8" value={div(k + 1) ?? n} step="1" min="1" onChange={(v) => setDiv(k + 1, v)} />
-            </div>
+            </SetRow>
           );
         })}
-        <p className="pt-1 text-[11px] text-gray-400">ใส่จำนวนช่วงตามตำแหน่งเสาจริง · ลบค่า (0) เพื่อกลับไปแบ่งตามระยะเสา</p>
-      </div>
-    </Card>}
+      </List>
+    </Panel>}
   </>);
 }
 
@@ -215,7 +203,7 @@ export function PlatePick({ m, d, setD, onClose }) {
   const ok = m.r.ok, types = d.plateTypes ?? [];
   const setType = (v) => { const t = { ...d.memberType }; if (v === "") delete t[m.id]; else t[m.id] = Number(v); setD("memberType", t); };
   return (
-    <div className="absolute left-2 top-7 z-20 w-[300px] rounded-xl border border-gray-200 bg-white/95 p-3 text-[12px] shadow-lg backdrop-blur dark:border-gray-700 dark:bg-gray-900/95" onClick={(e) => e.stopPropagation()}>
+    <div className="absolute left-2 top-7 z-20 w-[300px] rounded-xl border border-gray-200 bg-white/95 p-3 text-[12px] shadow-lg backdrop-blur" onClick={(e) => e.stopPropagation()}>
       <div className="mb-1 flex items-center gap-2"><b className="text-[13px]" style={{ color: m.color }}>{m.tag}</b><span className="text-gray-500">{m.label ?? ""}</span>
         <span className={`ml-auto rounded px-1.5 py-0.5 text-[11px] font-semibold ${ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>{ok ? "ผ่าน" : "ไม่ผ่าน"}</span>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-700">✕</button></div>

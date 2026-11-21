@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { arcPolyline } from "../engine/arc.js";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Bounds, Edges, Grid, OrbitControls } from "@react-three/drei";
+import { Bounds, Edges, Grid, Html, OrbitControls } from "@react-three/drei";
 import { Maximize2, Minimize2 } from "lucide-react";
 import * as THREE from "three";
 import { TYPE_COLORS } from "./FloorBoard.jsx";
@@ -14,8 +14,12 @@ import { RoofFrameMembers, roofSeat } from "./Roof3D.jsx";
 import { baseLevel } from "./StoreyTable.jsx";
 import { stairRiseOf } from "./StairPanel.jsx";
 import { beamPieces, edgeWidth, insetPolygon } from "./joints3d.js";
+import { alongPoints, loadArrowData } from "./loadArrows.js";
 
-const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"], ["roofFrame", "โครงหลังคา"]];
+const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"], ["roofFrame", "โครงหลังคา"], ["load", "ลูกศรน้ำหนัก"]];
+// load arrow colours: walls, line loads, point loads, roof points
+export const LOAD_COL = { walls: "#b54708", lines: "#7a5af8", points: "#d92d20", roof: "#0e9384" };
+const kg = (v) => Math.round(v).toLocaleString();
 const WALL_T = { brick: 0.1, brick2: 0.2, block: 0.1, light: 0.1, gypsum: 0.1 }; // wall thickness (m) incl. plaster
 const CONC = "#b8bcc6", SLAB = { S: "#c9ccd4", PS: "#a9c4b0", GS: "#b5a58f" };
 
@@ -129,9 +133,53 @@ function RoofFace({ f, dz, faint = false }) {
   return <mesh geometry={geo} position={[0, faint ? 0.12 : 0, 0]}><meshStandardMaterial color="#b54708" transparent opacity={faint ? 0.12 : 0.45} side={THREE.DoubleSide} depthWrite={false} />{!faint && <Edges color="#7a2e0e" />}</mesh>;
 }
 
-export default function Frame3D({ frame, res, cur, roof, dark = false, className = "", roofOn = false, onPick = null, selected = null }) {
-  const [on, setOn] = useState({ footing: true, column: true, beam: true, slab: true, cant: true, wall: true, stair: true, roof: roofOn, roofFrame: roofOn });
+// downward arrows drawn over everything (depthTest off) so loads behind walls / slabs stay visible: shafts + tail lines in one
+// LineSegments, heads as one instanced cone. tips = [[x, y, z, len]] (plan x, y; z = tip height; len = shaft length), tails = [[a, b, z]]
+function Arrows({ tips, tails = [], color }) {
+  const { lines, heads } = useMemo(() => {
+    const v = [];
+    for (const [x, y, z, L] of tips) v.push(x, z + L, -y, x, z + 0.13, -y);
+    for (const [a, b, z] of tails) v.push(a[0], z, -a[1], b[0], z, -b[1]);
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+    const cone = new THREE.ConeGeometry(0.05, 0.14, 10); cone.rotateX(Math.PI); cone.translate(0, 0.07, 0); // tip at y = 0, pointing down
+    const m = new THREE.InstancedMesh(cone, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true }), Math.max(1, tips.length));
+    const o = new THREE.Object3D();
+    tips.forEach(([x, y, z], i) => { o.position.set(x, z, -y); o.updateMatrix(); m.setMatrixAt(i, o.matrix); });
+    m.count = tips.length; m.renderOrder = 20; m.instanceMatrix.needsUpdate = true;
+    return { lines: g, heads: m };
+  }, [tips, tails, color]);
+  if (!tips.length) return null;
+  return (<group>
+    <lineSegments geometry={lines} renderOrder={20}><lineBasicMaterial color={color} depthTest={false} transparent /></lineSegments>
+    <primitive object={heads} />
+  </group>);
+}
+function LoadLabel({ at, color, children, title }) {
+  return <Html position={at} center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
+    <div title={title} style={{ color, borderColor: color, pointerEvents: "auto", cursor: "help" }} className="whitespace-nowrap rounded border bg-white/90 px-1 py-px text-[10px] font-semibold leading-tight tabular-nums shadow-sm">{children}</div></Html>;
+}
+// the loads of one floor (loadArrowData = the engine's own values), at that floor's level Zk; sizes scaled by the largest of each kind
+function FloorLoads({ d, Zk, qMax, pMax, labels = true }) {
+  const lenQ = (q) => 0.35 + (0.65 * q) / (qMax || 1), lenP = (P) => 0.5 + (0.9 * P) / (pMax || 1);
+  const dist = (kind) => {
+    const tips = [], tails = [];
+    for (const x of d[kind]) { const L = lenQ(x.q), z = Zk + x.z; for (const p of alongPoints(x.a, x.b)) tips.push([p[0], p[1], z, L]); tails.push([x.a, x.b, z + L]); }
+    return <Arrows tips={tips} tails={tails} color={LOAD_COL[kind]} />;
+  };
+  const pts = (kind) => <Arrows tips={d[kind].map((x) => [x.p[0], x.p[1], Zk + x.z, lenP(x.P)])} color={LOAD_COL[kind]} />;
+  const mid = (x) => [(x.a[0] + x.b[0]) / 2, (x.a[1] + x.b[1]) / 2];
+  return (<group>
+    {dist("walls")}{dist("lines")}{pts("points")}{pts("roof")}
+    {labels && [...d.walls.map((x) => ["walls", x, mid(x), Zk + x.z + lenQ(x.q), `${kg(x.q)} กก./ม.`]), ...d.lines.map((x) => ["lines", x, mid(x), Zk + x.z + lenQ(x.q), `${kg(x.q)} กก./ม.`]),
+      ...d.points.map((x) => ["points", x, x.p, Zk + x.z + lenP(x.P), `${kg(x.P)} กก.`]), ...d.roof.map((x) => ["roof", x, x.p, Zk + x.z + lenP(x.P), `${kg(x.P)} กก.`])].map(([kind, x, p, z, t], j) =>
+      <LoadLabel key={j} at={[p[0], z + 0.12, -p[1]]} color={LOAD_COL[kind]} title={`${x.name} → ${x.to}`}>{t}</LoadLabel>)}
+  </group>);
+}
+
+export default function Frame3D({ frame, res, cur, roof, dark = false, className = "", roofOn = false, onPick = null, selected = null, loadsOn = false }) {
+  const [on, setOn] = useState({ footing: true, column: true, beam: true, slab: true, cant: true, wall: true, stair: true, roof: roofOn, roofFrame: roofOn, load: loadsOn });
   const [floorsShown, setFloorsShown] = useState("all"), [byType, setByType] = useState(true), [big, setBig] = useState(false);
+  useEffect(() => { setOn((o) => (o.load === loadsOn ? o : { ...o, load: loadsOn })); }, [loadsOn]); // step 5 (loads) opens with the arrows on
   const roofFaces = useRoofFaces(roof, on.roof || on.roofFrame);
   const pts = frame.floors.flatMap((f) => [...f.columns, ...f.beams.flatMap((b) => [b.a, b.b])]);
   if (!pts.length) return <div className={`grid place-items-center text-sm text-gray-400 ${className}`}>ยังไม่มีเสาหรือคาน</div>;
@@ -139,6 +187,10 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
   let z = 0;
   const Z = frame.floors.map((f) => (z += f.h ?? 3)), top = z, span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), top, 4);
   const shown = (k) => floorsShown === "all" || (floorsShown === "upto" ? k <= cur : k === cur);
+  // load arrows: data per floor from the analysis; one size scale for all floors shown
+  const loads = on.load ? frame.floors.map((fl, k) => (shown(k) ? loadArrowData(frame, res.floors?.[k], k, wallsOf(fl)) : null)) : [];
+  const qMax = Math.max(1, ...loads.flatMap((d) => (d ? [...d.walls, ...d.lines].map((x) => x.q) : []))), pMax = Math.max(1, ...loads.flatMap((d) => (d ? [...d.points, ...d.roof].map((x) => x.P) : [])));
+  const tot = loads.reduce((t, d) => (d ? { walls: t.walls + d.totals.walls, lines: t.lines + d.totals.lines, points: t.points + d.totals.points, roof: t.roof + d.totals.roof } : t), { walls: 0, lines: 0, points: 0, roof: 0 });
   const wt = frame.wallTypes ?? DEFAULT_WALL_TYPES, base0 = -baseLevel(frame); // model z = 0 at the column base: a roof at elevation H sits at H − base level (was fixed at 0.40)
   const fo = frame.footing ?? { t: 0.4 }, hl = useHighlight(), hz = hl?.floor !== undefined ? Z[hl.floor] ?? top : Z[frame.roofLink?.floor ?? frame.floors.length - 1] ?? top; // highlighted point: at the linked (roof) floor
   // size (b, h) of the largest beam of the highlighted floor lying along a segment (default 0.20 × 0.40)
@@ -240,6 +292,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
                   return <group key={`w${i}`}>{(w0.gable ? [[0, L, 0, w.h]] : parts).map(([a, b, z, h], j) => <Box key={j} p={P(a)} q={P(b)} w={th} z0={Zk + (z === 0 ? zb : z)} h={z === 0 ? h - zb : h} color={col} opacity={0.6} />)}</group>;
                 })}
                 {on.stair && an?.stairs.map((st, i) => <Stair key={`s${i}`} st={st} raw={fl.stairs?.[st.i] ?? {}} zb={Zk - stairRiseOf(frame, k, fl.stairs?.[st.i] ?? {})} zt={Zk} color="#cfd4dc" />)}
+                {on.load && loads[k] && <FloorLoads d={loads[k]} Zk={Zk} qMax={qMax} pMax={pMax} labels={k === cur} />}
               </group>
             );
           })}
@@ -261,10 +314,17 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
       <button onClick={() => setBig((v) => !v)} title={big ? "ย่อ" : "ขยายเต็มจอ"} className={`${chip(false)} ml-auto`}>{big ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
     </div>
   );
+  const legend = on.load && (
+    <div className="pointer-events-none absolute bottom-2 left-2 rounded-md bg-white/90 px-2 py-1 text-[11px] leading-snug text-gray-700 shadow-sm ring-1 ring-gray-200">
+      <div className="font-semibold text-gray-500">น้ำหนักที่ลงโครงสร้าง (ชั้นที่แสดง)</div>
+      {[["walls", "ผนัง (กก./ม. × ยาว)"], ["lines", "น้ำหนักเส้น"], ["points", "น้ำหนักจุด"], ["roof", "จากหลังคา"]].map(([k, t]) => (
+        <div key={k} className="flex items-center gap-1.5"><i className="inline-block h-2 w-2 rounded-full" style={{ background: LOAD_COL[k] }} />{t}<b className="ml-auto pl-3 tabular-nums">{kg(tot[k])} กก.</b></div>))}
+      <div className="text-[10px] text-gray-400">ตัวเลขแสดงเฉพาะชั้นที่เลือก · ชี้ป้ายเพื่อดูว่าลงคาน / พื้น / เสา</div>
+    </div>);
   if (big) return (
     <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setBig(false)}>
-      <div className="relative h-full w-full overflow-hidden rounded-2xl" onClick={(e) => e.stopPropagation()}>{scene}{bar}</div>
+      <div className="relative h-full w-full overflow-hidden rounded-2xl" onClick={(e) => e.stopPropagation()}>{scene}{bar}{legend}</div>
     </div>
   );
-  return <div className={`relative ${className}`}>{scene}{bar}</div>;
+  return <div className={`relative ${className}`}>{scene}{bar}{legend}</div>;
 }

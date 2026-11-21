@@ -74,7 +74,7 @@ export function StairInputs({ st, set, H, r0, mat, onLandingBeam, zTop = null, H
       <Field label="กว้าง" unit="m"><Commit value={+(g.B || 0).toFixed(3)} step="0.05" onCommit={(v) => v >= 0.3 && set(stairResize(st, v, g.Lr))} /></Field>
       <Field label="ยาว (แนวราบ)" unit="m"><Commit value={+(g.Lr || 0).toFixed(3)} step="0.05" onCommit={(v) => v >= 0.5 && set(stairResize(st, g.B, v))} /></Field>
       {g.flights === 1 && Math.abs(g.Lr - g.runNeed) > 0.005 && <div className="col-span-2 -mt-1"><button onClick={() => set(stairResize(st, g.B, +g.runNeed.toFixed(3)))} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ให้ช่องยาวเท่าที่บันไดต้องการ ({fmt(g.runNeed, 2)} ม.)</button></div>}
-      {r0 && (r0.headOk !== null || r0.foot) && <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:text-gray-300 dark:ring-gray-800">
+      {r0 && (r0.headOk !== null || r0.foot) && <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03]">
         {r0.headOk !== null && <span className={r0.headOk ? "text-green-700" : "text-red-600"}>ปลายบน: {r0.headOk ? "วางบนคานชั้นนี้" : "ไม่มีคานรับ — วาดคานที่หัวบันได"}</span>}
         {r0.headOk !== null && r0.foot && <br />}
         {r0.foot && <span className={FOOT[r0.foot]?.[1]}>ปลายล่าง: {FOOT[r0.foot]?.[0]}</span>}</p>}
@@ -95,11 +95,11 @@ export function StairInputs({ st, set, H, r0, mat, onLandingBeam, zTop = null, H
       {st.kind === "landing" ? n("landingL", "ชานพักยาว", "m", "0.1", 1.2) : <div />}
       {st.kind === "landing" && onLandingBeam && <div className="col-span-2"><button onClick={onLandingBeam} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-left text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">+ สร้างคานชานพักที่ระดับ {fmt(H / 2, 2)} ม. (ขอบชานพัก ต่อถึงเสาที่ใกล้สุด)</button></div>}
       {st.kind === "landing" && <div className="col-span-2"><Field label="คานรับชานพัก"><Select value={st.landingTo ?? ""} onChange={(v) => set({ landingTo: v || undefined })} options={[["", "อัตโนมัติ — คานชานพัก (ระดับกลางชั้น) ถ้าวาดไว้ ไม่มีก็ฝากคานชั้นล่าง"], ["mid", "คานชานพักระดับกลางชั้น"], ["below", "ฝากคานชั้นล่าง"], ["this", "ฝากคานชั้นนี้"]]} /></Field></div>}
-      <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] tabular-nums text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:text-gray-300 dark:ring-gray-800">{g.n} ลูกตั้ง × {fmt(g.Ra, 3)} ม. · {g.flights} ช่วงบันได ช่วงละ {g.perFlight} ขั้น · ต้องการยาว {fmt(g.runNeed, 2)} ม. (ช่องที่วาด {fmt(g.runAvail, 2)} ม.)</p>
+      <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] tabular-nums text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03]">{g.n} ลูกตั้ง × {fmt(g.Ra, 3)} ม. · {g.flights} ช่วงบันได ช่วงละ {g.perFlight} ขั้น · ต้องการยาว {fmt(g.runNeed, 2)} ม. (ช่องที่วาด {fmt(g.runAvail, 2)} ม.)</p>
       {(st.kind ?? "long") === "long" && (() => { const sh = stairShare(st), wL = (r0?.w ?? 0) * (r0?.Lr ?? 0); return (<>
         <Sub>การฝากน้ำหนักลงคาน</Sub>
         <div className="col-span-2"><Field label="ปลายที่รับน้ำหนักบันได"><Select value={st.support ?? "both"} onChange={(v) => set({ support: v === "both" ? undefined : v })} options={STAIR_SUPPORT} /></Field></div>
-        {r0 && <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] tabular-nums text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:text-gray-300 dark:ring-gray-800">
+        {r0 && <p className="col-span-2 rounded-md bg-gray-50 px-2 py-1.5 text-[12px] tabular-nums text-gray-700 ring-1 ring-gray-200 dark:bg-white/[0.03]">
           wL = {fmt(r0.w, 0)} × {fmt(r0.Lr, 2)} = {fmt(wL, 0)} กก./ม. (ต่อความกว้างบันได 1 ม.)<br />
           คานบน (ชั้นนี้) <b>{fmt(wL * sh[1], 0)}</b> · คานล่าง (ชั้นล่าง) <b>{fmt(wL * sh[0], 0)}</b> กก./ม.</p>}
         {st.support && <p className="col-span-2 -mt-2 text-[11px] text-gray-500">น้ำหนักรวมเท่าเดิม ไปลงคานปลายเดียว · ท้องบันไดยังออกแบบเป็นช่วงพาด L (ไม่เปลี่ยนผลท้องบันได)</p>}

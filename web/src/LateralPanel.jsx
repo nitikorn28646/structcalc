@@ -1,5 +1,6 @@
 // Step 6 tab "ลม / แผ่นดินไหว / Combination" (frame.lateral) and the project-start choice of lateral loads.
 // Inputs with defaults from engine/lateral.js; results (floor forces, drift) come from analyzeFrame (res.lateral).
+import { CheckRow, List, Notice, Panel, btnGhost } from "./PanelKit.jsx";
 import { Card, Field, NumberInput, Select } from "./ui.jsx";
 import { Wind } from "lucide-react";
 import { fmt } from "./beamModel.js";
@@ -11,15 +12,13 @@ const th = "px-1 py-1 text-left text-[11px] font-medium text-gray-500", td = "px
 export function LateralChoice({ frame, set }) {
   const L = { ...DEFAULT_LATERAL, ...frame.lateral }, put = (k, on) => set("lateral", { ...L, asked: true, [k]: { ...DEFAULT_LATERAL[k], ...L[k], on } });
   return (
-    <Card title="แรงด้านข้าง — เลือกตอนเริ่มโครงการ" icon={Wind}>
-      <div className={`space-y-2 text-[13px] ${L.asked ? "" : "rounded-lg bg-[#fffaeb] p-2 ring-1 ring-[#fdb022]"}`}>
-        {!L.asked && <p className="font-medium text-[#b54708]">เลือกว่าจะคิดแรงลม / แผ่นดินไหวในการออกแบบหรือไม่</p>}
-        <label className="flex items-center gap-2"><input type="checkbox" checked={!!L.wind?.on} onChange={(e) => put("wind", e.target.checked)} /> คิดแรงลม (มยผ. 1311-50)</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={!!L.seismic?.on} onChange={(e) => put("seismic", e.target.checked)} /> คิดแรงแผ่นดินไหว (มยผ. 1301/1302-61)</label>
-        {!L.asked && <button onClick={() => set("lateral", { ...L, asked: true })} className="rounded-lg px-3 py-1 text-[12px] font-medium ring-1 ring-gray-300 hover:bg-gray-50">ไม่คิดทั้งสองอย่าง (แรงในแนวดิ่งเท่านั้น)</button>}
-        <p className="text-[12px] text-gray-500">ใส่ค่าละเอียดและดูผลที่ขั้น 5 แท็บ "ลม / แผ่นดินไหว / Combination" · แรงด้านข้างใช้โครง 3 มิติ โดยพื้นทุกชั้นแข็งในแนวราบ</p>
-      </div>
-    </Card>
+    <Panel title="แรงด้านข้าง" icon={Wind} hint="ค่าละเอียดและผลอยู่ที่ขั้น 5 แท็บ ลม / แผ่นดินไหว / Combination · ใช้โครง 3 มิติ พื้นทุกชั้นแข็งในแนวราบ">
+      {!L.asked && <div className="mb-2"><Notice kind="warn" action={<button onClick={() => set("lateral", { ...L, asked: true })} className={btnGhost}>ไม่คิดทั้งสองอย่าง</button>}>เลือกก่อนเริ่ม: คิดแรงลม / แผ่นดินไหวหรือไม่</Notice></div>}
+      <List>
+        <CheckRow checked={!!L.wind?.on} onChange={(v) => put("wind", v)} label="คิดแรงลม" sub="มยผ. 1311-50" />
+        <CheckRow checked={!!L.seismic?.on} onChange={(v) => put("seismic", v)} label="คิดแรงแผ่นดินไหว" sub="มยผ. 1301/1302-61" />
+      </List>
+    </Panel>
   );
 }
 

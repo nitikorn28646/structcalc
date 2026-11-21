@@ -833,3 +833,17 @@ levelJoints). Rows carry lapLo / lapAdd / lapOk; detail dims "ทาบ ≥ 1.3l
 WALLS ON LOWERED BEAMS (2026-11-20, user "ผนัง 3D ลอยจากคาน"): Frame3D walls start at the top of what they stand on (min lv.top of the beams of their line,
 or the panel dz) instead of the floor level, top unchanged; floor.js walls: an auto-height wall (hAuto) on a lowered beam / slab is taller by the drop
 → q = wallLoad(h + drop) (gable: drop/2); typed heights unchanged. levels-check 27/27.
+UI + 3D LOADS (2026-11-21, user: "ปรับให้เหมือนขั้นอื่น" · "ลูกศรน้ำหนักในภาพ 3D"): PanelKit look for the remaining pages — PanelKit gained SetRow (label + hint left,
+control right, unit), CheckRow, ctlCls / ctlNum. Step 0: DesignCriteria = panels คอนกรีต / เหล็กเสริมและระยะหุ้ม / การตรวจคาน / ดินและฐานราก / วิธีวิเคราะห์ (rows),
+StandardPanel (save / use / reset), project-info panel, LateralChoice as CheckRows. Roof settings (RoofPage settings, LoadInputs, DesignInputs) and PlateInputs
+→ Panel / Section / List / Row / Note. Step 7: AutoBeamTypes / AutoColTypes / TypeTable / ColTypeTable / BeamTypeFigures (sections side by side, 2 cards per row) /
+ColumnTypeFigures / LevelJointsCard / WidenTypesCard as Panels; covers + bar clear spacing = one compact line (coverInline) inside the type table panel.
+DARK MODE FIX: index.css inverts the whole gray scale in dark, so `dark:text-gray-*` / `dark:bg-gray-*` / `dark:border-gray-*` flip back to the wrong end (row
+titles invisible, white inputs) — all removed from src; never add `dark:` gray variants (white and gray already follow the theme).
+3D load arrows: src/loadArrows.js loadArrowData(frame, an, k, wallsOf(fl)) = the loads as the analysis took them (wall q per m incl. the lowered-beam height,
+line loads, point loads, roof points of the linked floor = frame.roofPoints appended in frame.js), Frame3D layer "ลูกศรน้ำหนัก" (on by default in step 5, prop
+loadsOn): arrows drawn over everything (depthTest off), length scaled by the largest of its kind, values only on the selected floor (hover = what carries it),
+legend with totals per kind. cli/loadarrows-check.mjs (in the gate): 1409 checks on 7 projects — wall q = every WALL item the engine put on the beams for it,
+line / point / roof totals. E2E 47/47 (cloud run: copy run.py to the scratchpad with ROOT / EXPECTED pointing at the repo and launch(executable_path="/opt/pw-browsers/chromium")).
+Excel K1/K2 (column WP1) NOT run: no Windows machine attached to the cloud session. Program output for the two new cases (to compare on the PC):
+k2-rect-20x50-my mode II, R 0.59, ratio 0.5148; k1-mx-only-slender mode III, R 0.8909, ratio 1.8262 (both expected to differ from the Excel = its documented defects).

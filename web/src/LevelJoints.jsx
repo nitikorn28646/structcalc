@@ -1,4 +1,6 @@
 // Beams at different levels (2026-11-20): table of every step joint + the typical detail per distinct case (step 7 Type คาน, report).
+import { Note, Panel } from "./PanelKit.jsx";
+import { GitCommitVertical } from "lucide-react";
 import { jointDetailModel, depthDetailModel } from "../engine/levelDetail.js";
 import { stairSvgString } from "./stairSvg.js";
 import { fmt } from "./beamModel.js";
@@ -48,23 +50,19 @@ export const DepthDetail = ({ g, mat, px = 220 }) => <div className="overflow-x-
 export function LevelJointsCard({ rows = [], groups = [], depth = [], dgroups = [], mat }) {
   if (!rows?.length && !depth?.length) return null;
   return (<>{depth?.length > 0 && (
-    <div className="mt-4 rounded-xl bg-white p-3 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:ring-gray-800">
-      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">คานลึกต่างกันที่หัวเสา — หลังคานเท่ากัน ท้องคานต่างระดับ ({depth.length} จุด)</p>
-      <p className="mb-2 text-[11px] text-gray-500">เหล็กบนต่อเนื่องผ่านเสา · เหล็กล่างคานตื้นวิ่งผ่านเสาเข้าคานลึก ≥ ld · เหล็กล่างคานลึกงอขอ 90° ขึ้นในเสา (เปิดแรงด้านข้าง: ต้องยึดเต็มกำลัง ldh ≤ เสา − 5 ซม.) · แต่ละช่วงตรวจด้วยความลึกของตัวเอง</p>
+    <Panel title={`คานลึกต่างกันที่หัวเสา (${depth.length} จุด)`} icon={GitCommitVertical} hint={<>หลังคานเท่ากัน ท้องคานต่างระดับ · เหล็กบนต่อเนื่องผ่านเสา · เหล็กล่างคานตื้นวิ่งผ่านเสาเข้าคานลึก ≥ ld · เหล็กล่างคานลึกงอขอ 90° ขึ้นในเสา (เปิดแรงด้านข้าง: ต้องยึดเต็มกำลัง ldh ≤ เสา − 5 ซม.) · แต่ละช่วงตรวจด้วยความลึกของตัวเอง</>}>
       <DepthJointTable rows={depth} />
       <div className="mt-3 grid gap-3 xl:grid-cols-2">{dgroups.map((g, i) => <div key={i} className="rounded-lg ring-1 ring-gray-100 p-1"><DepthDetail g={g} mat={mat} /></div>)}</div>
-      <p className="mt-2 text-[11px] text-gray-400">{DEPTH_REFS}</p>
-    </div>)}
+      <Note>{DEPTH_REFS}</Note>
+    </Panel>)}
     {rows?.length > 0 && <LevelStepCard rows={rows} groups={groups} mat={mat} />}</>);
 }
 function LevelStepCard({ rows, groups, mat }) {
   return (
-    <div className="mt-4 rounded-xl bg-white p-3 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:ring-gray-800">
-      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">คานต่างระดับที่หัวเสา ({rows.length} จุด)</p>
-      <p className="mb-2 text-[11px] text-gray-500">เหล็กบนของคานตัวสูงงอขอ 90° ฝังในเสา · เหล็กบนของคานตัวต่ำวิ่งผ่านเสาเข้าคานตัวสูง ≥ ld · ถ้าเสายาวไม่พอให้ขอยึด (ldh) ฝั่งคานตัวสูงที่หัวเสาตรวจด้วยความลึก h − ระยะต่าง · ออกใน DXF แบบขยายคานด้วย (แผ่นสุดท้าย)</p>
+    <Panel title={`คานต่างระดับที่หัวเสา (${rows.length} จุด)`} icon={GitCommitVertical} hint={<>เหล็กบนของคานตัวสูงงอขอ 90° ฝังในเสา · เหล็กบนของคานตัวต่ำวิ่งผ่านเสาเข้าคานตัวสูง ≥ ld · ถ้าเสายาวไม่พอให้ขอยึด (ldh) ฝั่งคานตัวสูงที่หัวเสาตรวจด้วยความลึก h − ระยะต่าง · ออกใน DXF แบบขยายคานด้วย</>}>
       <LevelJointTable rows={rows} />
       <div className="mt-3 grid gap-3 xl:grid-cols-2">{groups.map((g, i) => <div key={i} className="rounded-lg ring-1 ring-gray-100 p-1"><JointDetail g={g} mat={mat} /></div>)}</div>
-      <p className="mt-2 text-[11px] text-gray-400">{LEVEL_REFS}</p>
-    </div>
+      <Note>{LEVEL_REFS}</Note>
+    </Panel>
   );
 }

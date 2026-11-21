@@ -1,4 +1,6 @@
 // Side widening types (พอกข้างคาน, user 2026-11-20): table of types + the section of each type in use (step 7 Type คาน, report, DXF).
+import { Note, Panel, btnCls } from "./PanelKit.jsx";
+import { BrickWall } from "lucide-react";
 import { DEFAULT_WIDEN_TYPES, widensOf } from "../engine/floor.js";
 import { widenDetailModel, widenBeamModel } from "../engine/widenDetail.js";
 import { stairSvgString } from "./stairSvg.js";
@@ -31,10 +33,10 @@ export function beamWidenModel(frame, an, i, beam, o = {}) {
 export function WidenBeamSection({ frame, an, i, beam, width = 300 }) {
   const r = beamWidenModel(frame, an, i, beam); if (!r) return null;
   const [x0, , x1] = r.model.box, px = Math.min(520, width / (x1 - x0));
-  return <div className="overflow-x-auto rounded-md bg-white p-1 ring-1 ring-gray-200 dark:ring-gray-700" dangerouslySetInnerHTML={{ __html: stairSvgString(r.model, { px }) }} />;
+  return <div className="overflow-x-auto rounded-md bg-white p-1 ring-1 ring-gray-200" dangerouslySetInnerHTML={{ __html: stairSvgString(r.model, { px }) }} />;
 }
 
-const inp = "h-7 w-full rounded border border-gray-300 bg-transparent px-1.5 text-[12px] dark:border-gray-700";
+const inp = "h-7 w-full rounded border border-gray-300 bg-transparent px-1.5 text-[12px]";
 export function WidenTypesCard({ frame, set, res }) {
   const WT = widenTypesOf(frame), uses = widenUses(frame, res), count = (j) => uses.filter((u) => u.ti === j).length;
   const put = (j, patch) => set("widenTypes", WT.map((x, k) => (k === j ? { ...x, ...patch } : x)));
@@ -43,10 +45,8 @@ export function WidenTypesCard({ frame, set, res }) {
     set("floors", frame.floors.map((f) => ({ ...f, beams: (f.beams ?? []).map((b) => (!b.widen ? b : { ...b, widen: Array.isArray(b.widen) ? b.widen.map(fix) : fix(b.widen) })) }))); };
   const secs = widenSections(uses);
   return (
-    <div className="mt-4 rounded-xl bg-white p-3 ring-1 ring-gray-200 dark:bg-white/[0.03] dark:ring-gray-800">
-      <div className="mb-1 flex items-center gap-2"><p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Type พอกข้างคาน (รับผนังก่อ)</p>
-        <button onClick={() => set("widenTypes", [...WT, { name: `W${WT.length + 1}`, w: 0.1, top: "1-DB12", bot: "1-DB12", st: "RB 6", s: 0.15, sets: 1 }])} className="rounded-md px-2 py-0.5 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">+ เพิ่ม type</button></div>
-      <p className="mb-2 text-[11px] text-gray-500">กำหนดที่คาน: คลิกคาน → "พอกข้าง" ในแผงขวา · ส่วนพอกหล่อพร้อมคานเต็มความลึก · คานเดิมรับทั้งหมด (น้ำหนักส่วนพอก + ผนัง + แรงบิดจากที่เยื้องศูนย์) · ตรวจรอยต่อด้วยแรงเฉือนผ่านรอยต่อ</p>
+    <Panel title="Type พอกข้างคาน (รับผนังก่อ)" icon={BrickWall} hint={`กำหนดที่คาน: คลิกคาน → "พอกข้าง" ในแผงขวา · ส่วนพอกหล่อพร้อมคานเต็มความลึก · คานเดิมรับทั้งหมด (น้ำหนักส่วนพอก + ผนัง + แรงบิดจากที่เยื้องศูนย์) · ตรวจรอยต่อด้วยแรงเฉือนผ่านรอยต่อ`} action={<button onClick={() => set("widenTypes", [...WT, { name: `W${WT.length + 1}`, w: 0.1, top: "1-DB12", bot: "1-DB12", st: "RB 6", s: 0.15, sets: 1 }])} className={btnCls}>+ เพิ่ม type</button>}>
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
       <table className="w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">{["ชื่อ", "กว้าง (ม.)", "เหล็กบน", "เหล็กล่าง", "ปลอก", "@ (ม.)", "ชุด", "ใช้", ""].map((h) => <th key={h} className="px-1 py-1">{h}</th>)}</tr></thead>
         <tbody>{WT.map((x, j) => (<tr key={j} className="border-t border-gray-100">
           <td className="px-1 py-1"><input className={inp} value={x.name} onChange={(e) => put(j, { name: e.target.value })} /></td>
@@ -58,7 +58,7 @@ export function WidenTypesCard({ frame, set, res }) {
           <td className="px-1"><select className={inp} value={x.sets ?? 1} onChange={(e) => put(j, { sets: +e.target.value })}>{[1, 2].map((n) => <option key={n} value={n}>{n}</option>)}</select></td>
           <td className="px-1 text-gray-500">{count(j)} ส่วน</td>
           <td className="px-1"><button disabled={count(j) > 0} onClick={() => del(j)} className="text-[11px] text-red-600 disabled:opacity-30" title={count(j) ? "มีคานใช้ type นี้อยู่" : "ลบ"}>ลบ</button></td>
-        </tr>))}</tbody></table>
+        </tr>))}</tbody></table></div>
       {uses.length > 0 && <>
         <table className="mt-3 w-full text-[12px] tabular-nums"><thead><tr className="text-left text-gray-500">{["ชั้น / คาน", "พอก", "ด้าน", "ยาว", "คาน", "น้ำหนักพอก", "ผนัง", "เยื้อง e", "แรงบิด m", "Vu ≤ φVn (กก./ม.)", "ผล"].map((h) => <th key={h} className="px-1 py-1">{h}</th>)}</tr></thead>
           <tbody>{uses.map((u, q) => { const c = u.check; return (<tr key={q} className="border-t border-gray-100">
@@ -68,7 +68,7 @@ export function WidenTypesCard({ frame, set, res }) {
             <td className={`px-1 font-semibold ${c?.ok ? "text-green-600" : "text-red-600"}`} title={c?.why?.join(" · ")}>{c ? (c.ok ? "ผ่าน" : "ไม่ผ่าน") : "-"}</td></tr>); })}</tbody></table>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{secs.map((u, q) => <div key={q} className="rounded-lg p-1 ring-1 ring-gray-100"><WidenSection t={u.type} wt={u.wt} mat={frame.mat} sub={`บนคาน ${u.type?.name} · ${u.n} ส่วน`} /></div>)}</div>
       </>}
-      <p className="mt-2 text-[11px] text-gray-400">{WIDEN_REFS}</p>
-    </div>
+      <Note>{WIDEN_REFS}</Note>
+    </Panel>
   );
 }

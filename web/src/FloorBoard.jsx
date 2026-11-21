@@ -356,14 +356,14 @@ export default function FloorBoard({ floor, setFloor, an, types, wallTypes, wide
         {tool === "wall" && wallTypes.length > 0 && (
           <span id="sc-wall-draw" className="flex flex-wrap items-center gap-1.5 rounded-md bg-amber-50 px-2 py-0.5 text-[12px] text-gray-700 ring-1 ring-amber-200" title="ผนังเส้นต่อไปที่ลากจะได้ชนิดและความสูงนี้ — แก้ทีละเส้นได้ภายหลังที่แผงขวา">
             ผนังที่จะลาก
-            <select value={wallTypes.some((t) => t.id === wallDraw.kind) ? wallDraw.kind : wallTypes[0].id} onChange={(e) => setWallDraw({ kind: e.target.value })} className="h-7 rounded-md border border-gray-300 bg-white px-1 text-[12px] dark:bg-gray-900">
+            <select value={wallTypes.some((t) => t.id === wallDraw.kind) ? wallDraw.kind : wallTypes[0].id} onChange={(e) => setWallDraw({ kind: e.target.value })} className="h-7 rounded-md border border-gray-300 bg-white px-1 text-[12px]">
               {wallTypes.map((t) => <option key={t.id} value={t.id}>{t.name}{t.w ? ` · ${Math.round(t.w)} กก./ม.²` : ""}</option>)}
             </select>
             สูง
-            <select value={wallDraw.auto !== false ? "auto" : "fix"} onChange={(e) => setWallDraw({ auto: e.target.value === "auto" })} className="h-7 rounded-md border border-gray-300 bg-white px-1 text-[12px] dark:bg-gray-900">
+            <select value={wallDraw.auto !== false ? "auto" : "fix"} onChange={(e) => setWallDraw({ auto: e.target.value === "auto" })} className="h-7 rounded-md border border-gray-300 bg-white px-1 text-[12px]">
               <option value="auto">อัตโนมัติ (ถึงใต้คานชั้นบน)</option><option value="fix">กำหนดเอง</option>
             </select>
-            {wallDraw.auto === false && <><input type="number" min={0.1} max={20} step={0.05} value={wallDraw.h} onChange={(e) => { const v = Number(e.target.value); if (v > 0) setWallDraw({ h: v }); }} className="h-7 w-16 rounded-md border border-gray-300 bg-white px-1 text-right text-[12px] dark:bg-gray-900" />ม.</>}
+            {wallDraw.auto === false && <><input type="number" min={0.1} max={20} step={0.05} value={wallDraw.h} onChange={(e) => { const v = Number(e.target.value); if (v > 0) setWallDraw({ h: v }); }} className="h-7 w-16 rounded-md border border-gray-300 bg-white px-1 text-right text-[12px]" />ม.</>}
           </span>)}
         {moveMsg && <span className={`rounded-md px-2 py-0.5 text-[12px] ring-1 ${msgWarn ? "bg-amber-50 text-[#b54708] ring-amber-200" : "bg-green-50 text-green-700 ring-green-200"}`}>{moveMsg}</span>}
         <TextSizeControl />

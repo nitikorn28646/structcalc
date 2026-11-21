@@ -10,7 +10,8 @@ import { frameRoof } from "../engine/roofFrame.js";
 import { DEFAULT_DESIGN, ROOFINGS, autoInnerPlates, carrierPlates, designRoof, BATTEN_RANGE } from "../engine/roofMembers.js";
 import { SECTIONS, SECTION_TYPES, SYM } from "../engine/steelSections.js";
 import { Badge } from "./ui.jsx";
-import { Card, Field, NumberInput, Select, inputCls as SEL } from "./ui.jsx";
+import { Field, NumberInput, Select, inputCls as SEL } from "./ui.jsx";
+import { CheckRow, List, Panel, Row, Section, btnCls, btnGhost } from "./PanelKit.jsx";
 import { fmt } from "./beamModel.js";
 import Roof3D, { LINE_COLORS } from "./Roof3D.jsx";
 import { downloadDxf, plateModel, roofPlanModel } from "./drawings.js";
@@ -285,47 +286,47 @@ function LoadInputs({ d, set, g, onRoofing = () => {} }) {
   const n = (key, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={d[key]} step={step} onChange={(v) => set(key, v)} /></Field>;
   const roofing = ROOFINGS[d.roofing]?.[1] ?? 0, cos = g ? 1 / Math.sqrt(1 + g.tan * g.tan) : 1;
   return (<>
-    <Card title="น้ำหนักบรรทุกและวัสดุ" icon={Triangle}>
+    <Panel title="น้ำหนักบรรทุกและวัสดุ" icon={Triangle} hint="ใช้กับแป จันทัน ตะเข้ อกไก่ สะพาน และอะเส — ตั้งก่อนออกแบบเหล็ก">
       <div className="grid grid-cols-2 gap-3">
-        <Field label="วัสดุมุง"><Select value={d.roofing} onChange={(v) => { onRoofing(v); set({ roofing: v, pick: { ...d.pick, purlin: TILES.includes(v) ? "batten" : d.pick.purlin === "batten" ? "auto:C" : d.pick.purlin } }); }} options={Object.entries(ROOFINGS).map(([k, [t, w]]) => [k, `${t} (${w})`])} /></Field>
+        <div className="col-span-2"><Field label="วัสดุมุง"><Select value={d.roofing} onChange={(v) => { onRoofing(v); set({ roofing: v, pick: { ...d.pick, purlin: TILES.includes(v) ? "batten" : d.pick.purlin === "batten" ? "auto:C" : d.pick.purlin } }); }} options={Object.entries(ROOFINGS).map(([k, [t, w]]) => [k, `${t} (${w})`])} /></Field></div>
         {n("live", "น้ำหนักจร", "kg/m²")}{n("wind", "แรงลม", "kg/m²")}{n("extra", "น้ำหนักอื่นๆ", "kg/m²")}
+        {d.pick.purlin === "batten" && n("battenW", "น้ำหนักแปสำเร็จรูป", "kg/m", "0.05")}
+      </div>
+      <Section title="เหล็กโครงหลังคา" className="!mt-4"><div className="grid grid-cols-2 gap-3">
         <Field label="เกรดเหล็ก"><Select value={d.grade} onChange={(v) => set("grade", v)} options={[["Fe-24", "Fe-24 (2400)"], ["Fe-30", "Fe-30 (3000)"]]} /></Field>
         <Field label="เหล็กยึดแป"><Select value={d.sagRows} onChange={(v) => set("sagRows", Number(v))} options={[[0, "ไม่ใช้"], [1, "1 แถว"], [2, "2 แถว"], [3, "3 แถว"]]} /></Field>
-        {d.pick.purlin === "batten" && n("battenW", "น้ำหนักแปสำเร็จรูป", "kg/m", "0.05")}
-        <Field label="ความหนาเหล็กขั้นต่ำ"><Select value={d.minT ?? 0} onChange={(v) => set("minT", Number(v))} options={[[0, "ไม่จำกัด"], [1.6, "1.6 มม."], [2, "2.0 มม."], [2.3, "2.3 มม."], [3.2, "3.2 มม."]]} /></Field>
-      </div>
-    </Card>
-    <Card title="สรุปน้ำหนักบนหลังคา (ต่อ ม.² ตามแนวราบ)" icon={Ruler}>
-      <table className="w-full text-[13px] tabular-nums"><tbody>
+        <Field label="ความหนาขั้นต่ำ"><Select value={d.minT ?? 0} onChange={(v) => set("minT", Number(v))} options={[[0, "ไม่จำกัด"], [1.6, "1.6 มม."], [2, "2.0 มม."], [2.3, "2.3 มม."], [3.2, "3.2 มม."]]} /></Field>
+      </div></Section>
+    </Panel>
+    <Panel title="สรุปน้ำหนักบนหลังคา" icon={Ruler} hint="ต่อ ม.² ตามแนวราบ · น้ำหนักเหล็กโครงคิดจากหน้าตัดจริงในขั้นออกแบบ">
+      <List>
         {[["วัสดุมุง " + (ROOFINGS[d.roofing]?.[0] ?? ""), roofing / cos], ["น้ำหนักอื่น (ฝ้า / ฉนวน)", (d.extra ?? 0) / cos], ["น้ำหนักจร", d.live ?? 0], ["แรงลม (ตั้งฉากหลังคา)", d.wind ?? 0]].map(([t, v]) =>
-          <tr key={t} className="border-b border-gray-100"><td className="py-1 text-gray-600">{t}</td><td className="text-right">{fmt(v, 1)} กก./ม.²</td></tr>)}
-        {g && <tr><td className="py-1 font-medium">พื้นที่หลังคา (ราบ / ตามแนวเอียง)</td><td className="text-right font-medium">{fmt(g.planArea, 1)} / {fmt(g.roofArea, 1)} ม.²</td></tr>}
-      </tbody></table>
-      <p className="pt-1 text-[11px] text-gray-400">ค่าในแท็บนี้ใช้กับแป จันทัน ตะเข้ อกไก่ สะพาน และอะเส — ตั้งก่อนออกแบบเหล็ก · น้ำหนักเหล็กโครงคิดจากหน้าตัดจริงในขั้นออกแบบ</p>
-    </Card>
+          <Row key={t} title={t} value={fmt(v, 1)} unit="กก./ม.²" />)}
+        {g && <Row title="พื้นที่หลังคา" sub="ราบ / ตามแนวเอียง" value={`${fmt(g.planArea, 1)} / ${fmt(g.roofArea, 1)}`} unit="ม.²" />}
+      </List>
+    </Panel>
   </>);
 }
 
 function DesignInputs({ d, set }) {
-  return (<>
-    <Card title="หน้าตัดเหล็ก" icon={Ruler}>
-      <div className="space-y-1.5">
-        <div className="grid grid-cols-[64px_1fr] items-center gap-1.5 text-[13px]">
-          <span className="text-gray-500">ขั้นต่ำ</span>
-          <Select className="!px-2" value={d.minSec ?? ""} onChange={(v) => set("minSec", v || null)}
-            options={[["", "ไม่กำหนด"], ...SECTIONS.C.map((s) => [s.name, `C ${s.name}`])]} />
-        </div>
-        {[["purlin", "แป"], ["rafter", "จันทัน"], ["hip", "ตะเข้"], ["ridge", "อกไก่"], ["support", "สะพาน"], ["plate", "อะเส"], ["post", "ดั้ง/ตุ๊กตา"]].map(([k, t]) => (
-          <div key={k} className="grid grid-cols-[64px_1fr_64px] items-center gap-1.5 text-[13px]">
-            <span className="text-gray-500">{t}</span>
-            <SectionSelect value={d.pick[k]} batten={k === "purlin"} onChange={(v) => set("pick", { ...d.pick, [k]: v })} />
-            {k in d.counts ? <Select className="!px-2" value={d.counts[k]} onChange={(v) => set("counts", { ...d.counts, [k]: Number(v) })} options={[[1, "เดี่ยว"], [2, "คู่"]]} /> : <span />}
-          </div>
+  return (
+    <Panel title="หน้าตัดเหล็ก" icon={Ruler} hint="อัตโนมัติ = หน้าตัดเบาที่สุดที่ผ่าน และไม่เล็กกว่าขั้นต่ำ (ยกเว้นแป) · เลือกขนาดเองได้จากรายการ">
+      <List>
+        <li className="flex min-h-[44px] items-center gap-2 px-2.5 py-1.5" title="ขั้นต่ำ ใช้กับทุกกลุ่ม ยกเว้นแป">
+          <span className="w-16 shrink-0 text-[13px] font-medium text-gray-800">ขั้นต่ำ</span>
+          <div className="min-w-0 flex-1"><Select className="!h-8 !px-2 text-[12px]" value={d.minSec ?? ""} onChange={(v) => set("minSec", v || null)}
+            options={[["", "ไม่กำหนด"], ...SECTIONS.C.map((s) => [s.name, `C ${s.name}`])]} /></div><span className="w-[68px] shrink-0 text-[10px] leading-tight text-gray-400">ทุกกลุ่ม ยกเว้นแป</span>
+        </li>
+        {[["purlin", "แป"], ["rafter", "จันทัน"], ["hip", "ตะเข้"], ["ridge", "อกไก่"], ["support", "สะพาน"], ["plate", "อะเส"], ["post", "ดั้ง / ตุ๊กตา"]].map(([k, t]) => (
+          <li key={k} className="flex min-h-[44px] items-center gap-2 px-2.5 py-1.5">
+            <span className="w-16 shrink-0 text-[13px] font-medium text-gray-800">{t}</span>
+            <div className="min-w-0 flex-1"><SectionSelect className="!h-8 w-full text-[12px]" value={d.pick[k]} batten={k === "purlin"} onChange={(v) => set("pick", { ...d.pick, [k]: v })} /></div>
+            {k in d.counts ? <Select className="!h-8 !w-[68px] !px-2 text-[12px]" value={d.counts[k]} onChange={(v) => set("counts", { ...d.counts, [k]: Number(v) })} options={[[1, "เดี่ยว"], [2, "คู่"]]} /> : <span className="w-[68px] shrink-0" />}
+          </li>
         ))}
-        <p className="pt-1 text-[11px] text-gray-400">อัตโนมัติ = เลือกหน้าตัดเบาที่สุดที่ผ่าน และไม่เล็กกว่าขั้นต่ำ (ยกเว้นแป) · เลือกขนาดเองได้จากรายการ</p>
-      </div>
-    </Card>
-  </>);
+      </List>
+    </Panel>
+  );
 }
 
 // Slope read off the section drawing: the ridge level, or rise : run (e.g. 1:2 or 0.5). Either one sets the angle.
@@ -375,59 +376,54 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
   if (mode === "draw") return <DrawBoard roof={roof} set={set} g={g} fr={fr} loose={dz?.loose} plateMembers={dz?.members.filter((m) => m.group === "plate")} modeBar={modeBar} dark={dark} onFromFrame={onFromFrame} />;
   const settings = (
       <div className="space-y-3">
-        {mode !== "design" && mode !== "plate" && mode !== "loads" && <Card title="รูปทรงหลังคา" icon={Triangle}>
+        {mode !== "design" && mode !== "plate" && mode !== "loads" && <Panel title="รูปทรงหลังคา" icon={Triangle}>
           <div className="grid grid-cols-2 gap-3">
             {f("slope", "ความชัน", "องศา", "1")}{f("overhang", "ชายคายื่น", "m", "0.1")}
             {g && <SlopeFrom roof={roof} g={g} set={set} />}
             {f("H", "ระดับอะเส", "m", "0.1")}
             <Field label="กริดจับจุด"><Select value={roof.snap} onChange={(v) => set("snap", Number(v))} options={[[0.1, "0.10 ม."], [0.25, "0.25 ม."], [0.5, "0.50 ม."], [1, "1.00 ม."]]} /></Field>
           </div>
-        </Card>}
+        </Panel>}
         {mode === "plate" && g ? <PlateInputs d={roof.design} setD={setD} g={g} plates={pl.plates} sizes={pl.sizes} setInner={(v) => set("innerPlates", v)} onAutoInner={() => set("innerPlates", autoInnerPlates(g, fr))} drawn={!!roof.plates?.length} cols={!!roof.columns?.length} /> : mode === "loads" ? <LoadInputs d={roof.design} set={setD} g={g} onRoofing={(v) => TILES.includes(v) && (roof.frame.purlinSp < BATTEN_RANGE[0] || roof.frame.purlinSp > BATTEN_RANGE[1]) && set("frame", { ...roof.frame, purlinSp: 0.32 })} /> : mode === "design" ? <DesignInputs d={roof.design} set={setD} /> : mode === "frame" ? (<>
-        <Card title="ระยะโครงหลังคา" icon={Ruler}>
+        <Panel title="ระยะโครงหลังคา" icon={Ruler}>
           <div className="grid grid-cols-2 gap-3">
             {fv("rafterSp", "ระยะจันทัน", "m", "0.1")}{fv("purlinSp", "ระยะแป (ตามแนวเอียง)", "m", "0.05")}
-            {fv("maxSpan", "ช่วงจันทันสูงสุด", "m", "0.1")}{fv("postSp", "ระยะดั้ง/ตุ๊กตา", "m", "0.1")}
+            {fv("maxSpan", "ช่วงจันทันสูงสุด", "m", "0.1")}{fv("postSp", "ระยะดั้ง / ตุ๊กตา", "m", "0.1")}
           </div>
-        </Card>
-        <Card title="สะพานรับจันทัน" icon={GitCommitHorizontal}>
+        </Panel>
+        <Panel title="สะพานรับจันทัน" icon={GitCommitHorizontal} hint={`ลากปลายเพื่อปรับ · ลากกลางเส้นเพื่อย้ายทั้งเส้น · ${roof.supports ? "แก้ไขเองแล้ว" : "วางอัตโนมัติตามช่วงจันทันสูงสุด"}`}>
           {/* user 2026-11-04: on an RC ring beam the engineer places the supports — no automatic ones */}
-          <label className="mb-2 flex items-center gap-2 text-[12px] text-gray-600"><input type="checkbox" checked={roof.design?.autoSupports === true && !roof.supports} onChange={(e) => { setD("autoSupports", e.target.checked); if (e.target.checked) set("supports", null); else if (!roof.supports) set("supports", []); }} />
-            สร้างสะพานอัตโนมัติ (เอาออก = ไม่มีสะพาน หรือวาดเองด้วยเครื่องมือ "สะพาน")</label>
-          <div className="space-y-1.5 text-[13px]">
-            {fr?.supports.map((s, i) => (
-              <div key={i} onClick={() => setSel(i)} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 ${sel === i ? "bg-brand-50 text-brand-500" : "hover:bg-gray-50"}`}>
-                <span className="w-6 text-gray-400">S{i + 1}</span>
-                <span className="flex-1 tabular-nums">({fmt(s.a[0], 1)}, {fmt(s.a[1], 1)}) → ({fmt(s.b[0], 1)}, {fmt(s.b[1], 1)})</span>
-                <span className="tabular-nums text-gray-500">{fmt(Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]), 2)} ม.</span>
-                <button onClick={(e) => { e.stopPropagation(); set("supports", supList().filter((_, j) => j !== i)); setSel(null); }} className="text-gray-400 hover:text-red-500" title="ลบสะพาน"><Trash2 className="h-3.5 w-3.5" /></button>
-              </div>
+          <List>
+            <CheckRow checked={roof.design?.autoSupports === true && !roof.supports} onChange={(on) => { setD("autoSupports", on); if (on) set("supports", null); else if (!roof.supports) set("supports", []); }}
+              label="สร้างสะพานอัตโนมัติ" sub={'เอาออก = ไม่มีสะพาน หรือวาดเองด้วยเครื่องมือ "สะพาน"'} />
+          </List>
+          {fr?.supports.length > 0 && <Section title={`สะพาน ${fr.supports.length} เส้น`} className="!mt-3"><List>
+            {fr.supports.map((s, i) => (
+              <Row key={i} active={sel === i} onClick={() => setSel(i)} lead={<span className="w-6 shrink-0 text-[11px] font-semibold text-gray-400">S{i + 1}</span>}
+                title={`(${fmt(s.a[0], 1)}, ${fmt(s.a[1], 1)}) → (${fmt(s.b[0], 1)}, ${fmt(s.b[1], 1)})`} value={fmt(Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]), 2)} unit="ม."
+                tail={<button onClick={(e) => { e.stopPropagation(); set("supports", supList().filter((_, j) => j !== i)); setSel(null); }} className="text-gray-400 hover:text-red-500" title="ลบสะพาน"><Trash2 className="h-3.5 w-3.5" /></button>} />
             ))}
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => { set("supports", [...supList(), { a: [cx - 2, cy], b: [cx + 2, cy] }]); setSel(fr.supports.length); }}
-                className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-500 ring-1 ring-brand-500/40 hover:bg-brand-50"><Plus className="h-3.5 w-3.5" />เพิ่มสะพาน</button>
-              <button onClick={() => { set("supports", null); setSel(null); }}
-                className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50"><Wand2 className="h-3.5 w-3.5" />จัดวางอัตโนมัติ</button>
-            </div>
-            <p className="pt-1 text-[11px] text-gray-400">ลากปลายเพื่อปรับ · ลากกลางเส้นเพื่อย้ายทั้งเส้น · {roof.supports ? "แก้ไขเองแล้ว" : "วางอัตโนมัติตามช่วงจันทันสูงสุด"}</p>
+          </List></Section>}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button onClick={() => { set("supports", [...supList(), { a: [cx - 2, cy], b: [cx + 2, cy] }]); setSel(fr.supports.length); }} className={`${btnCls} justify-center py-1.5`}><Plus className="h-3.5 w-3.5" />เพิ่มสะพาน</button>
+            <button onClick={() => { set("supports", null); setSel(null); }} className={`${btnGhost} py-1.5`}><Wand2 className="h-3.5 w-3.5" />จัดวางอัตโนมัติ</button>
           </div>
-        </Card>
+        </Panel>
         </>) : (
-        <Card title="พิกัดมุมผนัง / แนวอะเส" icon={Ruler}>
-          <div className="space-y-1.5">
-            <div className="grid grid-cols-[14px_1fr_1fr_84px_18px] gap-1.5 text-[11px] text-gray-400"><span>#</span><span>X (m)</span><span>Y (m)</span><span>ขอบถัดไป</span><span /></div>
+        <Panel title="มุมผนัง / แนวอะเส" icon={Ruler} hint="ลากจุดในแปลนเพื่อย้าย · กด + กลางขอบเพื่อเพิ่มจุด · กดป้ายเพื่อสลับ จั่ว / ปั้นหยา / มนิลา">
+          <List>
+            <li className="grid grid-cols-[18px_1fr_1fr_88px_18px] gap-1.5 px-2.5 py-1 text-[11px] text-gray-400"><span>#</span><span>X (ม.)</span><span>Y (ม.)</span><span>ขอบถัดไป</span><span /></li>
             {roof.pts.map((p, i) => (
-              <div key={i} className="grid grid-cols-[14px_1fr_1fr_84px_18px] items-center gap-1.5 text-[13px]">
-                <span className="text-gray-500">{i + 1}</span>
-                <NumberInput className="compact-num" value={p[0]} step="0.1" onChange={(v) => setPt(i, 0, v)} />
-                <NumberInput className="compact-num" value={p[1]} step="0.1" onChange={(v) => setPt(i, 1, v)} />
-                <Select className="!px-2" value={roof.edges[i]?.type ?? "hip"} onChange={(v) => set("edges", roof.edges.map((e, k) => (k === i ? { type: v } : e)))} options={[["hip", "ปั้นหยา"], ["gable", "จั่ว"], ["manila", "มนิลา"]]} />
-                <button onClick={() => del(i)} className="grid h-7 w-6 place-items-center text-gray-400 hover:text-red-500" title="ลบจุด"><Trash2 className="h-3.5 w-3.5" /></button>
-              </div>
+              <li key={i} className="grid grid-cols-[18px_1fr_1fr_88px_18px] items-center gap-1.5 px-2.5 py-1.5 text-[13px]">
+                <span className="text-[11px] font-semibold text-gray-400">{i + 1}</span>
+                <NumberInput className="compact-num !h-8" value={p[0]} step="0.1" onChange={(v) => setPt(i, 0, v)} />
+                <NumberInput className="compact-num !h-8" value={p[1]} step="0.1" onChange={(v) => setPt(i, 1, v)} />
+                <Select className="!h-8 !px-2 text-[12px]" value={roof.edges[i]?.type ?? "hip"} onChange={(v) => set("edges", roof.edges.map((e, k) => (k === i ? { type: v } : e)))} options={[["hip", "ปั้นหยา"], ["gable", "จั่ว"], ["manila", "มนิลา"]]} />
+                <button onClick={() => del(i)} disabled={roof.pts.length <= 3} className="grid h-7 w-5 place-items-center text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบจุด"><Trash2 className="h-3.5 w-3.5" /></button>
+              </li>
             ))}
-            <p className="flex items-center gap-1 pt-1 text-[11px] text-gray-400"><Plus className="h-3 w-3" />ลากจุดในแปลนเพื่อย้าย · กด + กลางขอบเพื่อเพิ่มจุด · กดป้ายเพื่อสลับ จั่ว/ปั้นหยา</p>
-          </div>
-        </Card>
+          </List>
+        </Panel>
         )}
       </div>);
   const kpis = g ? (mode === "plate" && dz ? [["จำนวนช่วง", pl.plates.length], ["ความยาวรวม (ม.)", fmt(pl.plates.reduce((a, x) => a + x.len, 0), 2)],
@@ -446,7 +442,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
   const dxf = () => (mode === "plate" ? downloadDxf(plateModel(g, pl.plates, fr.posts), `${roof.roofNo}-wall-plate`) : downloadDxf(roofPlanModel(g, fr), `${roof.roofNo}-roof-framing`));
   // layout like the structure steps (user 2026-11-04): one toolbar row (sub-tabs, view, summary chips), the plan / table large in the
   // centre, settings in a right panel, tables / charts on demand from the right rail, 3D of the roof alone or of the whole building
-  const plan = (<div className="flex h-full min-h-0 flex-col rounded-xl border border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
+  const plan = (<div className="flex h-full min-h-0 flex-col rounded-xl border border-gray-200 bg-white p-2">
         {error ? <p className="text-sm text-red-600">{error}</p> : empty ? <p className="text-sm text-gray-500">ยังไม่มีหลังคา — ไปแท็บ "1 วาดแปลน" แล้วกด "ใช้แปลนจากโครงสร้าง" (แนะนำ), นำเข้า DXF หรือวาดผนังเอง</p> : !g ? <p className="text-sm text-gray-400">กำลังโหลดตัวคำนวณรูปทรงหลังคา…</p> : (
           mode === "plate" ? (
             <div className="flex h-full min-h-0 flex-col gap-2">
@@ -462,23 +458,23 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
   const centre = view === "3d" ? roof3d : view === "all" ? all3d : view === "split" ? <div className="grid h-full min-h-0 grid-cols-2 gap-2"><div className="min-h-0">{plan}</div><div className="min-h-0">{all3d}</div></div> : plan;
   return (
     <main className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-1.5 dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-3 py-1.5">
         {modeBar}
         <span className="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">{views.map(([k, t]) => <button key={k} onClick={() => setView(k)} className={`rounded-md px-2.5 py-1 ${view === k ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500"}`}>{t}</button>)}</span>
         <button disabled={!fr} onClick={dxf} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50"><Download className="h-3.5 w-3.5" />DXF</button>
-        <div className="ml-auto flex flex-wrap gap-1.5 text-[11px]">{kpis.map(([l, v]) => <span key={l} className="rounded-md bg-gray-50 px-2 py-0.5 text-gray-500 ring-1 ring-gray-200 dark:bg-white/5">{l} <b className="tabular-nums text-gray-800 dark:text-gray-100">{v}</b></span>)}</div>
+        <div className="ml-auto flex flex-wrap gap-1.5 text-[11px]">{kpis.map(([l, v]) => <span key={l} className="rounded-md bg-gray-50 px-2 py-0.5 text-gray-500 ring-1 ring-gray-200 dark:bg-white/5">{l} <b className="tabular-nums text-gray-800">{v}</b></span>)}</div>
       </div>
       <div className="flex min-h-0 flex-1">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col p-2">{centre}</section>
-        {side === "chart" && <section className="flex w-[380px] shrink-0 flex-col border-l border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900"><div>
+        {side === "chart" && <section className="flex w-[380px] shrink-0 flex-col border-l border-gray-200 bg-white p-3"><div>
           <div className="flex items-center justify-between px-1 text-sm font-semibold text-gray-800">
             {mode === "design" || mode === "plate" ? "อัตราส่วนการใช้งาน" : mode === "frame" ? "ปริมาณโครงเหล็กรวม" : "ความยาวแนวโครงหลังคา"}
             <span className="text-[11px] font-normal text-gray-500">{mode === "design" || mode === "plate" ? "หน่วยแรง / ระยะแอ่น เทียบค่ายอมให้" : "ความยาวจริงตามแนวเอียง"}</span>
           </div>
           {g && mode === "plate" ? <UtilChart items={pl.plates.map((x) => ({ ...x, label: x.tag }))} dark={dark} height={230} /> : g && mode === "design" ? <UtilChart dz={dz} dark={dark} height={230} /> : g && <LengthChart g={g} fr={mode === "frame" ? fr : null} dark={dark} height={230} />}
         </div></section>}
-        {!focus && <aside className="w-[330px] shrink-0 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">{settings}</aside>}
-        <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-l border-gray-200 bg-white py-2 dark:border-gray-800 dark:bg-gray-900">
+        {!focus && <aside className="w-[330px] shrink-0 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3">{settings}</aside>}
+        <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-l border-gray-200 bg-white py-2">
           {[...(mode === "plate" ? [["table", "ตารางช่วง", Ruler]] : []), ["chart", mode === "design" || mode === "plate" ? "อัตราใช้งาน" : "ความยาว", BarChart3]].map(([k, t, I]) => (
             <button key={k} onClick={() => setSide(side === k ? null : k)} title={t} className={`flex w-[46px] flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-[10px] font-medium leading-tight ${side === k ? "bg-brand-500 text-[#fff]" : "text-gray-600 hover:bg-gray-50"}`}><I className="h-4 w-4" /><span className="text-center">{t}</span></button>))}
         </nav>

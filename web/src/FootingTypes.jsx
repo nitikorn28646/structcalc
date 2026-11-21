@@ -91,18 +91,18 @@ export function FootingTypes({ frame, set, res }) {
   const [cage3, setCage3] = useState(null);
   return (
     <div className="max-w-[1500px] space-y-5 text-[12px]">
-      <section className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-white/[0.03]">
-        <h3 className="mb-1 text-sm font-semibold text-gray-800 dark:text-gray-100">แปลนฐานราก (ใต้ {frame.floors[0]?.name}) — ขนาดจริง สีตามแบบฐาน</h3>
+      <section className="rounded-xl border border-gray-200 bg-white p-3 dark:bg-white/[0.03]">
+        <h3 className="mb-1 text-sm font-semibold text-gray-800">แปลนฐานราก (ใต้ {frame.floors[0]?.name}) — ขนาดจริง สีตามแบบฐาน</h3>
         <FootingPlan floor={frame.floors[0]} footings={res.footings} columns={res.columns.filter((c) => c.floor === 0)} colTypes={frame.colTypes} marks={marks} className="h-[520px] w-full" />
         <FootingLegend footings={res.footings} marks={marks} />
       </section>
       <section>
-        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]">
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:bg-white/[0.03]">
           <span className="font-medium text-gray-600">ใช้กำลังรับไม่เกิน</span>
           <Num v={Math.round((frame.footUtil ?? 1) * 100)} on={(v) => set("footUtil", Math.min(100, Math.max(50, v)) / 100)} step="5" w="w-16" /><span>%</span>
           <span className="text-[11px] text-gray-400">ของแรงแบกทานดิน qa (ฐานแผ่) / น้ำหนักปลอดภัยของเข็ม (ฐานเข็ม) — เช่น 80–90 % เผื่อไว้ · ใช้ทั้งการเลือก type อัตโนมัติ การหาขนาด และการตรวจผ่าน</span>
         </div>
-        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]">
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:bg-white/[0.03]">
           <span className="font-medium text-gray-600">โมเมนต์ที่ฐาน Mx / My</span>
           <select value={frame.baseFixity ?? "pinned"} onChange={(e) => set("baseFixity", e.target.value)} className={box}>
             <option value="fixed">ฐานเสายึดแน่น — โมเมนต์จากโครง 3 มิติลงฐานราก (ฐานแผ่ / เข็มกลุ่ม)</option>
@@ -127,7 +127,7 @@ export function FootingTypes({ frame, set, res }) {
       </section>
       <section>
         <p className="mb-1 text-sm font-semibold text-gray-800">1b · Type ฐานแผ่ (วางบนดิน)</p>
-        <div className="mb-2 flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-white/[0.03]">
+        <div className="mb-2 flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:bg-white/[0.03]">
           <span className="font-medium text-gray-600">ดินของโครงการ (ใช้กับฐานแผ่ทุก type)</span>
           <label className="flex items-center gap-1">แรงแบกทานที่ยอมให้ qa <Num v={soil.qa / 1000} on={(v) => setSoil("qa", Math.round(v * 1000))} step="0.5" w="w-16" /> ตัน/ม.²</label>
           <label className="flex items-center gap-1">หน่วยน้ำหนักดินถม <Num v={soil.gamma} on={(v) => setSoil("gamma", v)} step="100" w="w-20" /> กก./ม.³</label>

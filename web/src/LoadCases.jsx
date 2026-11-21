@@ -103,7 +103,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
   if (pickRef) pickRef.current = (t) => assign([t]);
 
   const Head = ({ k, label, tag = "L" }) => (
-    <button onClick={() => setOpen({ ...open, [k]: !open[k] })} className="flex items-center gap-1.5 text-left text-[12px] font-semibold text-gray-700 dark:text-gray-200">
+    <button onClick={() => setOpen({ ...open, [k]: !open[k] })} className="flex items-center gap-1.5 text-left text-[12px] font-semibold text-gray-700">
       {open[k] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
       <span className={`grid h-4 w-4 place-items-center rounded-sm text-[9px] font-bold text-white ${tag === "C" ? "bg-[#3e63dd]" : "bg-[#b42318]"}`}>{tag}</span>{label}</button>);
   const sel = { panel: multi.filter((m) => m.kind === "panel" || m.kind === "cant").length, beam: multi.filter((m) => m.kind === "beam").length, column: multi.filter((m) => m.kind === "column").length };
@@ -133,7 +133,7 @@ export default function LoadCases({ frame, fl, an, cur, setFloor, multi, setPick
               : <p className="px-1 text-[11px] text-gray-400">ยังไม่มีรายการ</p>)}
           </Section>))}
         <Section title={<Head k="C" label="3 : DL+LL (ชุดผสม)" tag="C" />}>
-          {open.C && <p className="rounded-lg border border-gray-200 px-2.5 py-2 text-[12px] text-gray-600 dark:border-gray-800 dark:text-gray-300">1.0 DL + 1.0 LL (WSD) · น้ำหนักจรจัดเรียงทีละช่วงเพื่อหาค่ามากสุด · ลม / แผ่นดินไหว{onLateral ? <> ดูที่ <button onClick={onLateral} className="text-brand-600 hover:underline">แท็บลม / แผ่นดินไหว</button></> : null}</p>}
+          {open.C && <p className="rounded-lg border border-gray-200 px-2.5 py-2 text-[12px] text-gray-600">1.0 DL + 1.0 LL (WSD) · น้ำหนักจรจัดเรียงทีละช่วงเพื่อหาค่ามากสุด · ลม / แผ่นดินไหว{onLateral ? <> ดูที่ <button onClick={onLateral} className="text-brand-600 hover:underline">แท็บลม / แผ่นดินไหว</button></> : null}</p>}
         </Section>
       </div>
       <Note>"เลือก" = เลือกชิ้นของรายการนั้นบนแปลน · ช่องตัวเลข = แก้ทุกชิ้นในรายการพร้อมกัน</Note>

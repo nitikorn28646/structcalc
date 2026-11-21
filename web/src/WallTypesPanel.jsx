@@ -51,7 +51,7 @@ export default function WallTypesPanel({ wallTypes, setWallTypes, frame }) {
                     <PField label="ฉาบ (ซม.)"><input type="number" step="0.5" value={t.plaster ?? 1.5} disabled={(t.sides ?? 2) === 0} onChange={(e) => put(i, { plaster: Number(e.target.value) })} className={`${numCls} disabled:opacity-40`} /></PField>
                     <PField label="ฉาบ"><select value={t.sides ?? 2} onChange={(e) => put(i, { sides: Number(e.target.value) })} className={inputCls}><option value={2}>2 ด้าน</option><option value={1}>1 ด้าน</option><option value={0}>ไม่ฉาบ</option></select></PField>
                   </div>}
-              {t.core && <p className="rounded-md bg-white px-2 py-1.5 text-[11px] tabular-nums text-gray-600 ring-1 ring-gray-200 dark:bg-transparent dark:text-gray-400 dark:ring-gray-800">{workLine(t)}</p>}
+              {t.core && <p className="rounded-md bg-white px-2 py-1.5 text-[11px] tabular-nums text-gray-600 ring-1 ring-gray-200 dark:bg-transparent">{workLine(t)}</p>}
               <div className="flex items-center gap-2">
                 {!isDraw && <button onClick={() => setDraw({ kind: t.id })} className={btnCls}><Pencil className="h-3.5 w-3.5" />ใช้ลากผนัง</button>}
                 <button disabled={wallTypes.length < 2 || used > 0} onClick={() => { setWallTypes(wallTypes.filter((_, j) => j !== i)); setOpen(null); }}
