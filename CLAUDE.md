@@ -28,7 +28,7 @@ User data lives in project files (.json from "บันทึกโครงก�
   Oracles drive Excel via COM read-only (`oracle/excel_*.py`); candidates are `cli/*.mjs` printing key=value lines.
 
 ## Status (latest runs in `D:\REA\rea-lab\results\`)
-beam 18/18 · slab 31/31 · tied column 12/16 (slender = Excel circular-ref defect) · spiral 12/12 · stair 7/7 · spread footing 8/8 ·
+beam 18/18 · slab 31/31 · tied column 12/18 (run 20261121-131152, branch feature/review-fixes: 4 slender = Excel circular-ref defect, k2-rect-20x50-my + k1-mx-only-slender = Excel K1/K2 defects, differ as expected) · spiral 12/12 · stair 7/7 · spread footing 8/8 ·
 pile caps 15/16 (6-pile = Excel defect) · wall footing 8/8 (20261103-095510) · steel roof 20/20 (run 20261030-153300, incl. C-Channel cases; purlin/rafter/hip/valley/ridge/pole-plate sheets).
 Analysis vs PyNite (open-source FEA, `pip install PyNiteFEA` in the rea-lab venv): frame3d 7/7 (run 20261102-093430: portal, boxes with pinned
 secondary + torque, 2 storeys lateral ± P-Delta, Yasothon linear + P-Delta; linear 0.01 %, P-Delta 0.5 %), contBeam 2/2 (run 20261102-093446:
@@ -845,5 +845,5 @@ line loads, point loads, roof points of the linked floor = frame.roofPoints appe
 loadsOn): arrows drawn over everything (depthTest off), length scaled by the largest of its kind, values only on the selected floor (hover = what carries it),
 legend with totals per kind. cli/loadarrows-check.mjs (in the gate): 1409 checks on 7 projects — wall q = every WALL item the engine put on the beams for it,
 line / point / roof totals. E2E 47/47 (cloud run: copy run.py to the scratchpad with ROOT / EXPECTED pointing at the repo and launch(executable_path="/opt/pw-browsers/chromium")).
-Excel K1/K2 (column WP1) NOT run: no Windows machine attached to the cloud session. Program output for the two new cases (to compare on the PC):
+Excel K1/K2 (column WP1) RUN on the PC 2026-11-21 (20261121-131152): 16 old cases unchanged (12 pass, same 4 slender fails), both new cases differ from the Excel as expected. Program output:
 k2-rect-20x50-my mode II, R 0.59, ratio 0.5148; k1-mx-only-slender mode III, R 0.8909, ratio 1.8262 (both expected to differ from the Excel = its documented defects).
