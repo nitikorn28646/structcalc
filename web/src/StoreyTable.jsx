@@ -29,8 +29,10 @@ export function StoreyTable({ frame, set, cur, goFloor }) {
   const setH = (k, h) => { if (!(h > 0.1)) return; const d = h - frame.floors[k].h;
     set("floors", frame.floors.map((f, i) => (i === k ? { ...f, h, name: rename(f.name, E[k] + d) } : i > k ? { ...f, name: rename(f.name, E[i] + d) } : f))); };
   const setBase = (z) => { if (z < E[0] - 0.1) { set("baseLevel", z); set("floors", frame.floors.map((f, i) => (i === 0 ? { ...f, h: +(E[0] - z).toFixed(3) } : f))); } };
-  const add = () => { const top = frame.floors[cur], z = E[cur] + 3; set("floors", [...frame.floors.slice(0, cur + 1), { ...top, name: `ชั้นใหม่ ${levelText(z)}`, h: 3 }, ...frame.floors.slice(cur + 1)]); goFloor(cur + 1); };
-  const del = () => { if (n < 2) return; set("floors", frame.floors.filter((_, i) => i !== cur).map((f, i) => (i === cur && cur ? { ...f, h: +(f.h + frame.floors[cur].h).toFixed(3) } : f))); goFloor(Math.max(0, cur - 1)); };
+  // the roof link points at a floor by index: inserting / deleting a floor below it must move it too (a stale index dropped the roof load)
+  const relink = (f) => { const L = frame.roofLink; if (L?.on && Number.isInteger(L.floor)) set("roofLink", { ...L, floor: f(L.floor) }); };
+  const add = () => { const top = frame.floors[cur], z = E[cur] + 3; set("floors", [...frame.floors.slice(0, cur + 1), { ...top, name: `ชั้นใหม่ ${levelText(z)}`, h: 3 }, ...frame.floors.slice(cur + 1)]); relink((f) => (f > cur ? f + 1 : f)); goFloor(cur + 1); };
+  const del = () => { if (n < 2) return; set("floors", frame.floors.filter((_, i) => i !== cur).map((f, i) => (i === cur && cur ? { ...f, h: +(f.h + frame.floors[cur].h).toFixed(3) } : f))); relink((f) => (f > cur ? f - 1 : f === cur ? Math.min(cur, n - 2) : f)); goFloor(Math.max(0, cur - 1)); };
   // elevation figure: levels to scale, columns between them, storey heights on the right
   const zs = [base, ...E], zMin = Math.min(base, 0), zMax = E.at(-1), H = 240, W = 300, sy = (H - 24) / Math.max(zMax - zMin, 1), Y = (z) => 12 + (zMax - z) * sy;
   return (

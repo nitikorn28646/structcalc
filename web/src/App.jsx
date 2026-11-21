@@ -29,7 +29,7 @@ import ReportOptions from "./ReportOptions.jsx";
 import NewProjectWizard from "./NewProjectWizard.jsx";
 import { buildStarter } from "./starter.js";
 import { projectStamp, validateInput } from "./reportQA.js";
-import { analyzeFrame } from "../engine/frame.js";
+import { analyzeFrame, roofLinkFloor } from "../engine/frame.js";
 import { roofFromFrame, roofPoints } from "./roofLink.js";
 import { RoofLinkCard } from "./RoofLinkCard.jsx";
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
@@ -321,9 +321,9 @@ export default function App() {
     // nothing drawn to carry the roof yet (no columns / plates — e.g. the user cleared them): no load points, nothing to ask about
     if (!(roof.columns?.length || roof.plates?.length || roof.innerPlates?.length)) { setFrameState((x) => (x.roofPoints?.length ? { ...x, roofPoints: [] } : x)); return; }
     let alive = true;
-    roofPoints(roof, frame.floors[frame.roofLink.floor ?? frame.floors.length - 1] ?? {}).then((r) => { if (!alive || r.error) return; setFrameState((x) => { const next = { ...x, roofPoints: r.pts }; try { localStorage.setItem("structcalc.frame", JSON.stringify(next)); } catch { /* ignore */ } return next; }); });
+    roofPoints(roof, frame.floors[roofLinkFloor(frame) ?? frame.floors.length - 1] ?? {}).then((r) => { if (!alive || r.error) return; setFrameState((x) => { const next = { ...x, roofPoints: r.pts }; try { localStorage.setItem("structcalc.frame", JSON.stringify(next)); } catch { /* ignore */ } return next; }); });
     return () => { alive = false; };
-  }, [roof, frame.roofLink?.on, frame.roofLink?.floor, frame.floors[frame.roofLink?.floor ?? frame.floors.length - 1]?.beams, frame.floors[frame.roofLink?.floor ?? frame.floors.length - 1]?.columns]); // eslint-disable-line react-hooks/exhaustive-deps // the whole building, shared by every workflow step
+  }, [roof, frame.roofLink?.on, frame.roofLink?.floor, frame.floors[roofLinkFloor(frame) ?? frame.floors.length - 1]?.beams, frame.floors[roofLinkFloor(frame) ?? frame.floors.length - 1]?.columns]); // eslint-disable-line react-hooks/exhaustive-deps // the whole building, shared by every workflow step
   useEffect(() => {
     const k = (e) => {
       // physical keys (e.code): with the Thai keyboard layout Ctrl+Z sends e.key "ผ" (user 2026-11-04: Ctrl+Z did nothing)

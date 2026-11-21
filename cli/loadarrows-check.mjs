@@ -1,9 +1,9 @@
 // The 3D load arrows (web/src/loadArrows.js) must show the loads exactly as the analysis took them: per wall the q put on the beam lines
 // (or spread on the slab), every drawn line / point load, and the roof points of the linked floor. Run on the example + test projects.
 import { readFileSync, existsSync } from "node:fs";
-import { analyzeFrame } from "../web/engine/frame.js";
+import { analyzeFrame, roofLinkFloor } from "../web/engine/frame.js";
 import { wallsOf } from "../web/engine/floor.js";
-import { loadArrowData } from "../web/src/loadArrows.js";
+import { loadArrowData, roofStatus } from "../web/src/loadArrows.js";
 
 let bad = 0, n = 0;
 const ok = (name, cond, info = "") => { n++; if (!cond) { bad++; console.log(`FAIL ${name} ${info}`); } };
@@ -15,6 +15,13 @@ for (const f of files) {
   const top = frame.floors.length - 1, c0 = frame.floors[top].columns?.[0];
   for (const fr of [frame, ...(c0 ? [{ ...frame, roofLink: { on: true, floor: top }, roofPoints: [{ p: c0, P: 1234, name: "หลังคา" }, { p: [c0[0] + 0.01, c0[1] + 9e9], P: 0, name: "หลังคา" }] }] : [])]) {
     const res = analyzeFrame(fr);
+    // roof status: what the analysis says the roof points landed on; totals must add up
+    const rs = roofStatus(fr, res, raw.roof);
+    if (roofLinkFloor(fr) !== null && (fr.roofPoints ?? []).some((p) => p.P > 0)) {
+      const want = (fr.roofPoints ?? []).reduce((s, p) => s + Math.max(0, p.P), 0);
+      ok(`${f} roof status total`, near(rs.total, want, 1e-6) && near(rs.col + rs.beam + rs.panel + rs.lost, want, 1e-6), JSON.stringify(rs));
+      ok(`${f} roof status state`, rs.state === (rs.nLost || rs.moved ? "partial" : "ok"));
+    } else ok(`${f} roof status not linked`, ["unlinked", "none", "empty"].includes(rs.state), rs.state);
     fr.floors.forEach((fl, k) => {
       const an = res.floors[k], d = loadArrowData(fr, an, k, wallsOf(fl)), tag = `${f.split("/").pop()} ${fl.name}`;
       // walls: every wall with weight is drawn; its q = the q of each WALL item the engine put on the beam lines for it
@@ -30,11 +37,20 @@ for (const f of files) {
       ok(`${tag} line loads`, near(d.totals.lines, (fl.lineLoads ?? []).reduce((s, l) => s + (l.q > 0 ? l.q * Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]) : 0), 0), 1e-6));
       ok(`${tag} point loads`, near(d.totals.points, (fl.pointLoads ?? []).reduce((s, p) => s + Math.max(0, p.P), 0), 1e-6));
       // roof points: only on the linked floor, same values and order as the engine's appended point loads
-      const linked = fr.roofLink?.on && fr.roofLink.floor === k, want = linked ? (fr.roofPoints ?? []).reduce((s, p) => s + Math.max(0, p.P), 0) : 0;
+      const linked = roofLinkFloor(fr) === k, want = linked ? (fr.roofPoints ?? []).reduce((s, p) => s + Math.max(0, p.P), 0) : 0;
       ok(`${tag} roof total`, near(d.totals.roof, want, 1e-6), `${d.totals.roof} vs ${want}`);
       if (linked) ok(`${tag} engine took the roof points`, an.pointLoads.length === (fl.pointLoads ?? []).length + (fr.roofPoints ?? []).length);
     });
   }
+}
+{ // a link to a deleted floor (index past the end) must not drop the roof load: it goes to the top floor + a warning
+  const raw = JSON.parse(readFileSync("web/public/projects/yasothon.json", "utf8")), fr = raw.frame ?? raw, top = fr.floors.length - 1, c = fr.floors[top].columns[0];
+  const pts = [{ p: c, P: 5000, name: "หลังคา" }], base = (r) => r.footings.reduce((s, x) => s + (x.P ?? 0), 0);
+  const r0 = analyzeFrame({ ...fr, roofLink: undefined }), rOk = analyzeFrame({ ...fr, roofLink: { on: true, floor: top }, roofPoints: pts }), rStale = analyzeFrame({ ...fr, roofLink: { on: true, floor: top + 5 }, roofPoints: pts });
+  const sum = (r) => r.columns.filter((x) => x.floor === top).reduce((s, x) => s + (x.Ptop ?? 0), 0);
+  ok("stale link → same column loads as the right link", near(sum(rStale), sum(rOk), 1e-6) && sum(rOk) > sum(r0) + 4999, `${sum(r0)} ${sum(rOk)} ${sum(rStale)}`);
+  ok("stale link warned", rStale.warnings.some((w) => w.includes("หลังคาเชื่อมกับชั้นที่ไม่มี")));
+  ok("roofLinkFloor clamps", roofLinkFloor({ floors: [{}, {}], roofLink: { on: true, floor: 7 } }) === 1 && roofLinkFloor({ floors: [{}, {}], roofLink: { on: true } }) === 1 && roofLinkFloor({ floors: [{}], roofLink: { on: false, floor: 0 } }) === null);
 }
 console.log(`${n - bad}/${n} ok${bad ? ` · ${bad} FAILED` : ""} (${files.length} projects)`);
 process.exit(bad ? 1 : 0);

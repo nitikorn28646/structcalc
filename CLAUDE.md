@@ -847,3 +847,11 @@ legend with totals per kind. cli/loadarrows-check.mjs (in the gate): 1409 checks
 line / point / roof totals. E2E 47/47 (cloud run: copy run.py to the scratchpad with ROOT / EXPECTED pointing at the repo and launch(executable_path="/opt/pw-browsers/chromium")).
 Excel K1/K2 (column WP1) RUN on the PC 2026-11-21 (20261121-131152): 16 old cases unchanged (12 pass, same 4 slender fails), both new cases differ from the Excel ONLY where expected — k2: every value equal except mode (Excel I = weak-axis My ignored, program II) and ratio (Excel "-", program 0.5148); k1: Excel ex/ey = ERR (My = 0 → division by zero) and everything after it ERR, mode NONE (no answer at all), program finite. Program output:
 k2-rect-20x50-my mode II, R 0.59, ratio 0.5148; k1-mx-only-slender mode III, R 0.8909, ratio 1.8262 (both expected to differ from the Excel = its documented defects).
+ROOF LOAD STATUS IN 3D (2026-11-21, user "ผมจะรู้ได้ไงว่าน้ำหนักหลังคามันลงมาที่เสาหรือยัง"): loadArrows.js roofStatus(frame, res, roof) = read from the ANALYSIS
+(roof points appended on the linked floor and what each landed on: column / beam / slab / nothing) → state none | unlinked | empty | ok | partial;
+Frame3D legend line (red "ยังไม่ส่งน้ำหนักลงโครงสร้าง" + where to fix, or "✓ หลังคา x กก. เข้าโครงสร้างที่ <floor> ครบ · ลงเสา n จุด"), every roof
+arrow labelled "→ เสา / → คาน / → ไม่มีที่รับ!" (always shown, not only the selected floor) with a ring at the landing point; labels select-none
+(a text selection painted them blue). SAFETY FIX: frame.roofLink.floor pointing at a floor that no longer exists (deleted / re-imported) silently
+dropped the whole roof load (_u3w: 13.75 t) — engine/frame.js roofLinkFloor(frame) = the linked index or the top floor (+ warning), used by
+gravity, loadArrows, App roof points, RoofLinkCard, Frame3D; StoreyTable add / delete floor re-indexes roofLink. loadarrows-check 1437 (stale link
+test included). E2E 47/47, regress identical.

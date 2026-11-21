@@ -14,7 +14,8 @@ import { RoofFrameMembers, roofSeat } from "./Roof3D.jsx";
 import { baseLevel } from "./StoreyTable.jsx";
 import { stairRiseOf } from "./StairPanel.jsx";
 import { beamPieces, edgeWidth, insetPolygon } from "./joints3d.js";
-import { alongPoints, loadArrowData } from "./loadArrows.js";
+import { alongPoints, loadArrowData, roofStatus } from "./loadArrows.js";
+import { roofLinkFloor } from "../engine/frame.js";
 
 const LAYERS = [["footing", "ฐานราก"], ["column", "เสา"], ["beam", "คาน"], ["slab", "พื้น"], ["cant", "พื้นยื่น"], ["wall", "ผนัง"], ["stair", "บันได"], ["roof", "หลังคา"], ["roofFrame", "โครงหลังคา"], ["load", "ลูกศรน้ำหนัก"]];
 // load arrow colours: walls, line loads, point loads, roof points
@@ -156,10 +157,11 @@ function Arrows({ tips, tails = [], color }) {
 }
 function LoadLabel({ at, color, children, title }) {
   return <Html position={at} center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
-    <div title={title} style={{ color, borderColor: color, pointerEvents: "auto", cursor: "help" }} className="whitespace-nowrap rounded border bg-white/90 px-1 py-px text-[10px] font-semibold leading-tight tabular-nums shadow-sm">{children}</div></Html>;
+    <div title={title} style={{ color, borderColor: color, pointerEvents: "auto", cursor: "help" }} className="select-none whitespace-nowrap rounded border bg-white/90 px-1 py-px text-[10px] font-semibold leading-tight tabular-nums shadow-sm">{children}</div></Html>;
 }
 // the loads of one floor (loadArrowData = the engine's own values), at that floor's level Zk; sizes scaled by the largest of each kind
 function FloorLoads({ d, Zk, qMax, pMax, labels = true }) {
+  const dest = (x) => (x.on === "column" ? "→ เสา" : x.on === "beam" ? "→ คาน" : x.on === "panel" ? "→ พื้น" : "→ ไม่มีที่รับ!");
   const lenQ = (q) => 0.35 + (0.65 * q) / (qMax || 1), lenP = (P) => 0.5 + (0.9 * P) / (pMax || 1);
   const dist = (kind) => {
     const tips = [], tails = [];
@@ -170,8 +172,12 @@ function FloorLoads({ d, Zk, qMax, pMax, labels = true }) {
   const mid = (x) => [(x.a[0] + x.b[0]) / 2, (x.a[1] + x.b[1]) / 2];
   return (<group>
     {dist("walls")}{dist("lines")}{pts("points")}{pts("roof")}
+    {d.roof.map((x, j) => ( // where a roof point lands: a ring around the column / beam point (red = landed on nothing)
+      <mesh key={`rr${j}`} position={[x.p[0], Zk + x.z + 0.02, -x.p[1]]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={21}>
+        <ringGeometry args={[0.16, 0.24, 24]} /><meshBasicMaterial color={x.on === "column" || x.on === "beam" ? LOAD_COL.roof : "#d92d20"} depthTest={false} transparent side={THREE.DoubleSide} /></mesh>))}
+    {d.roof.map((x, j) => <LoadLabel key={`rl${j}`} at={[x.p[0], Zk + x.z + lenP(x.P) + 0.12, -x.p[1]]} color={x.on === "column" || x.on === "beam" ? LOAD_COL.roof : "#d92d20"} title={`${x.name} → ${x.to}`}>{`${kg(x.P)} กก. ${dest(x)}`}</LoadLabel>)}
     {labels && [...d.walls.map((x) => ["walls", x, mid(x), Zk + x.z + lenQ(x.q), `${kg(x.q)} กก./ม.`]), ...d.lines.map((x) => ["lines", x, mid(x), Zk + x.z + lenQ(x.q), `${kg(x.q)} กก./ม.`]),
-      ...d.points.map((x) => ["points", x, x.p, Zk + x.z + lenP(x.P), `${kg(x.P)} กก.`]), ...d.roof.map((x) => ["roof", x, x.p, Zk + x.z + lenP(x.P), `${kg(x.P)} กก.`])].map(([kind, x, p, z, t], j) =>
+      ...d.points.map((x) => ["points", x, x.p, Zk + x.z + lenP(x.P), `${kg(x.P)} กก.`])].map(([kind, x, p, z, t], j) =>
       <LoadLabel key={j} at={[p[0], z + 0.12, -p[1]]} color={LOAD_COL[kind]} title={`${x.name} → ${x.to}`}>{t}</LoadLabel>)}
   </group>);
 }
@@ -192,7 +198,7 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
   const qMax = Math.max(1, ...loads.flatMap((d) => (d ? [...d.walls, ...d.lines].map((x) => x.q) : []))), pMax = Math.max(1, ...loads.flatMap((d) => (d ? [...d.points, ...d.roof].map((x) => x.P) : [])));
   const tot = loads.reduce((t, d) => (d ? { walls: t.walls + d.totals.walls, lines: t.lines + d.totals.lines, points: t.points + d.totals.points, roof: t.roof + d.totals.roof } : t), { walls: 0, lines: 0, points: 0, roof: 0 });
   const wt = frame.wallTypes ?? DEFAULT_WALL_TYPES, base0 = -baseLevel(frame); // model z = 0 at the column base: a roof at elevation H sits at H − base level (was fixed at 0.40)
-  const fo = frame.footing ?? { t: 0.4 }, hl = useHighlight(), hz = hl?.floor !== undefined ? Z[hl.floor] ?? top : Z[frame.roofLink?.floor ?? frame.floors.length - 1] ?? top; // highlighted point: at the linked (roof) floor
+  const fo = frame.footing ?? { t: 0.4 }, hl = useHighlight(), hz = hl?.floor !== undefined ? Z[hl.floor] ?? top : Z[roofLinkFloor(frame) ?? frame.floors.length - 1] ?? top; // highlighted point: at the linked (roof) floor
   // size (b, h) of the largest beam of the highlighted floor lying along a segment (default 0.20 × 0.40)
   const segSize = (a, b) => {
     const fl = frame.floors[hl?.floor], an = res.floors?.[hl?.floor]; let w = 0, h = 0;
@@ -314,12 +320,21 @@ export default function Frame3D({ frame, res, cur, roof, dark = false, className
       <button onClick={() => setBig((v) => !v)} title={big ? "ย่อ" : "ขยายเต็มจอ"} className={`${chip(false)} ml-auto`}>{big ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
     </div>
   );
+  const rs = on.load ? roofStatus(frame, res, roof) : null;
+  const roofLine = rs && ({
+    none: <div className="text-gray-500">ยังไม่มีหลังคาในโครงการ</div>,
+    unlinked: <div className="font-semibold text-[#d92d20]">หลังคายังไม่ส่งน้ำหนักลงโครงสร้าง (0 กก.)<div className="font-normal">ไปขั้น 4 หลังคา → กด "นำเข้าเสา + แปลนจากโครงสร้าง"</div></div>,
+    empty: <div className="font-semibold text-[#d92d20]">เชื่อมกับ {rs.floor} แล้ว แต่ยังไม่มีจุดรับ<div className="font-normal">ขั้น 4: วาดอะเส / เสาบนแปลนหลังคา</div></div>,
+    ok: <div className="text-[#067647]">✓ หลังคา {kg(rs.total)} กก. เข้าโครงสร้างที่ {rs.floor} ครบ<div className="text-gray-500">ลงเสา {rs.nCol} จุด ({kg(rs.col)} กก.){rs.nBeam ? ` · ลงคาน ${rs.nBeam} จุด (${kg(rs.beam)} กก.)` : ""}{rs.nPanel ? ` · ลงพื้น ${rs.nPanel} จุด` : ""}</div></div>,
+    partial: <div className="font-semibold text-[#d92d20]">หลังคา {kg(rs.total)} กก. — {rs.nLost ? `${rs.nLost} จุด (${kg(rs.lost)} กก.) ไม่มีที่รับ` : ""}{rs.nLost && rs.moved ? " · " : ""}{rs.moved ? `${rs.moved} จุดไม่มีเสา/คานใต้ → ย้ายไปเสาใกล้สุด` : ""}<div className="font-normal">ขั้น 4: ตารางจุดถ่ายแรง → "เพิ่มคานรับ" / "เพิ่มเสา"</div></div>,
+  })[rs.state];
   const legend = on.load && (
     <div className="pointer-events-none absolute bottom-2 left-2 rounded-md bg-white/90 px-2 py-1 text-[11px] leading-snug text-gray-700 shadow-sm ring-1 ring-gray-200">
       <div className="font-semibold text-gray-500">น้ำหนักที่ลงโครงสร้าง (ชั้นที่แสดง)</div>
       {[["walls", "ผนัง (กก./ม. × ยาว)"], ["lines", "น้ำหนักเส้น"], ["points", "น้ำหนักจุด"], ["roof", "จากหลังคา"]].map(([k, t]) => (
         <div key={k} className="flex items-center gap-1.5"><i className="inline-block h-2 w-2 rounded-full" style={{ background: LOAD_COL[k] }} />{t}<b className="ml-auto pl-3 tabular-nums">{kg(tot[k])} กก.</b></div>))}
-      <div className="text-[10px] text-gray-400">ตัวเลขแสดงเฉพาะชั้นที่เลือก · ชี้ป้ายเพื่อดูว่าลงคาน / พื้น / เสา</div>
+      <div className="mt-1 max-w-[300px] border-t border-gray-200 pt-1 text-[11px] leading-snug">{roofLine}{rs?.fallback && <div className="text-[#b54708]">ชั้นที่เชื่อมไว้ไม่มีแล้ว → ลงชั้นบนสุดแทน (ตรวจที่ขั้น 4)</div>}</div>
+      <div className="text-[10px] text-gray-400">ตัวเลขแสดงเฉพาะชั้นที่เลือก (หลังคาแสดงเสมอ) · ชี้ป้ายเพื่อดูว่าลงคาน / พื้น / เสา</div>
     </div>);
   if (big) return (
     <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setBig(false)}>

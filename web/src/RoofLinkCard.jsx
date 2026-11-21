@@ -1,6 +1,7 @@
 // "Roof → columns" card (top of step 5 and step 6 "น้ำหนักอื่น"): one button builds the roof from the structure and links its loads;
 // below it every roof bearing point is listed with where its load goes (column / beam / moved to the nearest column) and, for a
 // point with nothing under it, the fixes in one click: a carrier beam through it (between the nearest beams) or a column under it.
+import { roofLinkFloor } from "../engine/frame.js";
 import { useState } from "react";
 import { carrierBeam, snapRoofToFrame } from "./roofLink.js";
 import { highlight } from "./highlight.js";
@@ -12,7 +13,7 @@ const TO = { col: ["ลงเสา", "text-[#067647]"], beam: ["ลงคาน
 export function RoofLinkCard({ frame, roof, onFromFrame, set, setRoof = null }) {
   const link = frame.roofLink, pts = frame.roofPoints ?? [], total = pts.reduce((s, p) => s + p.P, 0);
   const moved = pts.filter((p) => p.to === "moved" || String(p.name).includes("ย้าย")), ready = roof?.fromFrame && link?.on;
-  const [open, setOpen] = useState(null), k = link?.floor ?? frame.floors.length - 1, fl = frame.floors[k];
+  const [open, setOpen] = useState(null), k = roofLinkFloor(frame) ?? frame.floors.length - 1, fl = frame.floors[k];
   const setFloor = (patch) => set?.("floors", frame.floors.map((f, i) => (i === k ? { ...f, ...patch } : f)));
   const addBeams = (list) => { let beams = [...(fl.beams ?? [])], n = 0;
     for (const p of list) { const at = p.at ?? p.p, b = carrierBeam({ beams }, at); if (b) { beams = [...beams, b]; n++; } }
