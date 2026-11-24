@@ -902,3 +902,10 @@ C-HATCH / C-PILE / C-GRID / C-COL appended to the template LAYER table, poly(…
 src/footingMarks.js (plain JS; FootingPlan re-exports). Step 8 and the report footing figures now draw the same model (src/FootingDrawing.jsx).
 cli/footingdxf-check.mjs (in the gate): drawn bars = nLong / nShort, texts from the design, dims, piles, no pier callout, tags, schedule, no NaN
 (208 checks on 5 projects); ezdxf audit 0 errors. Drawing only — no check changed.
+Footing DXF round 2 (2026-11-24, user's AutoCAD screenshots): footing bottom level reads "VARY ท้องฐานราก" (not −Df); section leaders go
+STRAIGHT UP from the bar to rows above the footing (top row = leftmost leader, lower rows further right → no crossings), plan leaders run
+level from the object to a knee outside the footing then along the text, lean concrete / sand named at the right with small leaders;
+filled arrowheads (Dxf.arrow = tapered LWPOLYLINE, model primitive "arrow", SVG too). Colours per entity as on the user's sheet (model item
+`c`, emitModel passes it; footing files only): concrete / ties / leaders 2 yellow, mat bars 3 green, column bars 1 red, bar dots + hatch 8,
+lean/sand lines 1, dimension line 1 / extension 8 / text 3, texts 3, title bubble 5 + text 4; plan: grid 8, bubbles 3 + text 6, footings /
+columns / tags 3 (clash 1), piles 2.

@@ -30,6 +30,10 @@ export class Dxf {
   poly(pts, l, closed = true, w = 0, color = 0) {
     this.e.push(`${this.head("LWPOLYLINE", l, color)}\n100\nAcDbPolyline\n90\n${pts.length}\n70\n${closed ? 1 : 0}\n43\n${w ? f(w) : 0}${pts.map(([x, y, b = 0]) => `\n10\n${f(x)}\n20\n${f(y)}${b ? `\n42\n${f(b)}` : ""}`).join("")}`);
   }
+  // filled arrowhead: a 2-vertex LWPOLYLINE whose width tapers from w at the tail to 0 at the tip (x, y); (dx, dy) = unit tip → tail
+  arrow(x, y, dx, dy, L, w, l, color = 0) {
+    this.e.push(`${this.head("LWPOLYLINE", l, color)}\n100\nAcDbPolyline\n90\n2\n70\n0\n10\n${f(x + dx * L)}\n20\n${f(y + dy * L)}\n40\n${f(w)}\n41\n0\n10\n${f(x)}\n20\n${f(y)}`);
+  }
   // h = text height (m); ha 0 left / 1 centre / 2 right, va 0 baseline / 1 bottom / 2 middle / 3 top
   text(x, y, h, s, l = "C-TEXT", ha = 0, va = 0, rot = 0, color = 0, at = null, wf = 1) {
     const al = ha || va ? `\n72\n${ha}\n11\n${f(at ? at[0] : x)}\n21\n${f(at ? at[1] : y)}\n31\n0` : "";
@@ -279,16 +283,18 @@ export function modelSheets(d, secs, project, title, X0 = 0, first = 1, total = 
 export function emitModel(d, m, ox, oy) {
   const P = (p) => [ox + p[0], oy + p[1], p[2] ?? 0];
   for (const p of m.items) {
+    const c = p.c ?? 0; // colour per entity (footing sheets, as on the user's drawing); 0 = by layer
     if (p.t === "line") {
-      if (!p.dash) { d.line(ox + p.x1, oy + p.y1, ox + p.x2, oy + p.y2, p.layer); continue; }
+      if (!p.dash) { d.line(ox + p.x1, oy + p.y1, ox + p.x2, oy + p.y2, p.layer, c); continue; }
       const L = Math.hypot(p.x2 - p.x1, p.y2 - p.y1), ux = (p.x2 - p.x1) / (L || 1), uy = (p.y2 - p.y1) / (L || 1);
-      for (let s0 = 0; s0 < L; s0 += 0.2) { const s1 = Math.min(L, s0 + 0.12); d.line(ox + p.x1 + ux * s0, oy + p.y1 + uy * s0, ox + p.x1 + ux * s1, oy + p.y1 + uy * s1, p.layer);
-        if (s1 + 0.04 < L) { const sd = s1 + 0.04; d.line(ox + p.x1 + ux * sd, oy + p.y1 + uy * sd, ox + p.x1 + ux * Math.min(L, sd + 0.005), oy + p.y1 + uy * Math.min(L, sd + 0.005), p.layer); } }
-    } else if (p.t === "poly") d.poly(p.pts.map(P), p.layer, !!p.closed);
-    else if (p.t === "circle") d.circle(ox + p.x, oy + p.y, p.r, p.layer);
-    else if (p.t === "disk") { const r = p.r / 2; d.poly([[ox + p.x - r, oy + p.y, 1], [ox + p.x + r, oy + p.y, 1]], p.layer, true, p.r); }
-    else if (p.t === "solid") { const w = p.y1 - p.y0, ym = (p.y0 + p.y1) / 2; d.poly([[ox + p.x0, oy + ym], [ox + p.x1, oy + ym]], p.layer, false, w); }
-    else if (p.t === "tri") d.poly([[ox + p.x, oy + p.y], [ox + p.x - p.s * 0.6, oy + p.y + p.s], [ox + p.x + p.s * 0.6, oy + p.y + p.s]], p.layer, true);
-    else if (p.t === "text") d.text(ox + p.x, oy + p.y, p.h, p.s, p.layer, p.ha ?? 0, p.va ?? 0, p.rot ?? 0);
+      for (let s0 = 0; s0 < L; s0 += 0.2) { const s1 = Math.min(L, s0 + 0.12); d.line(ox + p.x1 + ux * s0, oy + p.y1 + uy * s0, ox + p.x1 + ux * s1, oy + p.y1 + uy * s1, p.layer, c);
+        if (s1 + 0.04 < L) { const sd = s1 + 0.04; d.line(ox + p.x1 + ux * sd, oy + p.y1 + uy * sd, ox + p.x1 + ux * Math.min(L, sd + 0.005), oy + p.y1 + uy * Math.min(L, sd + 0.005), p.layer, c); } }
+    } else if (p.t === "poly") d.poly(p.pts.map(P), p.layer, !!p.closed, 0, c);
+    else if (p.t === "circle") d.circle(ox + p.x, oy + p.y, p.r, p.layer, c);
+    else if (p.t === "disk") { const r = p.r / 2; d.poly([[ox + p.x - r, oy + p.y, 1], [ox + p.x + r, oy + p.y, 1]], p.layer, true, p.r, c); }
+    else if (p.t === "solid") { const w = p.y1 - p.y0, ym = (p.y0 + p.y1) / 2; d.poly([[ox + p.x0, oy + ym], [ox + p.x1, oy + ym]], p.layer, false, w, c); }
+    else if (p.t === "arrow") d.arrow(ox + p.x, oy + p.y, p.dx, p.dy, p.L, p.w, p.layer, c);
+    else if (p.t === "tri") d.poly([[ox + p.x, oy + p.y], [ox + p.x - p.s * 0.6, oy + p.y + p.s], [ox + p.x + p.s * 0.6, oy + p.y + p.s]], p.layer, true, 0, c);
+    else if (p.t === "text") d.text(ox + p.x, oy + p.y, p.h, p.s, p.layer, p.ha ?? 0, p.va ?? 0, p.rot ?? 0, c);
   }
 }

@@ -32,6 +32,8 @@ export function stairSvgString(model, { px = 190, mono = false } = {}) {
       out.push(`<path d="${path(p.pts, p.closed)}" fill="${fill}" stroke="${c}" stroke-width="${sw(p.layer, p.bar)}" stroke-linejoin="round" stroke-linecap="round"/>`);
     } else if (p.t === "circle") out.push(`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${Math.max(1.6, p.r * k).toFixed(2)}" fill="none" stroke="${c}" stroke-width="1"/>`);
     else if (p.t === "disk") out.push(`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${Math.max(1.5, p.r * k).toFixed(2)}" fill="${c}"/>`);
+    else if (p.t === "arrow") { const nx = -p.dy, ny = p.dx, bx = p.x + p.dx * p.L, by = p.y + p.dy * p.L, h = p.w / 2;
+      out.push(`<path d="M${X(p.x)} ${Y(p.y)} L${X(bx + nx * h)} ${Y(by + ny * h)} L${X(bx - nx * h)} ${Y(by - ny * h)} Z" fill="${c}"/>`); }
     else if (p.t === "tri") out.push(`<path d="M${X(p.x)} ${Y(p.y)} l${(-p.s * k * 0.6).toFixed(2)} ${(-p.s * k).toFixed(2)} h${(p.s * k * 1.2).toFixed(2)} Z" fill="${c}"/>`);
     else if (p.t === "text") {
       const anchor = ["start", "middle", "end"][p.ha ?? 0], base = ["alphabetic", "text-after-edge", "central", "hanging"][p.va ?? 0];

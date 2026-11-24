@@ -60,20 +60,21 @@ function planSheet(d, X0, k, frameData, res, project, title) {
   const P = (x, y) => [ox + x, oy + y];
   const L = (x1, y1, x2, y2, l = "C-CONC", c = 0) => { const [a, b] = P(x1, y1), [e, g] = P(x2, y2); d.line(a, b, e, g, l, c); };
   const T = (x, y, h, s, l = "C-TEXT", ha = 0, va = 0, rot = 0, c = 0) => { const [a, b] = P(x, y); d.text(a, b, h, s, l, ha, va, rot, c); };
-  const tick = (x, y) => L(x - 0.06 * u, y - 0.06 * u, x + 0.06 * u, y + 0.06 * u, "C-DIM");
-  const dimH = (xa, xb, y, label, yObj = null, c = 0) => { if (yObj != null) for (const x of [xa, xb]) L(x, yObj, x, y + Math.sign(y - yObj) * 0.1 * u, "C-DIM");
-    L(xa - 0.1 * u, y, xb + 0.1 * u, y, "C-DIM"); tick(xa, y); tick(xb, y); T((xa + xb) / 2, y + 0.06 * u, 0.15 * u, label, "C-DIM", 1, 1, 0, c); };
-  const dimV = (ya, yb, x, label, xObj = null, c = 0) => { if (xObj != null) for (const y of [ya, yb]) L(xObj, y, x + Math.sign(x - xObj) * 0.1 * u, y, "C-DIM");
-    L(x, ya - 0.1 * u, x, yb + 0.1 * u, "C-DIM"); tick(x, ya); tick(x, yb); T(x - 0.06 * u, (ya + yb) / 2, 0.15 * u, label, "C-DIM", 1, 1, 90, c); };
+  const tick = (x, y) => L(x - 0.06 * u, y - 0.06 * u, x + 0.06 * u, y + 0.06 * u, "C-DIM", 1);
+  // colours as on the user's sheet: dimension line red, extension lines gray, text green
+  const dimH = (xa, xb, y, label, yObj = null, c = 0) => { if (yObj != null) for (const x of [xa, xb]) L(x, yObj, x, y + Math.sign(y - yObj) * 0.1 * u, "C-DIM", 8);
+    L(xa - 0.1 * u, y, xb + 0.1 * u, y, "C-DIM", 1); tick(xa, y); tick(xb, y); T((xa + xb) / 2, y + 0.06 * u, 0.15 * u, label, "C-DIM", 1, 1, 0, c || 3); };
+  const dimV = (ya, yb, x, label, xObj = null, c = 0) => { if (xObj != null) for (const y of [ya, yb]) L(xObj, y, x + Math.sign(x - xObj) * 0.1 * u, y, "C-DIM", 8);
+    L(x, ya - 0.1 * u, x, yb + 0.1 * u, "C-DIM", 1); tick(x, ya); tick(x, yb); T(x - 0.06 * u, (ya + yb) / 2, 0.15 * u, label, "C-DIM", 1, 1, 90, c || 3); };
   // ---- grid: dash-dot lines, bubbles, chains
   const gx0 = mx0 - 0.8 * u, gx1 = mx1 + 0.9 * u, gy0 = my0 - 0.8 * u, gy1 = my1 + 0.9 * u;
   const dashDot = (x1, y1, x2, y2) => { const len = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / len, uy = (y2 - y1) / len, pat = [0.8 * u, 0.15 * u, 0.06 * u, 0.15 * u]; let s = 0, i = 0;
-    while (s < len - 1e-9) { const e = Math.min(len, s + pat[i % 4]); if (i % 2 === 0) L(x1 + ux * s, y1 + uy * s, x1 + ux * e, y1 + uy * e, "C-GRID"); s = e; i++; } };
+    while (s < len - 1e-9) { const e = Math.min(len, s + pat[i % 4]); if (i % 2 === 0) L(x1 + ux * s, y1 + uy * s, x1 + ux * e, y1 + uy * e, "C-GRID", 8); s = e; i++; } };
   for (const x of GX) dashDot(x, gy0, x, gy1 + 1.4 * u);
   for (const y of GY) dashDot(gx0, y, gx1 + 1.6 * u, y);
   const rB = 0.25 * u;
-  GX.forEach((x, i) => { const [a, b] = P(x, gy1 + 1.4 * u + rB); d.circle(a, b, rB, "C-GRID"); T(x, gy1 + 1.4 * u + rB, 0.22 * u, xName(i), "C-TEXT", 1, 2); });
-  GY.forEach((y, i) => { const [a, b] = P(gx1 + 1.6 * u + rB, y); d.circle(a, b, rB, "C-GRID"); T(gx1 + 1.6 * u + rB, y, 0.22 * u, yName(i), "C-TEXT", 1, 2); });
+  GX.forEach((x, i) => { const [a, b] = P(x, gy1 + 1.4 * u + rB); d.circle(a, b, rB, "C-GRID", 3); T(x, gy1 + 1.4 * u + rB, 0.22 * u, xName(i), "C-TEXT", 1, 2, 0, 6); });
+  GY.forEach((y, i) => { const [a, b] = P(gx1 + 1.6 * u + rB, y); d.circle(a, b, rB, "C-GRID", 3); T(gx1 + 1.6 * u + rB, y, 0.22 * u, yName(i), "C-TEXT", 1, 2, 0, 6); });
   for (let i = 1; i < GX.length; i++) dimH(GX[i - 1], GX[i], gy1 + 0.45 * u, f2(GX[i] - GX[i - 1]));
   if (GX.length > 2) dimH(GX[0], GX.at(-1), gy1 + 0.85 * u, f2(GX.at(-1) - GX[0]));
   for (let i = 1; i < GY.length; i++) dimV(GY[i - 1], GY[i], gx1 + 0.5 * u, f2(GY[i] - GY[i - 1]));
@@ -92,24 +93,24 @@ function planSheet(d, X0, k, frameData, res, project, title) {
     const up = room("up"), dn = room("down"), rt = room("right"), lf = room("left"), tagH = 0.32 * u;
     const wSide = up >= need + (up < Infinity ? tagH : 0) ? 1 : dn >= need + tagH + (dn < Infinity ? need : 0) ? -1 : 0, dSide = rt >= need ? 1 : lf >= need ? -1 : 0;
     // outline, piles, column
-    { const [a, b] = P(cx - B / 2, cy - D / 2), [e, g] = P(cx + B / 2, cy + D / 2); d.poly([[a, b], [e, b], [e, g], [a, g]], "C-CONC", true, red ? 0.04 * u : 0, red); }
+    { const [a, b] = P(cx - B / 2, cy - D / 2), [e, g] = P(cx + B / 2, cy + D / 2); d.poly([[a, b], [e, b], [e, g], [a, g]], "C-CONC", true, red ? 0.04 * u : 0, red || 3); }
     for (const [px, py] of f.r.piles ?? []) { if (f.kind === "spread" || !f.n) break; const h = (PILES[f.pile]?.b ?? 0.2) / 2, q = [[-h, -h], [h, -h], [h, h], [-h, h]];
-      for (let j = 0; j < 4; j++) { const [a, b] = q[j], [e, g] = q[(j + 1) % 4]; for (let s = 0; s < 1; s += 0.5) L(cx + px + a + (e - a) * s, cy + py + b + (g - b) * s, cx + px + a + (e - a) * (s + 0.3), cy + py + b + (g - b) * (s + 0.3), "C-PILE"); } }
+      for (let j = 0; j < 4; j++) { const [a, b] = q[j], [e, g] = q[(j + 1) % 4]; for (let s = 0; s < 1; s += 0.5) L(cx + px + a + (e - a) * s, cy + py + b + (g - b) * s, cx + px + a + (e - a) * (s + 0.3), cy + py + b + (g - b) * (s + 0.3), "C-PILE", 2); } }
     const col = colAt(f.p), cB = (col?.lv?.Bx ?? 20) / 100, cD = (col?.lv?.By ?? 20) / 100;
-    { const [a, b] = P(cx - cB / 2, cy), [e] = P(cx + cB / 2, cy); d.poly([[a, b], [e, b]], "C-COL", false, cD); }
+    { const [a, b] = P(cx - cB / 2, cy), [e] = P(cx + cB / 2, cy); d.poly([[a, b], [e, b]], "C-COL", false, cD, 3); }
     if (wSide) dimH(cx - B / 2, cx + B / 2, wSide > 0 ? cy + D / 2 + 0.22 * u : cy - D / 2 - 0.22 * u, f2(B), wSide > 0 ? cy + D / 2 : cy - D / 2, red);
     if (dSide) dimV(cy - D / 2, cy + D / 2, dSide > 0 ? cx + B / 2 + 0.22 * u : cx - B / 2 - 0.22 * u, f2(D), dSide > 0 ? cx + B / 2 : cx - B / 2, red);
     const ct = col ? frameData.colTypes?.[col.typeIdx]?.name : "", label = `${mark}${ct ? `,${ct}` : ""}${!wSide || !dSide ? ` ${f2(B)}x${f2(D)}` : ""}`;
     const below = dn >= (wSide < 0 ? need : 0) + tagH;
     const ty = below ? cy - D / 2 - (wSide < 0 ? need : 0) - 0.08 * u : cy + D / 2 + (wSide > 0 ? need : 0) + 0.08 * u;
-    T(cx - B / 2 + 0.03 * u, ty, 0.15 * u, label, "C-TAG", 0, below ? 3 : 1, 0, red);
+    T(cx - B / 2 + 0.03 * u, ty, 0.15 * u, label, "C-TAG", 0, below ? 3 : 1, 0, red || 3);
   }
   // ---- schedule table + notes (bottom of the drawing area), title + scale at the bottom right
   const heads = ["ฐาน", "จำนวน", "กว้าง × ยาว × หนา (ม.)", "ลึก Df (ม.)", "เข็ม / ฐานแผ่", "เหล็กล่างแนว X", "เหล็กล่างแนว Y", "ตอม่อ (ม.)", "เดือย"];
   const cw = [0.8, 0.8, 2.3, 1.1, 1.6, 2.6, 2.6, 1.3, 1.2].map((v) => v * u), rh = 0.36 * u, tX = X0 + AL, tY = AB + tabH - 0.35 * u, tw = cw.reduce((a, b) => a + b, 0);
-  d.text(tX, tY + 0.12 * u, 0.22 * u, "ตารางฐานราก", "C-TITLE", 0, 1);
+  d.text(tX, tY + 0.12 * u, 0.22 * u, "ตารางฐานราก", "C-TITLE", 0, 1, 0, 3);
   const rows = [heads, ...groups.map((g) => footingScheduleRow(g.f, g.mark, g.list.length))];
-  rows.forEach((row, i) => { const y = tY - i * rh; d.line(tX, y, tX + tw, y, i ? "C-FRAME2" : "C-FRAME"); let x = tX; row.forEach((s, j) => { d.text(x + 0.08 * u, y - rh / 2, (i ? 0.14 : 0.15) * u, s, "C-TEXT", 0, 2); x += cw[j]; }); });
+  rows.forEach((row, i) => { const y = tY - i * rh; d.line(tX, y, tX + tw, y, i ? "C-FRAME2" : "C-FRAME"); let x = tX; row.forEach((s, j) => { d.text(x + 0.08 * u, y - rh / 2, (i ? 0.14 : 0.15) * u, s, "C-TEXT", 0, 2, 0, 3); x += cw[j]; }); });
   { const yE = tY - rows.length * rh; d.line(tX, yE, tX + tw, yE, "C-FRAME"); let x = tX; for (let j = 0; j <= cw.length; j++) { d.line(x, tY, x, yE, "C-FRAME2"); x += cw[j] ?? 0; } }
   const qa = frameData.soil?.qa, pileF = groups.find((g) => g.f.kind !== "spread" && g.f.n);
   const notes = ["หมายเหตุ", "1. ขนาดเป็นเมตร ศูนย์ฐานรากตรงศูนย์เสา เว้นแต่ระบุ · Df วัดจากระดับดินถึงท้องฐานราก",
@@ -117,9 +118,9 @@ function planSheet(d, X0, k, frameData, res, project, title) {
     ...(qa ? [`4. ฐานแผ่ออกแบบด้วยแรงแบกทานดินที่ยอมให้ ${Math.round(qa).toLocaleString()} กก./ตร.ม. — ตรวจสอบดินจริงก่อนก่อสร้าง`] : []),
     ...(pileF ? [`${qa ? 5 : 4}. เข็ม ${[...new Set(groups.filter((g) => g.f.kind !== "spread" && g.f.n).map((g) => `${g.f.pile}${g.f.r?.Pallow ? ` ${f2(g.f.r.Pallow / 1000)} ตัน/ต้น` : ""}`))].join(", ")} (น้ำหนักปลอดภัย)`] : []),
     ...(foots.some((f) => f.clash?.length) ? ["ฐานที่ขอบหนา = ซ้อนหรือชิดฐานข้างเคียงเกินไป ต้องแก้ก่อนใช้แบบ"] : [])];
-  const nX = tX + tw + 0.6 * u; notes.forEach((s, i) => d.text(nX, tY - i * 0.3 * u, (i ? 0.15 : 0.18) * u, s, i ? "C-TEXT" : "C-TITLE", 0, 2));
+  const nX = tX + tw + 0.6 * u; notes.forEach((s, i) => d.text(nX, tY - i * 0.3 * u, (i ? 0.15 : 0.18) * u, s, i ? "C-TEXT" : "C-TITLE", 0, 2, 0, 3));
   const xT = X0 + AR - 3.2 * u, yT = AB + 0.4 * u;
-  d.text(xT, yT + 0.45 * u, 0.3 * u, "แปลนฐานราก", "C-TITLE", 0, 1); d.line(xT, yT + 0.38 * u, xT + 2.4 * u, yT + 0.38 * u, "C-TITLE"); d.text(xT, yT + 0.12 * u, 0.17 * u, `มาตราส่วน 1:${S}`, "C-TEXT", 0, 1);
+  d.text(xT, yT + 0.45 * u, 0.3 * u, "แปลนฐานราก", "C-TITLE", 0, 1, 0, 3); d.line(xT, yT + 0.38 * u, xT + 2.4 * u, yT + 0.38 * u, "C-TITLE", 3); d.text(xT, yT + 0.12 * u, 0.17 * u, `มาตราส่วน 1:${S}`, "C-TEXT", 0, 1, 0, 3);
 }
 
 // whole file: plan sheet + detail sheets. project = { name, location, owner, engineer, license, date }
