@@ -37,7 +37,7 @@ function autoGrid(pts) {
   return { x0: xs[0], y0: ys[0], dx: gaps(xs), dy: gaps(ys), sub: 1 };
 }
 
-export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark, onFromFrame = null, plateMembers = [] }) {
+export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark, onFromFrame = null, plateMembers = [], others = [], error = null }) {
   const svg = useRef(null), [tool, setTool] = useState("column"), [ortho, setOrtho] = useState(true), [snapOn, setSnapOn] = useState(true);
   useDeclutter(svg); // overlapping plan labels hidden until zoomed in
   const [start, setStart] = useState(null), [draft, setDraft] = useState([]), [cur, setCur] = useState(null), [drag, setDrag] = useState(null);
@@ -52,11 +52,11 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
   // guide from the structure (faint): outline + beams of the linked floor, to trace the roof; snapped to like any line
   const guide = roof.guide ?? null, guideSegs = guide ? [...(guide.beams ?? []).map((b) => [b.a, b.b, "แนวคาน (แปลนโครงสร้าง)"]), ...(guide.outline ?? []).map((a, i, P) => [a, P[(i + 1) % P.length], "ขอบอาคาร"])] : [];
   const sups = (roof.supports ?? fr?.supports ?? []).map((s) => ({ a: [+s.a[0].toFixed(3), +s.a[1].toFixed(3)], b: [+s.b[0].toFixed(3), +s.b[1].toFixed(3)] })), supAuto = !roof.supports;
-  const posts = fr?.posts.filter((p) => p.kind === "ดั้ง") ?? [], dangList = roof.dang ?? posts.map((p) => [+p.x.toFixed(3), +p.y.toFixed(3)]);
+  const posts = fr?.posts.filter((p) => p.kind === "ดั้ง" && !p.wallTop) ?? [], dangList = roof.dang ?? posts.map((p) => [+p.x.toFixed(3), +p.y.toFixed(3)]);
   const ridgeSegs = (g?.lines ?? []).filter((l) => l.type === "ridge" || l.type === "hip" || l.type === "valley").map((l) => [[l.p[0], l.p[1]], [l.q[0], l.q[1]], "แนวอกไก่/ตะเข้"]);
   // view box in model metres (y up): fit the eave once, then free pan / zoom
   const fit = () => {
-    const P = g?.eave ?? (roof.pts?.length ? roof.pts : [[0, 0], [12, 10]]), xs = P.map((p) => p[0]), ys = P.map((p) => p[1]), pad = 2;
+    const P = [...(g?.eave ?? (roof.pts?.length ? roof.pts : [[0, 0], [12, 10]])), ...others.flat()], xs = P.map((p) => p[0]), ys = P.map((p) => p[1]), pad = 2;
     const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad;
     return { x: x0, y: y0, w: Math.max(...xs) - x0 + pad, h: Math.max(...ys) - y0 + pad };
   };
@@ -118,7 +118,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
     if (!snapOn) return { p, kind: null };
     const r = 22 * px(), axis = (ortho || forceOrtho) && from ? (Math.abs(p[1] - from[1]) < 1e-9 ? 1 : 0) : -1; // -1 free, 1 horizontal, 0 vertical
     const keep = (q) => (axis < 0 ? q : axis === 1 ? [q[0], from[1]] : [from[0], q[1]]); // stay on the locked axis
-    const pts = [...cols.map((c) => [c, "เสา"]), ...plates.flatMap((l) => [[l.a, "ปลายอะเส"], [l.b, "ปลายอะเส"]]), ...roof.pts.map((c) => [c, "มุมผนัง"]),
+    const pts = [...cols.map((c) => [c, "เสา"]), ...plates.flatMap((l) => [[l.a, "ปลายอะเส"], [l.b, "ปลายอะเส"]]), ...roof.pts.map((c) => [c, "มุมผนัง"]), ...others.flatMap((P) => P.map((c) => [c, "มุมผืนอื่น"])),
       ...inner.flatMap((l) => [[l.a, "ปลายอะเสรับดั้ง"], [l.b, "ปลายอะเสรับดั้ง"]]), ...posts.map((c) => [[c.x, c.y], "ดั้ง"]), ...crossings.map((c) => [c, "จุดตัด"]),
       ...ridgeSegs.flatMap(([a, b]) => [[a, "ปลายอกไก่/ตะเข้"], [b, "ปลายอกไก่/ตะเข้"]]), ...(gridOn ? SX.flatMap((x) => SY.map((y) => [[x, y], null])) : [])];
     let best = null;
@@ -340,7 +340,7 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
           {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v === 1 ? "โหนดเฉพาะแกน" : `แบ่งช่องละ ${v}`}</option>)}
         </select>
         <button onClick={() => setVb(fit())} title="พอดีจอ" className={`${btn} text-gray-600 ring-gray-300`}><Hand className="h-3.5 w-3.5" />พอดีจอ</button>
-        <div className="ml-auto">{modeBar}</div>
+        {error && <span className="text-xs text-red-600">{error}</span>}<div className="ml-auto">{modeBar}</div>
       </div>
 
       <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_260px]">
@@ -358,14 +358,16 @@ export default function DrawBoard({ roof, set, g, fr, loose = [], modeBar, dark,
             <g stroke={dark ? "#6e7591" : "#98a2b3"}>{axes}</g>
             {g && <polygon points={ring(g.eave)} fill={dark ? "#7b8cff0d" : "#465fff08"} stroke="#8b8d98" strokeWidth={1.2 * k} strokeDasharray={`${6 * k} ${4 * k}`} />}
             {g?.lines.filter((l) => l.type !== "eave").map((l, i) => <line key={`r${i}`} x1={l.p[0]} y1={-l.p[1]} x2={l.q[0]} y2={-l.q[1]} stroke={LINE_COLORS[l.type]} strokeWidth={1.5 * k} opacity={0.45} />)}
+            {others.map((P, i) => <polygon key={`o${i}`} points={ring(P)} fill={dark ? "#ffffff08" : "#0000000a"} stroke="#98a2b3" strokeWidth={1.5 * k} strokeDasharray={`${5 * k} ${3 * k}`} />)}
             <polygon points={ring(roof.pts)} fill="none" stroke={dark ? "#cdd1e2" : "#344054"} strokeWidth={2.5 * k} />
+            {roof.pts.map((a, i) => roof.edges[i]?.type === "wall" && <line key={`wl${i}`} x1={a[0]} y1={-a[1]} x2={roof.pts[(i + 1) % roof.pts.length][0]} y2={-roof.pts[(i + 1) % roof.pts.length][1]} stroke={LINE_COLORS.wall} strokeWidth={5 * k} opacity={0.8} />)}
             {tool === "wall" && roof.pts.map((a, i) => {
               const b = roof.pts[(i + 1) % roof.pts.length], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], ty = roof.edges[i]?.type ?? "hip", gable = ty !== "hip";
               // click cycles ปั้นหยา → จั่ว → มนิลา (hip below, small gable on top)
               return (
-                <g key={`e${i}`} className="cursor-pointer" onPointerDown={(e) => { e.stopPropagation(); commit({ edges: roof.edges.map((x, j) => (j === i ? { type: ({ hip: "gable", gable: "manila", manila: "hip" })[ty] ?? "hip" } : x)) }); }}>
-                  <rect x={m[0] - 26 * k} y={-m[1] - 9 * k} width={52 * k} height={18 * k} rx={4 * k} fill={ty === "gable" ? LINE_COLORS.rake : ty === "manila" ? "#8e4ec6" : dark ? "#3a4163" : "#fff"} stroke="#98a2b3" strokeWidth={k} />
-                  {txt(m, ty === "gable" ? "จั่ว" : ty === "manila" ? "มนิลา" : "ปั้นหยา", gable ? "#fff" : dark ? "#e3e6f0" : "#344054", 11)}
+                <g key={`e${i}`} className="cursor-pointer" onPointerDown={(e) => { e.stopPropagation(); commit({ edges: roof.edges.map((x, j) => (j === i ? { type: ({ hip: "gable", gable: "manila", manila: "wall", wall: "hip" })[ty] ?? "hip" } : x)) }); }}>
+                  <rect x={m[0] - 26 * k} y={-m[1] - 9 * k} width={52 * k} height={18 * k} rx={4 * k} fill={ty === "gable" ? LINE_COLORS.rake : ty === "manila" ? "#8e4ec6" : ty === "wall" ? LINE_COLORS.wall : dark ? "#3a4163" : "#fff"} stroke="#98a2b3" strokeWidth={k} />
+                  {txt(m, ty === "gable" ? "จั่ว" : ty === "manila" ? "มนิลา" : ty === "wall" ? "ติดผนัง" : "ปั้นหยา", gable || ty === "wall" ? "#fff" : dark ? "#e3e6f0" : "#344054", 11)}
                   {txt([m[0], m[1] - 18 * k], `${fmt(dist(a, b), 2)} ม.`, "#667085", 11)}
                 </g>
               );

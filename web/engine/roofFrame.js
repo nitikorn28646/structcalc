@@ -35,6 +35,15 @@ function faceFrame(g, f) {
   return { a, u, nrm, L, reach, plan: f.P.map((v) => [v[0], v[1]]) };
 }
 
+// a point on an outline edge of type "wall" (roofGeometry g.wallEdges)
+export const onWallEdge = (g, [x, y], tol = 0.05) => (g.wallEdges ?? []).some((k) => { const a = g.pts[k], b = g.pts[(k + 1) % g.pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const t = ((x - a[0]) * (b[0] - a[0]) + (y - a[1]) * (b[1] - a[1])) / (L * L); return t > -0.01 && t < 1.01 && Math.abs((x - a[0]) * (b[1] - a[1]) - (y - a[1]) * (b[0] - a[0])) / L < tol; });
+// roof height on a wall edge line (the plate fixed to the higher wall): the surface just inside the line
+export function wallTopZ(g, k, pt) {
+  const a = g.pts[k], b = g.pts[(k + 1) % g.pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]), nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L; // inward normal of a CCW ring
+  return surfaceZ(g, [pt[0] + nx * 2e-3, pt[1] + ny * 2e-3]);
+}
+
 // Roof surface height at a plan point (face that contains it, else eave height).
 export function surfaceZ(g, pt) {
   for (const f of g.faces) if (!f.gable && f.plane && inside(f.P, pt)) return f.plane.a * pt[0] + f.plane.b * pt[1] + f.plane.c;
@@ -123,7 +132,12 @@ export function frameRoof(g, roof, supportsIn) {
   const addPost = ([x, y], top, kind) => {
     const k = `${x.toFixed(2)},${y.toFixed(2)}`;
     // a post needs something to stand on: none beyond the walls (ridge ends over a gable overhang)
-    if (top - g.H > 0.15 && !key.has(k) && (inside(g.pts, [x, y]) || onWall(g.pts, [x, y]))) { key.add(k); posts.push({ x, y, top, kind, len: top - g.H }); }
+    if (!(top - g.H > 0.15 && !key.has(k) && (inside(g.pts, [x, y]) || onWall(g.pts, [x, y])))) return;
+    key.add(k);
+    // on a wall edge (multi-level roof): the hip / ridge end rests on the wall plate fixed to the higher wall — no post is built there,
+    // the point stays so that its load goes onto that plate (designRoof: post on a wall-plate span)
+    if (onWallEdge(g, [x, y])) posts.push({ x, y, top, kind, len: 0, wallTop: true });
+    else posts.push({ x, y, top, kind, len: top - g.H });
   };
   const along = (a, b, za, zb, kind) => {
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / postSp - 1e-9));

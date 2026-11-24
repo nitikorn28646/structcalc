@@ -6,6 +6,7 @@ import { SVGRenderer } from "echarts/renderers";
 import { BarChart3, Download, GitCommitHorizontal, Home, Plus, Ruler, Trash2, Triangle, Wand2 } from "lucide-react";
 import Frame3D from "./Frame3D.jsx";
 import { roofGeometry } from "../engine/roof.js";
+import { mergeRuns, newPart, partDesign, partName, partSetter, partView, partsOf } from "../engine/roofParts.js";
 import { frameRoof } from "../engine/roofFrame.js";
 import { DEFAULT_DESIGN, ROOFINGS, autoInnerPlates, carrierPlates, designRoof, BATTEN_RANGE } from "../engine/roofMembers.js";
 import { SECTIONS, SECTION_TYPES, SYM } from "../engine/steelSections.js";
@@ -57,11 +58,20 @@ export function splitPlates(roof) {
   return { plates: all.filter(out), innerPlates: all.filter((l) => !out(l)) };
 }
 
+function runPart(roof0, sk) {
+  const roof = { ...roof0, ...splitPlates(roof0) };
+  try { const g = roofGeometry(roof, sk); const fr = frameRoof(g, roof, roof.supports ?? (roof.design?.autoSupports === true ? null : [])); /* สะพาน: none unless drawn or "auto" ticked (user 2026-11-05: auto ones looked like real members) */ return { g, fr, dz: designRoof(g, fr, roof, partDesign(roof.design, roof.partIdx ?? 0)) }; } catch (e) { return { error: e.message }; }
+}
+// every roof part (engine/roofParts.js) designed on its own, one merged result; a one-part roof = exactly runPart (old files unchanged)
+const runCache = new WeakMap();
 export function runRoof(roof0, sk) {
   if (!sk) return {};
   if (!(roof0?.pts?.length >= 3)) return { empty: true };
-  const roof = { ...roof0, ...splitPlates(roof0) };
-  try { const g = roofGeometry(roof, sk); const fr = frameRoof(g, roof, roof.supports ?? (roof.design?.autoSupports === true ? null : [])); /* สะพาน: none unless drawn or "auto" ticked (user 2026-11-05: auto ones looked like real members) */ return { g, fr, dz: designRoof(g, fr, roof, roof.design) }; } catch (e) { return { error: e.message }; }
+  if (!roof0.parts?.length) return runPart(roof0, sk);
+  if (runCache.has(roof0)) return runCache.get(roof0);
+  const parts = partsOf(roof0), out = mergeRuns(roof0, parts.map((p) => (p.pts?.length >= 3 ? runPart(p, sk) : { error: "ยังไม่ได้วาดผนัง" })));
+  runCache.set(roof0, out);
+  return out;
 }
 
 export const FRAME_COLORS = { purlin: "#98a2b3", rafter: "#b54708", support: "#7a5af8", post: "#0e9384" };
@@ -94,7 +104,7 @@ function PlanEditor({ roof, set, g, fr, mode, sel, setSel, dark }) {
     set("pts", [...roof.pts.slice(0, i + 1), m, ...roof.pts.slice(i + 1)]);
     set("edges", [...roof.edges.slice(0, i + 1), { ...roof.edges[i] }, ...roof.edges.slice(i + 1)]);
   };
-  const toggle = (i) => set("edges", roof.edges.map((e, k) => (k === i ? { type: ({ hip: "gable", gable: "manila", manila: "hip" })[e.type ?? "hip"] ?? "hip" } : e))); // hip → gable → manila
+  const toggle = (i) => set("edges", roof.edges.map((e, k) => (k === i ? { type: ({ hip: "gable", gable: "manila", manila: "wall", wall: "hip" })[e.type ?? "hip"] ?? "hip" } : e))); // hip → gable → manila
   const grid = [];
   for (let x = Math.ceil(x0); x <= x0 + w; x++) grid.push(<line key={`x${x}`} x1={x} x2={x} y1={y0} y2={y0 + h} strokeWidth={x % 5 ? sc * 0.04 : sc * 0.09} />);
   for (let y = Math.ceil(y0); y <= y0 + h; y++) grid.push(<line key={`y${y}`} y1={Y(y)} y2={Y(y)} x1={x0} x2={x0 + w} strokeWidth={y % 5 ? sc * 0.04 : sc * 0.09} />);
@@ -136,8 +146,8 @@ function PlanEditor({ roof, set, g, fr, mode, sel, setSel, dark }) {
           <g key={`e${i}`} fontSize={sc * 1.1} textAnchor="middle" dominantBaseline="middle">
             <text x={mx + nx * o} y={Y(my + ny * o)} fill={dark ? "#9097b1" : "#667085"}>{fmt(L, 2)}</text>
             <g className="cursor-pointer" onClick={() => toggle(i)}>
-              <rect x={mx - sc * 1.9} y={Y(my) - sc * 0.8} width={sc * 3.8} height={sc * 1.6} rx={sc * 0.4} fill={ty === "manila" ? "#8e4ec6" : gable ? LINE_COLORS.rake : dark ? "#3a4163" : "#fff"} stroke={dark ? "#6e7591" : "#d0d5dd"} strokeWidth={sc * 0.06} />
-              <text x={mx} y={Y(my)} fill={gable ? "#fff" : dark ? "#cdd1e2" : "#344054"} fontSize={sc * 0.9}>{ty === "manila" ? "มนิลา" : gable ? "จั่ว" : "ปั้นหยา"}</text>
+              <rect x={mx - sc * 1.9} y={Y(my) - sc * 0.8} width={sc * 3.8} height={sc * 1.6} rx={sc * 0.4} fill={ty === "manila" ? "#8e4ec6" : ty === "wall" ? LINE_COLORS.wall : gable ? LINE_COLORS.rake : dark ? "#3a4163" : "#fff"} stroke={dark ? "#6e7591" : "#d0d5dd"} strokeWidth={sc * 0.06} />
+              <text x={mx} y={Y(my)} fill={gable ? "#fff" : dark ? "#cdd1e2" : "#344054"} fontSize={sc * 0.9}>{ty === "manila" ? "มนิลา" : ty === "wall" ? "ติดผนัง" : gable ? "จั่ว" : "ปั้นหยา"}</text>
             </g>
             <g className="cursor-copy" onClick={() => insert(i)}>
               <circle cx={mx + (b[0] - a[0]) / L * sc * 3} cy={Y(my + (b[1] - a[1]) / L * sc * 3)} r={sc * 0.65} fill={dark ? "#2c3250" : "#f2f4f7"} />
@@ -233,7 +243,7 @@ function MemberTable({ dz, d, setD, setHover }) {
           {dz.rows.map((x) => {
             const r = x.r, post = x.key === "post";
             return (
-              <tr key={x.key} className="border-b border-gray-100">
+              <tr key={`${x.part ?? 0}-${x.key}`} className="border-b border-gray-100">
                 <td className="px-2 py-2 font-medium text-gray-800">{x.label}</td>
                 <td className="px-2">{x.count > 1 ? "2×" : ""}{secLabel(r.section)}
                   {x.mixed && <span className="ml-1 rounded bg-brand-50 px-1 text-[10px] text-brand-500">หลายขนาด</span>}
@@ -355,17 +365,36 @@ function SlopeFrom({ roof, g, set }) {
   );
 }
 
-export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, res = null, focus = false }) {
-  const sk = useSkeleton(), { g, fr, dz, error, empty } = runRoof(roof, sk), [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|loads|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
+export function RoofPage({ roof: roofAll, set: setAll, dark, onFromFrame = null, frame = null, res = null, focus = false }) {
+  // multi-level roofs (engine/roofParts.js): every board / setting edits the current part; design, 3D and totals show all parts
+  const [cur0, setCur] = useState(0), nParts = 1 + (roofAll.parts?.length ?? 0), cur = Math.min(cur0, nParts - 1);
+  const roof = partView(roofAll, cur), set = partSetter(setAll, cur), [delAsk, setDelAsk] = useState(false);
+  const sk = useSkeleton(), all = runRoof(roofAll, sk), { empty } = all, multi = nParts > 1;
+  const g = multi ? all.g?.parts?.[cur] ?? (cur === 0 ? null : null) : all.g, fr = multi ? all.fr?.parts?.[cur] ?? null : all.fr;
+  const dz = all.dz && multi ? { ...all.dz, members: all.dz.members.filter((m) => (m.part ?? 0) === cur), loose: all.dz.parts?.[cur]?.loose ?? [], warnings: all.dz.parts?.[cur]?.warnings ?? [] } : all.dz;
+  const error = all.error ?? all.partErrors?.find((e) => e.startsWith(partName(roofAll, cur)));
+  const addPart = () => { setAll("parts", (ps = []) => [...ps, newPart(roofAll)]); setCur(nParts); };
+  const delPart = () => { if (cur === 0) return; setAll("parts", (ps = []) => ps.filter((_, i) => i !== cur - 1)); setCur(cur - 1); setDelAsk(false); };
+  const partBar = (
+    <span className="flex items-center gap-1 text-xs">
+      <span className="text-gray-500">ผืน</span>
+      <select value={cur} onChange={(e) => { setCur(Number(e.target.value)); setDelAsk(false); }} className="h-7 rounded-md border border-gray-300 bg-white px-1.5 text-xs text-gray-700">
+        {Array.from({ length: nParts }, (_, i) => <option key={i} value={i}>{partName(roofAll, i)}{multi ? ` · +${Number(partsOf(roofAll)[i].H ?? 0).toFixed(2)}` : ""}</option>)}
+      </select>
+      <button onClick={addPart} title="เพิ่มหลังคาอีกผืน (ระดับชายคาต่างกัน) — ขอบที่ชนผนังอาคารที่สูงกว่าให้ตั้งเป็น &quot;ติดผนัง&quot;" className="rounded-md px-1.5 py-1 text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50"><Plus className="inline h-3 w-3" />ผืน</button>
+      {cur > 0 && <button onClick={() => (delAsk ? delPart() : setDelAsk(true))} className={`rounded-md px-1.5 py-1 ring-1 ${delAsk ? "bg-red-600 text-[#fff] ring-red-600" : "text-gray-500 ring-gray-300 hover:text-red-600"}`}>{delAsk ? "ยืนยันลบผืนนี้" : <Trash2 className="h-3 w-3" />}</button>}
+    </span>
+  );
+  const [mode, setMode] = useState(() => location.search.match(/roof=(draw|shape|loads|frame|design|plate)/)?.[1] ?? "draw"), [sel, setSel] = useState(null), [hover, setHover] = useState(null);
   useEffect(() => { const f = (e) => { if (e.detail?.roof) setMode(e.detail.roof); }; window.addEventListener("structcalc:go", f); return () => window.removeEventListener("structcalc:go", f); }, []); // checklist bar → roof tab
   const [view, setView] = useState("2d"), [side, setSide] = useState("table"), [pickP, setPickP] = useState(null);
-  const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz);
-  const modeBar = (
+  const setD = (k, v) => set("design", { ...roof.design, ...(typeof k === "object" ? k : { [k]: v }) }), pl = platesOf(dz), plAll = multi ? platesOf(all.dz) : pl;
+  const modeBar = (<span className="flex flex-wrap items-center gap-2">
     <span className="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium">
       {[["draw", "1 วาดแปลน"], ["shape", "2 รูปทรง"], ["loads", "3 น้ำหนัก / วัสดุมุง"], ["frame", "4 โครงหลังคา"], ["design", "5 ออกแบบเหล็ก"], ["plate", "6 อะเส"]].map(([k, t]) => (
         <button key={k} onClick={() => setMode(k)} className={`rounded-md px-3 py-1 ${mode === k ? "bg-white text-gray-800 shadow-theme-xs" : "text-gray-500"}`}>{t}</button>
       ))}
-    </span>
+    </span>{partBar}</span>
   );
   const fv = (key, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={roof.frame[key]} step={step} onChange={(v) => set("frame", { ...roof.frame, [key]: v })} /></Field>;
   const supList = () => fr.supports.map(({ a, b }) => ({ a, b }));
@@ -373,10 +402,15 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
   const f = (key, label, unit, step) => <Field label={label} unit={unit}><NumberInput value={roof[key]} step={step} onChange={(v) => set(key, v)} /></Field>;
   const setPt = (i, k, v) => set("pts", roof.pts.map((p, j) => (j === i ? (k ? [p[0], v] : [v, p[1]]) : p)));
   const del = (i) => { if (roof.pts.length <= 3) return; set("pts", roof.pts.filter((_, j) => j !== i)); set("edges", roof.edges.filter((_, j) => j !== i)); };
-  if (mode === "draw") return <DrawBoard roof={roof} set={set} g={g} fr={fr} loose={dz?.loose} plateMembers={dz?.members.filter((m) => m.group === "plate")} modeBar={modeBar} dark={dark} onFromFrame={onFromFrame} />;
+  const others = multi ? partsOf(roofAll).filter((_, i) => i !== cur).map((p) => p.pts ?? []).filter((p) => p.length >= 3) : [];
+  if (mode === "draw") return <DrawBoard roof={roof} set={set} g={g} fr={fr} loose={dz?.loose} plateMembers={dz?.members.filter((m) => m.group === "plate")} modeBar={modeBar} dark={dark} onFromFrame={cur === 0 ? onFromFrame : null} others={others} error={multi ? error : null} />;
   const settings = (
       <div className="space-y-3">
-        {mode !== "design" && mode !== "plate" && mode !== "loads" && <Panel title="รูปทรงหลังคา" icon={Triangle}>
+        {mode !== "design" && mode !== "plate" && mode !== "loads" && <Panel title={multi ? `รูปทรงหลังคา — ${partName(roofAll, cur)}` : "รูปทรงหลังคา"} icon={Triangle}>
+          {multi && <div className="mb-3 grid grid-cols-2 gap-3">
+            <Field label="ชื่อผืน"><input className={SEL} value={partName(roofAll, cur)} onChange={(e) => set("name", e.target.value)} /></Field>
+            {cur > 0 && frame && <Field label="ลงโครงสร้างที่ชั้น"><Select value={roof.linkFloor ?? ""} onChange={(v) => set("linkFloor", v === "" ? null : Number(v))} options={[["", "ชั้นเดียวกับหลังคาหลัก"], ...frame.floors.map((fl, k) => [k, fl.name])]} /></Field>}
+          </div>}
           <div className="grid grid-cols-2 gap-3">
             {f("slope", "ความชัน", "องศา", "1")}{f("overhang", "ชายคายื่น", "m", "0.1")}
             {g && <SlopeFrom roof={roof} g={g} set={set} />}
@@ -418,7 +452,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
                 <span className="text-[11px] font-semibold text-gray-400">{i + 1}</span>
                 <NumberInput className="compact-num !h-8" value={p[0]} step="0.1" onChange={(v) => setPt(i, 0, v)} />
                 <NumberInput className="compact-num !h-8" value={p[1]} step="0.1" onChange={(v) => setPt(i, 1, v)} />
-                <Select className="!h-8 !px-2 text-[12px]" value={roof.edges[i]?.type ?? "hip"} onChange={(v) => set("edges", roof.edges.map((e, k) => (k === i ? { type: v } : e)))} options={[["hip", "ปั้นหยา"], ["gable", "จั่ว"], ["manila", "มนิลา"]]} />
+                <Select className="!h-8 !px-2 text-[12px]" value={roof.edges[i]?.type ?? "hip"} onChange={(v) => set("edges", roof.edges.map((e, k) => (k === i ? { type: v } : e)))} options={[["hip", "ปั้นหยา"], ["gable", "จั่ว"], ["manila", "มนิลา"], ["wall", "ติดผนัง"]]} />
                 <button onClick={() => del(i)} disabled={roof.pts.length <= 3} className="grid h-7 w-5 place-items-center text-gray-400 hover:text-red-500 disabled:opacity-30" title="ลบจุด"><Trash2 className="h-3.5 w-3.5" /></button>
               </li>
             ))}
@@ -430,7 +464,7 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
             ["น้ำหนักอะเส (กก.)", fmt(pl.plates.reduce((a, x) => a + x.weight, 0), 0)], ["ช่วงยาวสุด (ม.)", fmt(Math.max(...pl.plates.map((x) => x.span)), 2)],
             ["หน่วยแรงสูงสุด", `${fmt(Math.max(...pl.plates.map((x) => x.stress)) * 100, 0)}%`], ["ระยะแอ่นสูงสุด", `${fmt(Math.max(...pl.plates.map((x) => x.defl)) * 100, 0)}%`],
             ["ขนาดเหล็กที่ใช้", `${pl.sizes.length} ขนาด`], ["สรุป", pl.plates.every((x) => x.r.ok) ? "ผ่านทุกช่วง" : `ไม่ผ่าน ${pl.plates.filter((x) => !x.r.ok).length} ช่วง`]]
-            : mode === "design" && dz ? [["น้ำหนักเหล็กรวม (กก.)", fmt(dz.weight, 0)], ["เหล็กต่อพื้นที่ (กก./ม²)", fmt(dz.weight / g.roofArea, 2)],
+            : mode === "design" && dz ? [["น้ำหนักเหล็กรวม (กก.)", fmt(dz.weight, 0)], ["เหล็กต่อพื้นที่ (กก./ม²)", fmt(dz.weight / (all.g?.roofArea ?? g.roofArea), 2)],
             ["แป", dz.rows[0].r.section.name], ["จันทัน", dz.rows[1].r.section.name], ["หน่วยแรงสูงสุด", `${fmt(Math.max(...dz.rows.map((x) => x.stress)) * 100, 0)}%`],
             ["ระยะแอ่นสูงสุด", `${fmt(Math.max(...dz.rows.map((x) => x.defl)) * 100, 0)}%`], ["ผ่าน (กลุ่ม)", `${dz.rows.filter((x) => x.r.ok).length}/${dz.rows.length}`], ["สรุป", dz.ok ? "ผ่านทุกข้อ" : "ยังไม่ผ่าน"]]
             : mode === "frame" && fr ? [["พื้นที่มุงจริง (ม²)", fmt(g.roofArea, 2)], ["จันทัน (ตัว)", fr.rafters.length], ["ช่วงจันทันยาวสุด (ม.)", fmt(fr.maxSpan, 2)],
@@ -449,11 +483,11 @@ export function RoofPage({ roof, set, dark, onFromFrame = null, frame = null, re
               <div className="relative min-h-[300px] flex-[3] rounded-xl bg-gray-50 p-1"><span className="pointer-events-none absolute left-2 top-1 text-[10px] text-gray-400">ล้อเมาส์ = ซูม · ลาก = เลื่อน · ดับเบิลคลิก = พอดีจอ</span><button onClick={() => setSide(side === "table" ? null : "table")} className="absolute right-2 top-1 z-10 rounded-md bg-white px-2 py-0.5 text-[11px] text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50">{side === "table" ? "ซ่อนตาราง ▾" : "แสดงตาราง ▴"}</button><PlatePlan g={g} plates={pl.plates} posts={fr?.posts} loose={dz?.loose}columns={roof.columns?.length ? roof.columns : null} hover={hover} setHover={setHover} dark={dark} picked={pickP} onPick={(m) => setPickP(pickP?.id === m.id ? null : m)} /><PlatePick m={pickP && pl.plates.find((x) => x.id === pickP.id)} d={roof.design} setD={setD} onClose={() => setPickP(null)} /></div>
               <div className={side === "table" ? "min-h-0 flex-[1.3] overflow-auto" : "hidden"}><PlateTable plates={pl.plates} d={roof.design} setD={setD} setHover={setHover} warnings={dz?.warnings} looseN={dz?.loose?.length ?? 0} onCarriers={() => set("innerPlates", [...(roof.innerPlates ?? []), ...carrierPlates(roof, g, dz?.loose ?? [])])} /></div>
             </div>
-          ) : mode === "design" ? <MemberTable dz={dz} d={roof.design} setD={setD} setHover={setHover} /> : <div className="h-full rounded-xl bg-gray-50 p-2"><PlanEditor roof={roof} set={set} g={g} fr={fr} mode={mode} sel={sel} setSel={setSel} dark={dark} /></div>
+          ) : mode === "design" ? <MemberTable dz={all.dz} d={roof.design} setD={setD} setHover={setHover} /> : <div className="h-full rounded-xl bg-gray-50 p-2"><PlanEditor roof={roof} set={set} g={g} fr={fr} mode={mode} sel={sel} setSel={setSel} dark={dark} /></div>
         )}
   </div>);
-  const roof3d = g && <Roof3D loose={dz?.loose ?? []} onPick={mode === "plate" || mode === "design" ? (m) => setHover(m) : null} g={g} fr={mode !== "shape" ? fr : null} hover={mode === "design" || mode === "plate" ? hover : null} plates={mode === "design" || mode === "plate" ? pl.plates : null} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
-  const all3d = frame && res ? <Frame3D frame={frame} res={res} cur={frame.floors.length - 1} roof={roof} dark={dark} roofOn className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" /> : roof3d;
+  const roof3d = all.g && <Roof3D loose={all.dz?.loose ?? []} onPick={mode === "plate" || mode === "design" ? (m) => setHover(m) : null} g={all.g} fr={mode !== "shape" ? all.fr : null} hover={mode === "design" || mode === "plate" ? hover : null} plates={mode === "design" || mode === "plate" ? plAll.plates : null} dark={dark} className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" />;
+  const all3d = frame && res ? <Frame3D frame={frame} res={res} cur={frame.floors.length - 1} roof={roofAll} dark={dark} roofOn className="h-full min-h-[300px] overflow-hidden rounded-xl border border-gray-200" /> : roof3d;
   const views = [["2d", mode === "design" ? "ตาราง" : "แปลน 2D"], ["3d", "3D หลังคา"], ["all", "3D ทั้งหลัง"], ["split", "2D + 3D"]];
   const centre = view === "3d" ? roof3d : view === "all" ? all3d : view === "split" ? <div className="grid h-full min-h-0 grid-cols-2 gap-2"><div className="min-h-0">{plan}</div><div className="min-h-0">{all3d}</div></div> : plan;
   return (

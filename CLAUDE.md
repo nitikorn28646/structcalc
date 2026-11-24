@@ -938,3 +938,20 @@ Frame3D / DXF plan draw the rectangle once at center (dup = column only), step 8
 sheets. Pile caps are not combined (warning stays). Tests: cli/combined-check.mjs 46 (independent face moments, statics, q, As, shear, bands,
 limits, frame integration, off switch — in the gate); footingdxf-check 300 (+ weak-soil Yasothon with a combined footing). Yasothon qa 6 t/m²:
 3.50,6.90 + 3.50,7.90 → 2.80 × 3.35 × 0.30; 6.00,2.40 + 6.00,3.40 cannot (soil with the neighbours) → warning. Other projects unchanged.
+MULTI-LEVEL ROOFS (2026-11-24, user "หลังคาหลายระดับ (ชายคาสูงต่างกัน)", chose: separate parts · wall plate fixed to the wall, load down to columns/beams):
+engine/roofParts.js — part 1 = the roof object itself (old files = one part, runRoof path unchanged), parts 2… = roof.parts[] with own PART_KEYS
+(pts, edges, slope, overhang, H, plates, innerPlates, columns, dang, supports, name, linkFloor, plateDiv); shared: frame, design, grid, guide, snap.
+partsOf / partView / partSetter (functional set: App setRoof accepts v as a function) / newPart / partDesign (memberPick etc. stored as "P2:<id>")
+/ mergeRuns (faces / lines / members tagged .part, ids "P2:…", tags "2·A1", labels "<part name> · …", totals summed, g.parts / fr.parts / dz.parts
+kept). RoofPage runRoof(roof) = runPart per part + mergeRuns (WeakMap cache). New edge type "wall" (ติดผนัง; menus cycle ปั้นหยา → จั่ว → มนิลา →
+ติดผนัง): roof.js offsetPolygon per-edge offset (0 there), treated as a gable cut on the wall line itself, no gable wall face, top line type "wall",
+g.wallEdges; roofFrame: posts on a wall edge = wallTop (len 0, not drawn / not designed, load stays as a point on the wall plate); roofMembers:
+wall-edge plate spans = "อะเสยึดผนัง" at the highest roof point along the span (level), load = governing rafter's top reaction × rafters really ending
+on the span / span length (hip-corner jacks end on the hips). roofLink roofPoints(roof, host, hostOf): points carry floor = part.linkFloor (null =
+the linked floor), snapped on that floor; frame.js roofPointsOn(frame, k) (used by gravity, loadArrows, roofStatus). UI: part select / "+ผืน" /
+delete (two clicks) next to the roof tabs, shape panel name + "ลงโครงสร้างที่ชั้น", DrawBoard edits the current part (others dashed, their corners
+snap, fit shows all parts), design table / 3D / report all parts (Roof3D walls per part, posts at the part's H), report table of parts.
+Test cli/roof-multilevel.cjs (browser, dev server) 31/31: planar, covers its plan, nothing past the wall, top = H + run·tanθ, wall plate level +
+carries every rafter, ids prefixed, load down ≥ independent, main part identical to alone, roofPoints floors. Known (pre-existing, not changed):
+the governing-rafter method loads every wall plate with Rwall/D incl. gable-side plates → a gable lean-to sends ~40 % more than the independent
+total (conservative). Not done: overlapping parts in plan, slanted wall edges checks, RoofLinkCard level check per part.

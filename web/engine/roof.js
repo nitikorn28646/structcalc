@@ -3,10 +3,11 @@
 
 export const signedArea = (pts) => pts.reduce((a, [x, y], i) => { const [u, v] = pts[(i + 1) % pts.length]; return a + x * v - u * y; }, 0) / 2;
 
-// Offset every edge outward by d and intersect neighbouring lines (outline must be CCW).
-export function offsetPolygon(pts, d) {
+// Offset every edge outward by d and intersect neighbouring lines (outline must be CCW). d may be one number or one per edge
+// (an edge against a higher wall — type "wall" — has no overhang: d 0).
+export function offsetPolygon(pts, d0) {
   const n = pts.length, lines = pts.map((p, i) => {
-    const q = pts[(i + 1) % n], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    const q = pts[(i + 1) % n], L = Math.hypot(q[0] - p[0], q[1] - p[1]), d = Array.isArray(d0) ? d0[i] : d0;
     const nx = (q[1] - p[1]) / L, ny = -(q[0] - p[0]) / L; // outward normal of a CCW ring
     return { p: [p[0] + nx * d, p[1] + ny * d], u: [(q[0] - p[0]) / L, (q[1] - p[1]) / L] };
   });
@@ -44,14 +45,17 @@ const area3 = (P) => {
 export function roofGeometry(roof, skeleton) {
   let pts = roof.pts.map((p) => [...p]), edges = roof.edges;
   if (signedArea(pts) < 0) { pts = pts.reverse(); edges = [...edges.slice(0, -1)].reverse().concat(edges.slice(-1)); }
-  const n = pts.length, eave = offsetPolygon(pts, roof.overhang), tan = Math.tan((roof.slope * Math.PI) / 180);
+  // WALL edges (multi-level roofs, user 2026-11-24): the roof part abuts a higher wall there — no overhang, the roof planes are cut
+  // on the wall line itself (like a gable but no gable wall is made), the rafters end on a wall plate fixed to that wall
+  const isW = edges.map((e) => e?.type === "wall");
+  const n = pts.length, eave = offsetPolygon(pts, isW.some(Boolean) ? isW.map((w) => (w ? 0 : roof.overhang)) : roof.overhang), tan = Math.tan((roof.slope * Math.PI) / 180);
   // segments i, j of a closed ring cross (not neighbours) → the outline folds over itself
   const crosses = (P) => { const m = P.length, X = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
     for (let i = 0; i < m; i++) for (let j = i + 2; j < m; j++) { if (i === 0 && j === m - 1) continue; const a = P[i], b = P[(i + 1) % m], c = P[j], d = P[(j + 1) % m];
       if (X(a, b, c) * X(a, b, d) < -1e-9 && X(c, d, a) * X(c, d, b) < -1e-9) return true; } return false; };
   if (eave.some((p, i) => Math.hypot(p[0] - eave[(i + 1) % n][0], p[1] - eave[(i + 1) % n][1]) < 1e-6) || crosses(eave))
     throw new Error(`ชายคาชนกันที่ช่องแคบ (ช่องกว้างไม่เกิน 2 × ชายคา ${roof.overhang} ม.) — ลดระยะชายคา หรือขยายช่องระหว่างปีกอาคาร`);
-  const isG = edges.map((e) => e?.type === "gable"), isM = edges.map((e) => e?.type === "manila"), zE = roof.H - roof.overhang * tan;
+  const isG = edges.map((e) => e?.type === "gable" || e?.type === "wall"), isM = edges.map((e) => e?.type === "manila"), zE = roof.H - roof.overhang * tan;
   // GABLES (user 2026-11-04: only hip roofs came out right): every gable edge is pushed far outward (its two neighbours lengthened),
   // the hip skeleton of that extended outline is taken, and each roof face is cut back at the real gable line → exact planes for
   // gable / shed (หมาแหงน: three gables) / mixed gable-hip / gable wings of L, T, U plans. The gable wall is the vertical face left
@@ -66,11 +70,11 @@ export function roofGeometry(roof, skeleton) {
   for (let k = 0; k < n; k++) if (isG[k]) {
     const mid = [(eave[k][0] + eave[(k + 1) % n][0]) / 2 + E[k].nrm[0] * 1e-3, (eave[k][1] + eave[(k + 1) % n][1]) / 2 + E[k].nrm[1] * 1e-3], far = [mid[0] + E[k].nrm[0] * D, mid[1] + E[k].nrm[1] * D];
     for (let q = 0; q < n; q++) { if (q === k) continue; const a = eave[q], b = eave[(q + 1) % n];
-      if (X(mid, far, a) * X(mid, far, b) < 0 && X(a, b, mid) * X(a, b, far) < 0) { isG[k] = false; warn.push(k); break; } }
+      if (X(mid, far, a) * X(mid, far, b) < 0 && X(a, b, mid) * X(a, b, far) < 0) { isG[k] = false; isW[k] = false; warn.push(k); break; } }
   }
   // two gables meeting at an inside (reflex) corner would be pushed into each other: both become hips (warned)
   for (let k = 0; k < n; k++) { const j = (k + 1) % n, c = E[k].u[0] * E[j].u[1] - E[k].u[1] * E[j].u[0];
-    if (isG[k] && isG[j] && c < -1e-9) { isG[k] = isG[j] = false; warn.push(k, j); } }
+    if (isG[k] && isG[j] && c < -1e-9) { isG[k] = isG[j] = false; isW[k] = isW[j] = false; warn.push(k, j); } }
   // MANILA (มนิลา, user 2026-11-04): the end face is a hip up to a cut line dm inside the eave, above it the side planes run on to a
   // small vertical gable (gablet). dm = edge.dm (m) or a quarter of the edge length.
   const dm = eave.map((p, k) => (isM[k] ? edges[k].dm ?? 0.25 * Math.hypot(eave[(k + 1) % n][0] - p[0], eave[(k + 1) % n][1] - p[1]) : 0));
@@ -113,7 +117,7 @@ export function roofGeometry(roof, skeleton) {
   }
   // gable walls: the roof profile left on each gable line, closed at eave level
   const gableF = [];
-  for (let e = 0; e < n; e++) if (isG[e]) {
+  for (let e = 0; e < n; e++) if (isG[e] && !isW[e]) {
     const on = []; for (const f of roofF) for (const p of f.P) if (Math.abs(side(e, p)) < 1e-6) on.push(p);
     const s = (p) => (p[0] - E[e].a[0]) * E[e].u[0] + (p[1] - E[e].a[1]) * E[e].u[1], L = Math.hypot(eave[(e + 1) % n][0] - eave[e][0], eave[(e + 1) % n][1] - eave[e][1]);
     const prof = [...new Map(on.filter((p) => s(p) > -1e-6 && s(p) < L + 1e-6).map((p) => [`${s(p).toFixed(5)}|${p[2].toFixed(5)}`, p])).values()].sort((a, b) => s(a) - s(b) || a[2] - b[2]);
@@ -134,6 +138,7 @@ export function roofGeometry(roof, skeleton) {
   const vk = (p) => `${p[0].toFixed(4)},${p[1].toFixed(4)},${p[2].toFixed(4)}`, seg = new Map();
   faces.forEach((f) => f.P.forEach((p, k) => { const q = f.P[(k + 1) % f.P.length], a = vk(p), b = vk(q); if (a === b) return; const id = a < b ? `${a}|${b}` : `${b}|${a}`;
     (seg.get(id) ?? seg.set(id, { p, q, faces: [] }).get(id)).faces.push(f); }));
+  const onW = (p) => isW.some((w, k) => w && Math.abs(side(k, p)) < 1e-6);
   const lines = [], onG = (p) => isG.some((g, k) => g && Math.abs(side(k, p)) < 1e-6) || isM.some((m, k) => m && Math.abs(side(k, p) + dm[k]) < 1e-6);
   for (const s0 of seg.values()) {
     const { p, q } = s0, len = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
@@ -142,7 +147,8 @@ export function roofGeometry(roof, skeleton) {
     if (rf.length === 2) { const [A, B] = rf; if (Math.abs(A.plane.a - B.plane.a) < 1e-6 && Math.abs(A.plane.b - B.plane.b) < 1e-6 && Math.abs(A.plane.c - B.plane.c) < 1e-4) continue; }
     if (rf.length === 0) continue; // gable wall's own edges (its base is the eave line, its top is a rake already)
     let type;
-    if (rf.length === 1) type = onG(p) && onG(q) ? (Math.abs(q[2] - p[2]) < 1e-6 && p[2] > zE + 1e-6 ? "ridge" : "rake") : Math.abs(p[2] - zE) < 1e-6 && Math.abs(q[2] - zE) < 1e-6 ? "eave" : "rake";
+    if (rf.length === 1 && onW(p) && onW(q)) type = "wall"; // roof top against the higher wall: the wall plate there (not a ridge / rake)
+    else if (rf.length === 1) type = onG(p) && onG(q) ? (Math.abs(q[2] - p[2]) < 1e-6 && p[2] > zE + 1e-6 ? "ridge" : "rake") : Math.abs(p[2] - zE) < 1e-6 && Math.abs(q[2] - zE) < 1e-6 ? "eave" : "rake";
     else if (Math.abs(q[2] - p[2]) < 1e-6) type = "ridge";
     else {
       const [A, B] = rf, mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, cB = B.P.reduce((c, v) => [c[0] + v[0] / B.P.length, c[1] + v[1] / B.P.length], [0, 0]);
@@ -155,7 +161,7 @@ export function roofGeometry(roof, skeleton) {
   const sum = (t) => lines.filter((l) => l.type === t).reduce((a, l) => a + l.len, 0);
   const roofFaces = faces.filter((f) => !f.gable);
   return {
-    pts, edges, eave, faces, lines, V: faces.flatMap((f) => f.P), tan, H: roof.H,
+    pts, edges, eave, faces, lines, wallEdges: isW.map((w, k) => (w ? k : -1)).filter((k) => k >= 0), V: faces.flatMap((f) => f.P), tan, H: roof.H,
     planArea: Math.abs(signedArea(eave)), wallArea: Math.abs(signedArea(pts)),
     roofArea: roofFaces.reduce((a, f) => a + f.area, 0), gableArea: faces.filter((f) => f.gable).reduce((a, f) => a + f.area, 0),
     ridge: sum("ridge"), hip: sum("hip"), valley: sum("valley"), rake: sum("rake"), eaveLen: sum("eave"),

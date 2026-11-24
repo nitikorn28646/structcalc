@@ -244,6 +244,14 @@ export function roofLinkFloor(frame) {
   return Number.isInteger(L.floor) && L.floor >= 0 && L.floor < n ? L.floor : n - 1;
 }
 
+// roof points that bear on floor k: a roof part with its own floor (multi-level roofs, p.floor) there, every other point on the roof's
+// linked floor (a part floor that no longer exists falls back to the linked floor, never dropped)
+export function roofPointsOn(frame, k) {
+  const roofK = roofLinkFloor(frame), n = frame?.floors?.length ?? 0;
+  if (roofK === null) return [];
+  return (frame.roofPoints ?? []).filter((p) => (Number.isInteger(p.floor) && p.floor >= 0 && p.floor < n ? p.floor : roofK) === k);
+}
+
 // gravity analysis of every floor (continuous beams, top down) with column loads accumulated floor by floor
 function gravity(frame, minTypes) {
   const { floors, beamTypes, colTypes } = frame, mat = { ...frame.mat, beamPick: frame.beamAutoMode === "cost" ? "cost" : "steel", widenTypes: frame.widenTypes ?? DEFAULT_WIDEN_TYPES }, n = floors.length, an = new Array(n), cols = [], warnings = [];
@@ -253,9 +261,9 @@ function gravity(frame, minTypes) {
   for (let k = n - 1; k >= 0; k--) {
     // roof module reactions linked to this floor (frame.roofPoints, recomputed by the app whenever the roof changes)
     const fl0 = floors[k].walls?.some((w) => w.hAuto || w.gable || w.openings?.length) ? { ...floors[k], walls: floors[k].walls.map((w) => resolveWall(w, frame, k)) } : floors[k]; // auto height / doors / windows
-    const fl = roofK === k ? { ...fl0, pointLoads: [...(fl0.pointLoads ?? []), ...(frame.roofPoints ?? [])] } : fl0;
+    const rpK = roofPointsOn(frame, k), fl = rpK.length ? { ...fl0, pointLoads: [...(fl0.pointLoads ?? []), ...rpK] } : fl0;
     if (roofK === k && frame.roofLink.floor !== k && (frame.roofPoints ?? []).length) warnings.push(`หลังคาเชื่อมกับชั้นที่ไม่มีอยู่แล้ว (ลำดับ ${frame.roofLink.floor ?? "-"}) — แรงหลังคาจึงลงที่ชั้นบนสุด ${floors[k].name} แทน ตรวจที่ขั้น 4 การ์ด "หลังคา → โครงสร้าง"`);
-    if (roofK === k) for (const p of frame.roofPoints ?? []) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — แก้: ขั้น 4 / 5 การ์ด "หลังคา → เสา" → ตารางจุดถ่ายแรง กด "เพิ่มคานรับ" หรือ "เพิ่มเสา" (หรือวาดคาน / เสาผ่านจุดนั้นในขั้น 2)`);
+    for (const p of rpK) if (String(p.name).includes("ย้าย")) warnings.push(`${floors[k].name}: แรง${p.name} ${Math.round(p.P)} กก. — แก้: ขั้น 4 / 5 การ์ด "หลังคา → เสา" → ตารางจุดถ่ายแรง กด "เพิ่มคานรับ" หรือ "เพิ่มเสา" (หรือวาดคาน / เสาผ่านจุดนั้นในขั้น 2)`);
     // columns of the floor above with no column right under them stand on this floor's beams
     const extra = above.filter((c) => !fl.columns.some((q) => near(q, c.p))).map((c) => ({ p: c.p, P: c.Pbot, from: `เสา ${c.stack} (${floors[k + 1].name})` }));
     // column size under a point of this floor (step joints: can the beam bars be hooked in it?) — the picked type, else the first (as the self weight)

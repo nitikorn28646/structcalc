@@ -1,36 +1,41 @@
 // Roof → structure link: wall-plate (and interior-plate / post) reactions of the roof module as point loads where they bear.
 import { loadSkeleton, runRoof } from "./RoofPage.jsx";
+import { partName, partsOf } from "../engine/roofParts.js";
 import { elevations } from "./StoreyTable.jsx";
 
 // host: the linked floor of the structure { columns, beams } — a reaction where no column stands but a beam passes stays there as a
 // point load on that beam (the plate bears on the RC beam); only a point on neither goes to the nearest column (named, warned)
-export async function roofPoints(roof, host = {}) {
+// multi-level roofs: a part with its own linkFloor sends its points to that floor (hostOf(k) = that floor's { columns, beams });
+// x.floor = that index (null = the roof's linked floor, frame.roofLink)
+export async function roofPoints(roof, host = {}, hostOf = null) {
     const sk = await loadSkeleton(), { dz, fr, error } = runRoof(roof, sk);
     if (error || !dz) return { error: error ?? "ไม่มีข้อมูลหลังคา" };
     // every plate hands down what it carries (roofMembers: m.bear — wall plates incl. the posts / interior plates standing on them,
     // interior plates only at ends that rest on nothing else); posts standing on no plate go down where they stand (dz.bearLoose)
-    const pts = [], cols = roof.columns ?? [];
-    const addAt = (p, P) => { const hit = pts.find((x) => Math.hypot(x.p[0] - p[0], x.p[1] - p[1]) < 0.05); if (hit) hit.P += P; else pts.push({ p: [+p[0].toFixed(3), +p[1].toFixed(3)], P, name: "หลังคา" }); };
-    for (const m of dz.members.filter((x) => x.group === "plate")) for (const b of m.bear ?? []) if (b.P > 0) addAt(b.p, b.P);
-    for (const b of dz.bearLoose ?? []) if (b.P > 0) addAt(b.p, b.P);
-    for (const b of dz.bearDirect ?? []) if (b.P > 0) addAt(b.p, b.P); // rafters on the RC ring beam (no steel wall plate)
+    const parts = partsOf(roof), floorOf = (i) => (i ? parts[i]?.linkFloor ?? null : null);
+    const pts = [], cols = parts.flatMap((p) => p.columns ?? []);
+    const addAt = (p, P, part = 0) => { const floor = floorOf(part), hit = pts.find((x) => x.floor === floor && Math.hypot(x.p[0] - p[0], x.p[1] - p[1]) < 0.05); if (hit) hit.P += P; else pts.push({ p: [+p[0].toFixed(3), +p[1].toFixed(3)], P, name: parts.length > 1 ? `หลังคา ${partName(roof, part)}` : "หลังคา", floor }); };
+    for (const m of dz.members.filter((x) => x.group === "plate")) for (const b of m.bear ?? []) if (b.P > 0) addAt(b.p, b.P, m.part);
+    for (const b of dz.bearLoose ?? []) if (b.P > 0) addAt(b.p, b.P, b.part);
+    for (const b of dz.bearDirect ?? []) if (b.P > 0) addAt(b.p, b.P, b.part); // rafters on the RC ring beam (no steel wall plate)
     // the roof plan and the structure are drawn separately: a bearing point a little off a column / beam (wall face vs column centre,
     // e.g. 0.25 m) is the same support — within host.tol (default 0.30 m) it goes to that column, else onto that beam (projected)
-    const tol = host.tol ?? 0.3, fcols = host.columns?.length ? host.columns : cols, d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-    const onBeam = (p) => { let best = null;
-      for (const b of host.beams ?? []) { const L = Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]); if (!(L > 0)) continue;
+    const tol = host.tol ?? 0.3, d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const hostAt = (x) => (x.floor != null && hostOf ? hostOf(x.floor) ?? host : host), colsAt = (x) => (hostAt(x).columns?.length ? hostAt(x).columns : cols);
+    const onBeam = (p, hst) => { let best = null;
+      for (const b of hst.beams ?? []) { const L = Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1]); if (!(L > 0)) continue;
         const t = Math.max(0, Math.min(1, ((p[0] - b.a[0]) * (b.b[0] - b.a[0]) + (p[1] - b.a[1]) * (b.b[1] - b.a[1])) / (L * L))), q = [b.a[0] + (b.b[0] - b.a[0]) * t, b.a[1] + (b.b[1] - b.a[1]) * t];
         if (d2(p, q) <= tol && (!best || d2(p, q) < best.d)) best = { q, d: d2(p, q) }; }
       return best; };
     for (const x of pts) {
       x.at = [...x.p];
-      const c = fcols.length ? fcols.reduce((a, b) => (d2(b, x.p) < d2(a, x.p) ? b : a)) : null, bm = onBeam(x.p);
+      const fcols = colsAt(x), c = fcols.length ? fcols.reduce((a, b) => (d2(b, x.p) < d2(a, x.p) ? b : a)) : null, bm = onBeam(x.p, hostAt(x));
       if (c && d2(c, x.p) <= tol) { x.to = "col"; x.snap = d2(c, x.p); x.p = [+c[0].toFixed(3), +c[1].toFixed(3)]; }
       else if (bm) { x.to = "beam"; x.snap = bm.d; x.p = bm.q.map((v) => +v.toFixed(3)); x.name = "หลังคา (ลงคาน)"; }
       else if (c) { x.to = "moved"; x.name = `หลังคา (จาก ${x.at[0].toFixed(2)}, ${x.at[1].toFixed(2)} ไม่มีเสา/คานใกล้ → ย้ายมาเสาใกล้สุด)`; x.p = [+c[0].toFixed(3), +c[1].toFixed(3)]; }
     }
     // the same column / beam point reached from two nearby roof points: one load
-    for (let a = 0; a < pts.length; a++) for (let b = pts.length - 1; b > a; b--) if (d2(pts[a].p, pts[b].p) < 0.01) { pts[a].P += pts[b].P; pts.splice(b, 1); }
+    for (let a = 0; a < pts.length; a++) for (let b = pts.length - 1; b > a; b--) if (pts[a].floor === pts[b].floor && d2(pts[a].p, pts[b].p) < 0.01) { pts[a].P += pts[b].P; pts.splice(b, 1); }
     return { pts: pts.map((x) => ({ ...x, P: Math.round(x.P) })), total: pts.reduce((s, x) => s + x.P, 0) };
 }
 

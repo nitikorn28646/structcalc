@@ -9,6 +9,7 @@ import { platesOf } from "./PlateView.jsx";
 import { ROOFINGS } from "../engine/roofMembers.js";
 import { SECTION_TYPES, SYM } from "../engine/steelSections.js";
 import { runRoof, useSkeleton } from "./RoofPage.jsx";
+import { partName, partsOf } from "../engine/roofParts.js";
 
 const ksc = "กก./ซม.²";
 const secText = (x) => (x.r.section.type === "BAT" ? `${x.r.section.name} @${fmt(x.r.s, 2)} ม.` : `${x.count > 1 ? "2-" : ""}${SYM[x.r.section.type] ?? ""} ${x.r.section.name} มม.`);
@@ -16,10 +17,10 @@ const secText = (x) => (x.r.section.type === "BAT" ? `${x.r.section.name} @${fmt
 // Schedule lines: one per group, split by section where spans of a group use different sizes.
 function schedule(dz) {
   return dz.rows.flatMap((x) => {
-    if (!x.members || !x.mixed) return [{ ...x, key: x.key }];
+    if (!x.members || !x.mixed) return [{ ...x, key: `${x.part ?? 0}-${x.key}` }];
     const by = new Map();
     for (const m of x.members) {
-      const k = `${m.count}|${m.r.section.type}|${m.r.section.name}`, e = by.get(k) ?? { key: `${x.key}-${k}`, label: x.label, count: m.count, r: m.r, len: 0, weight: 0, ok: true };
+      const k = `${m.count}|${m.r.section.type}|${m.r.section.name}`, e = by.get(k) ?? { key: `${x.part ?? 0}-${x.key}-${k}`, label: x.label, count: m.count, r: m.r, len: 0, weight: 0, ok: true };
       e.len += m.len; e.weight += m.weight; e.ok &&= m.r.ok; by.set(k, e);
     }
     return [...by.values()];
@@ -28,7 +29,7 @@ function schedule(dz) {
 
 // bending members: the standard check sheet (ReportKit CheckSheet via CheckSheets RoofSheet) — section, M, fb ≤ Fb, deflection (มม.)
 function Bending({ x, f }) {
-  return <RoofSheet f={f} id={`R-${x.key ?? x.id ?? x.label}`} title={`การตรวจสอบ ${x.label ?? ""}${x.tag ? ` ${x.tag}` : ""}`} x={x} secText={secText(x)} />;
+  return <RoofSheet f={f} id={`R-${x.part ? `P${x.part + 1}-` : ""}${x.key ?? x.id ?? x.label}`} title={`การตรวจสอบ ${x.label ?? ""}${x.tag ? ` ${x.tag}` : ""}`} x={x} secText={secText(x)} />;
 }
 
 export function RoofReport({ roof, project , bare = false, nb = null, mark = () => true }) {
@@ -42,7 +43,7 @@ export function RoofReport({ roof, project , bare = false, nb = null, mark = () 
   // inside the whole-project book: one chapter (nb), sections nb.1, nb.2 … on from its first page
   const Wrap = bare ? ({ children }) => <>{children}</> : ({ children }) => <div className="report">{children}</div>;
   const roofSummary = [
-          ["รูปทรง / ความชัน", `${[roof.edges.some((e) => (e.type ?? "hip") === "hip") && "ปั้นหยา", roof.edges.some((e) => e.type === "gable") && "จั่ว", roof.edges.some((e) => e.type === "manila") && "มนิลา"].filter(Boolean).join(" + ")} · ${roof.slope}°`],
+          ["รูปทรง / ความชัน", `${[roof.edges.some((e) => (e.type ?? "hip") === "hip") && "ปั้นหยา", roof.edges.some((e) => e.type === "gable") && "จั่ว", roof.edges.some((e) => e.type === "manila") && "มนิลา"].filter(Boolean).join(" + ")} · ${roof.slope}°${roof.parts?.length ? ` · หลายระดับ ${roof.parts.length + 1} ผืน` : ""}`],
           ["พื้นที่มุงจริง", `${fmt(g.roofArea, 2)} ม.²`],
           ["วัสดุมุง", `${roofing[0]} (${roofing[1]} กก./ม.²)`],
           ["แป / จันทัน", `${pu.r.section.name} / ${ra.r.section.name}`],
@@ -62,6 +63,12 @@ export function RoofReport({ roof, project , bare = false, nb = null, mark = () 
           <Item th="ระยะชายคายื่น / ระดับอะเส" v={`${fmt(roof.overhang)} / ${fmt(roof.H)}`} u="ม." />
           <Item th="พื้นที่ใต้หลังคา / พื้นที่มุงจริง" f="A / cosθ" v={`${fmt(g.planArea, 2)} / ${fmt(g.roofArea, 2)}`} u="ม.²" />
           <Item th="ความยาวอกไก่ / ตะเข้สัน / ตะเข้ราง" v={`${fmt(g.ridge, 2)} / ${fmt(g.hip, 2)} / ${fmt(g.valley, 2)}`} u="ม." />
+          {roof.parts?.length > 0 && g.parts && (<>
+            <Note>หลังคาหลายระดับ {g.parts.length} ผืน — แต่ละผืนมีระดับอะเส ความชัน และชายคาของตัวเอง ออกแบบแยกกัน ขอบ "ติดผนัง" คือด้านที่หลังคาผืนต่ำชนผนังของส่วนที่สูงกว่า: ไม่มีชายคา จันทันวางบนอะเสยึดผนังที่ระดับยอดหลังคาของผืนนั้น แรงจากอะเสยึดผนังลงเสา / คานในแนวนั้น</Note>
+            <table className="mt-1 w-full border-collapse text-[9pt]"><thead><tr className="border-b border-gray-300 text-left"><th>ผืน</th><th>ระดับอะเส (ม.)</th><th>ความชัน (°)</th><th>ชายคา (ม.)</th><th>ขอบติดผนัง</th><th>สูงสุด (ม.)</th><th>พื้นที่มุง (ม.²)</th><th>เหล็ก (กก.)</th></tr></thead>
+              <tbody>{partsOf(roof).map((p, i) => { const gp = g.parts[i], dp = dz.parts?.[i]; return gp ? (
+                <tr key={i} className="border-b border-gray-100"><td>{partName(roof, i)}</td><td>{fmt(p.H)}</td><td>{fmt(p.slope, 1)}</td><td>{fmt(p.overhang)}</td><td>{(gp.wallEdges ?? []).map((k) => `ขอบ ${k + 1}`).join(", ") || "-"}</td><td>{fmt(gp.top)}</td><td>{fmt(gp.roofArea, 2)}</td><td>{fmt(dp?.weight ?? 0, 0)}</td></tr>) : null; })}</tbody></table>
+          </>)}
           <Item th="น้ำหนักวัสดุมุง" v={fmt(roofing[1], 0)} u="กก./ม.²" note={roofing[0]} />
           <Item th="น้ำหนักจร / น้ำหนักอื่นๆ" v={`${fmt(d.live, 0)} / ${fmt(d.extra, 0)}`} u="กก./ม.²" />
           <Item th="แรงลม" f="q = p·2sinθ/(1+sin²θ)" v={fmt(d.wind, 0)} u="กก./ม.²"
@@ -113,7 +120,7 @@ export function RoofReport({ roof, project , bare = false, nb = null, mark = () 
         <Sec n={sn(5)} chapter={!bare} th="ตะเข้ อกไก่ และสะพานรับจันทัน" en="Hips, ridge & rafter supports"
           intro="ชิ้นส่วนเหล่านี้รับแรงปฏิกิริยาจากจันทันเป็นน้ำหนักแผ่ต่อเมตร ตะเข้คิดเป็นคานมีปลายยื่น ส่วนอกไก่ สะพาน และอะเส คิดเป็นคานช่วงเดี่ยว wL²/8 ระหว่างดั้ง/ตุ๊กตา/เสา">
           {dz.rows.filter((x) => ["hip", "valley", "ridge", "support"].includes(x.key)).map((x) => (
-            <div key={x.key} className="mb-2">
+            <div key={`${x.part ?? 0}-${x.key}`} className="mb-2">
               <Sub>{x.label} — ช่วง {fmt(x.span)} ม.</Sub>
               <Item th="น้ำหนักแผ่ (รวมน้ำหนักตัวเอง)" f="w" v={fmt(x.r.w)} u="กก./ม." />
               <Item th="โมเมนต์สูงสุด" f={x.key === "hip" || x.key === "valley" ? "max(Mช่วง, Mยื่น)" : "M = wL²/8"} v={fmt(x.r.Mx)} u="กก.-ม." />
@@ -193,7 +200,7 @@ export function RoofReport({ roof, project , bare = false, nb = null, mark = () 
             </tr></thead>
             <tbody>
               {schedule(dz).map((x) => (
-                <tr key={x.key} className="border-b border-gray-200">
+                <tr key={`${x.part ?? 0}-${x.key}`} className="border-b border-gray-200">
                   <td className="py-1 pr-2">{x.label}</td><td className="pr-2">{secText(x)}</td>
                   <td className="pr-2 tabular-nums">{fmt(x.len * x.count, 2)}</td><td className="pr-2 tabular-nums">{fmt(x.r.section.w, 2)}</td>
                   <td className="pr-2 tabular-nums">{fmt(x.weight, 1)}</td><td>{res(x.label, x.ok)}</td>

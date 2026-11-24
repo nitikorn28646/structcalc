@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import { Bounds, ContactShadows, Edges, Grid, Line, OrbitControls } from "@react-three/drei";
 
-export const LINE_COLORS = { ridge: "#e5484d", hip: "#3e63dd", valley: "#30a46c", rake: "#f76b15", eave: "#8b8d98" };
+export const LINE_COLORS = { ridge: "#e5484d", hip: "#3e63dd", valley: "#30a46c", rake: "#f76b15", eave: "#8b8d98", wall: "#c11574" };
 const to3 = ([x, y, z]) => [x, z, -y];
 
 function faceGeometry(f) {
@@ -50,7 +50,7 @@ export const roofSeat = (plates) => (plates?.length ? Math.max(...plates.map((m)
 
 export function RoofFrameMembers({ g, fr, plates, Z0 = 0, onPick = null, loose = [] }) {
   const isLoose = (p) => loose.some((q) => Math.hypot(q[0] - p.x, q[1] - p.y) < 0.05);
-  const list = plates ?? g.pts.map((p, i) => ({ p: [...p, g.H], q: [...g.pts[(i + 1) % g.pts.length], g.H] })), seat = roofSeat(list), Z = Z0 + seat;
+  const list = plates ?? (g.parts ?? [g]).flatMap((gp) => gp.pts.map((p, i) => ({ p: [...p, gp.H], q: [...gp.pts[(i + 1) % gp.pts.length], gp.H] }))), seat = roofSeat(list), Z = Z0 + seat;
   return (<>
               {fr.purlins.map((m, i) => <Member key={`p${i}`} {...m} w={0.05} h={0.1} dz={Z + 0.04} color={FC.purlin} />)}
               {fr.rafters.map((m, i) => <Member key={`r${i}`} {...m} w={0.05} h={0.15} dz={Z - 0.08} color={FC.rafter} />)}
@@ -61,17 +61,17 @@ export function RoofFrameMembers({ g, fr, plates, Z0 = 0, onPick = null, loose =
                 const { dep, wid } = plateDim(m);
                 return <Member key={`w${i}`} p={m.p} q={m.q} w={wid} h={dep} dz={Z0 + dep / 2} color={m.color ?? FC.plate} onClick={onPick && m.tag ? () => onPick(m) : undefined} />;
               })}
-              {fr.posts.map((p, i) => <Member key={`t${i}`} p={[p.x, p.y, g.H - RAFTER_SEAT]} q={[p.x, p.y, p.top - (p.kind === "ดั้ง" ? 0.22 : 0.32)]} w={0.1} h={0.1} dz={Z} color={isLoose(p) ? "#f04438" : FC.post} />)}
+              {fr.posts.filter((p) => !p.wallTop).map((p, i) => <Member key={`t${i}`} p={[p.x, p.y, (g.parts?.[p.part]?.H ?? g.H) - RAFTER_SEAT]} q={[p.x, p.y, p.top - (p.kind === "ดั้ง" ? 0.22 : 0.32)]} w={0.1} h={0.1} dz={Z} color={isLoose(p) ? "#f04438" : FC.post} />)}
   </>);
 }
 
 export default function Roof3D({ g, fr, hover, plates, dark = false, className = "", onPick = null, loose = [] }) {
   const geo = useMemo(() => {
-    const walls = new THREE.Shape(g.pts.map(([x, y]) => new THREE.Vector2(x, y)));
+    const walls = (g.parts ?? [g]).map((gp) => ({ shape: new THREE.Shape(gp.pts.map(([x, y]) => new THREE.Vector2(x, y))), H: gp.H })); // one block per roof part (multi-level)
     return { faces: g.faces.map((f) => ({ gable: f.gable, geom: faceGeometry(f) })), walls };
   }, [g]);
   const seat = fr ? roofSeat(plates ?? g.pts) : 0; // framing lifted onto the wall plates (RoofFrameMembers)
-  const xs = g.eave.map((p) => p[0]), ys = g.eave.map((p) => p[1]);
+  const eaves = (g.parts ?? [g]).flatMap((gp) => gp.eave), xs = eaves.map((p) => p[0]), ys = eaves.map((p) => p[1]);
   const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
   const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2;
   return (
@@ -82,11 +82,12 @@ export default function Roof3D({ g, fr, hover, plates, dark = false, className =
         <directionalLight position={[10, 20, 8]} intensity={1.5} />
         <Bounds fit clip observe margin={1.7}>
           <group position={[-cx, 0, cy]}>
-            <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <extrudeGeometry args={[geo.walls, { depth: g.H, bevelEnabled: false }]} />
-              <meshStandardMaterial color={dark ? "#5b6380" : "#e4e7ec"} transparent opacity={0.35} depthWrite={false} />
-              <Edges color={dark ? "#6e7591" : "#98a2b3"} />
-            </mesh>
+            {geo.walls.map((w, i) => (
+              <mesh key={`w${i}`} rotation={[-Math.PI / 2, 0, 0]}>
+                <extrudeGeometry args={[w.shape, { depth: w.H, bevelEnabled: false }]} />
+                <meshStandardMaterial color={dark ? "#5b6380" : "#e4e7ec"} transparent opacity={0.35} depthWrite={false} />
+                <Edges color={dark ? "#6e7591" : "#98a2b3"} />
+              </mesh>))}
             {geo.faces.map((f, i) => (
               <mesh key={i} geometry={f.geom} position={[0, fr ? 0.12 + seat : 0, 0]} visible={!fr || !f.gable}>
                 <meshStandardMaterial side={THREE.DoubleSide} roughness={0.6} metalness={f.gable ? 0 : 0.35}

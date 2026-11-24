@@ -5,7 +5,7 @@
 // Plan coordinates [x, y]; z = height of the arrow tip above the floor level (a wall on a lowered beam starts lower).
 
 import { wallsOf } from "../engine/floor.js";
-import { roofLinkFloor } from "../engine/frame.js";
+import { roofLinkFloor, roofPointsOn } from "../engine/frame.js";
 
 const len = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
 
@@ -30,8 +30,8 @@ export function loadArrowData(frame, an, k, walls = null) {
   const nOwn = (fl.pointLoads ?? []).length;
   (fl.pointLoads ?? []).forEach((pl, i) => { if (pl.P > 0) out.points.push({ p: pl.p, P: pl.P, z: 0, name: pl.name || `น้ำหนักจุด ${i + 1}`, to: onTxt(an.pointLoads?.[i]?.on) }); });
   // roof points: the analysis appended frame.roofPoints after the floor's own point loads (frame.js gravity) — same order here
-  if (roofLinkFloor(frame) === k) // exactly the condition of frame.js gravity()
-    (frame.roofPoints ?? []).forEach((rp, j) => { const on = an.pointLoads?.[nOwn + j]?.on; if (rp.P > 0) out.roof.push({ p: rp.p, P: rp.P, z: 0, name: rp.name || "หลังคา", on, moved: rp.to === "moved" || String(rp.name ?? "").includes("ย้าย"), to: onTxt(on) }); });
+  roofPointsOn(frame, k) // exactly the list frame.js gravity() appended (multi-level roofs: the points of the parts on this floor)
+    .forEach((rp, j) => { const on = an.pointLoads?.[nOwn + j]?.on; if (rp.P > 0) out.roof.push({ p: rp.p, P: rp.P, z: 0, name: rp.name || "หลังคา", on, moved: rp.to === "moved" || String(rp.name ?? "").includes("ย้าย"), to: onTxt(on) }); });
   const totals = {
     walls: out.walls.reduce((s, x) => s + x.q * len(x.a, x.b), 0), lines: out.lines.reduce((s, x) => s + x.q * len(x.a, x.b), 0),
     points: out.points.reduce((s, x) => s + x.P, 0), roof: out.roof.reduce((s, x) => s + x.P, 0),
@@ -46,14 +46,17 @@ export function loadArrowData(frame, an, k, walls = null) {
 export function roofStatus(frame, res, roof) {
   const hasRoof = (roof?.pts?.length ?? 0) >= 3, k = roofLinkFloor(frame);
   if (k === null) return { state: hasRoof ? "unlinked" : "none" };
-  const pts = (frame.roofPoints ?? []).filter((p) => p.P > 0), an = res?.floors?.[k], nOwn = (frame.floors[k].pointLoads ?? []).length;
+  const pts = (frame.roofPoints ?? []).filter((p) => p.P > 0);
   if (!pts.length) return { state: "empty", floor: frame.floors[k].name };
   const st = { floor: frame.floors[k].name, k, fallback: frame.roofLink.floor !== k, total: 0, col: 0, beam: 0, panel: 0, lost: 0, nCol: 0, nBeam: 0, nPanel: 0, nLost: 0, moved: 0 };
-  (frame.roofPoints ?? []).forEach((rp, j) => {
+  // every floor that receives roof points (one, or several for a multi-level roof), in the order the analysis appended them
+  frame.floors.forEach((_, kk) => { const an = res?.floors?.[kk], nOwn = (frame.floors[kk].pointLoads ?? []).length; roofPointsOn(frame, kk).forEach((rp, j) => {
     if (!(rp.P > 0)) return; const on = an?.pointLoads?.[nOwn + j]?.on; st.total += rp.P;
     if (rp.to === "moved" || String(rp.name ?? "").includes("ย้าย")) st.moved++;
     if (on === "column") { st.col += rp.P; st.nCol++; } else if (on === "beam") { st.beam += rp.P; st.nBeam++; } else if (on === "panel") { st.panel += rp.P; st.nPanel++; } else { st.lost += rp.P; st.nLost++; }
-  });
+  }); });
+  const others = [...new Set(pts.map((p) => p.floor).filter((f) => Number.isInteger(f) && f !== k && frame.floors[f]))];
+  if (others.length) st.floor += ` + ${others.map((f) => frame.floors[f].name).join(", ")}`;
   return { ...st, state: st.nLost || st.moved ? "partial" : "ok" };
 }
 
