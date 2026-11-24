@@ -869,3 +869,11 @@ column bars to the bottom bars with 90° hooks along the beam, crank, ties conti
 (table + details) in step 7 Type คาน and Type เสา; DXF beam sheets (details + table packed in the rows, ezdxf 0 errors); report beams chapter
 "เสาตั้งบนคาน" (worked rows formula / substituted / result per column + figures). cli/planted-check.mjs 23/23 (in the gate). Yasothon regress identical
 (no planted columns); _big 8.00,7.00 on the 8 m transfer girder NG only because that girder span fails; _roof3 3 planted, all pass.
+FOOTINGS STILL OVERLAPPING (2026-11-24, user's house _anucha.json — client data, git-ignored: B-2 F5 1.90 and B-3 F3 1.30 1.50 m apart drawn red): the
+reshape (spread footing squeezed into a rectangle) failed for two reasons — (1) the limit along the clash axis came from ONE neighbour, so a column
+between two close neighbours escaped one and hit the other; (2) the rectangle kept the type's thickness and bar spacing, so the longer cantilever of a
+narrow strip failed every size. frame.js reshape(i, ax): Lmax = from every footing clashing along that axis, loop stops when a passing size still
+touches a neighbour on the other axis, designSpread tt.growT = fixed plan size with t +0.05 steps (+0.40) and spacing @0.125 / @0.10 like the auto
+size, 4 passes. User's house: B-3 → 1.90 × 0.90 × 0.30 (F6), 0.10 clear, 18/18 footings, beams 41/41, columns 54/54. Pairs that separate footings
+cannot serve remain flagged (e.g. Yasothon with qa 6 t/m²: columns 1.0 m apart, 28 t + 6 t) → COMBINED FOOTING not built yet (proposed).
+frame-check: reshape test also requires that only such 1.0 m pairs stay touching. verify20 40/40, E2E 47/47, regress identical.

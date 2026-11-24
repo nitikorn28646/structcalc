@@ -40,8 +40,10 @@ console.log(`${ok3 ? "ok  " : "FAIL"} bored pile bars: ${bp.map(({ D, r }) => `�
 // spread footings too close → the lighter one becomes a rectangle that keeps ≥ 0.10 m clear and still passes
 const { analyzeFrame: aF } = await import("../web/engine/frame.js"); const yj = JSON.parse((await import("node:fs")).readFileSync(new URL("../web/public/projects/yasothon.json", import.meta.url), "utf8"));
 const rr = aF({ ...yj.frame, footTypes: [{ kind: "spread", name: "F", Bx: 0, By: 0, t: 0.3, Df: 1.2, bar: "DB 12", s: 0.15 }], soil: { qa: 6000, gamma: 1800 } });
-const re = rr.footings.filter((f) => f.reshaped), ok4 = re.length > 0 && re.every((f) => f.ok && f.r.Bx !== f.r.By);
-console.log(`${ok4 ? "ok  " : "FAIL"} clashing spread footings reshaped to rectangles: ${re.map((f) => `${f.r.Bx}x${f.r.By}`).join(", ")}`);
+const re = rr.footings.filter((f) => f.reshaped), ok4 = re.length > 0 && re.every((f) => f.ok && f.r.Bx !== f.r.By)
+  // what is left touching must be a pair that separate footings cannot serve (columns 1.0 m apart, 28 t + 6 t) — a combined footing case
+  && rr.footings.every((f) => (f.clash ?? []).every((j) => Math.hypot(f.p[0] - rr.footings[j].p[0], f.p[1] - rr.footings[j].p[1]) <= 1.0 + 1e-6));
+console.log(`${ok4 ? "ok  " : "FAIL"} clashing spread footings reshaped to rectangles, only 1.0 m pairs left touching (combined footing): ${re.map((f) => `${f.r.Bx}x${f.r.By}`).join(", ")}`);
 // stair with a landing on a beam inside the storey (user 2026-11-04): foot on the floor below, landing on the landing beam (lvl 1.5),
 // head on this floor — three beams loaded; the 3D frame puts the landing beam at +1.5 on the columns (split) and balances
 let okS = false, okS3 = false;

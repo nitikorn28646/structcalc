@@ -79,7 +79,9 @@ function designSpread(tt, P, pier, mat, fo, Mx, My) {
   // spacing may close up to @0.125 / @0.10 (minimum steel grows with d) — auto size only
   const B0 = r10(Math.sqrt(P / Math.max(qa * (fo.utilMax ?? 1) - (t0 * 2400 + (Df0 - t0) * gamma), 1)));
   const fixed = tt.Bx > 0 && tt.By > 0, ts = Array.from({ length: 9 }, (_, i) => Math.round((t0 + i * 0.05) * 100) / 100);
-  const sizes = fixed ? [[tt.Bx, tt.By, t0]] : Array.from({ length: 16 }, (_, i) => Math.round((Math.max(B0, 0.6) + i / 10) * 10) / 10).flatMap((b) => ts.flatMap((t) => [1, 0.125, 0.1].map((k) => [b, b, t, k])));
+  // tt.growT (a footing squeezed into a rectangle by its neighbours, 2026-11-24): fixed plan size, but the thickness may grow and the bars close
+  // up like the auto size — the long cantilever of a narrow strip needs more depth than the type's square did
+  const sizes = fixed ? (tt.growT ? ts.flatMap((t) => [1, 0.125, 0.1].map((k) => [tt.Bx, tt.By, t, k])) : [[tt.Bx, tt.By, t0]]) : Array.from({ length: 16 }, (_, i) => Math.round((Math.max(B0, 0.6) + i / 10) * 10) / 10).flatMap((b) => ts.flatMap((t) => [1, 0.125, 0.1].map((k) => [b, b, t, k])));
   let best = null;
   for (const [Bx, By, t, sk = 1] of sizes) {
     const Df = Math.max(tt.Df ?? 1.2, t);
@@ -498,28 +500,39 @@ export function analyzeFrame(frame) {
     const gapMin = 0.1, foS = { ...(frame.footing ?? DEFAULT_FOOTING), soil: frame.soil, utilMax: frame.footUtil };
     const gapOf = (a, b) => { const gx = Math.abs(a.p[0] - b.p[0]) - (a.r.Bx + b.r.Bx) / 2, gy = Math.abs(a.p[1] - b.p[1]) - (a.r.By + b.r.By) / 2; return { gap: Math.max(gx, gy), ax: gx >= gy ? 0 : 1 }; };
     const clear = (f, i) => footings.every((g, j) => j === i || !g.r?.Bx || gapOf(f, g).gap >= gapMin - 1e-9);
-    const reshape = (i, j, ax) => {
-      const f = footings[i], g = footings[j]; if (f.kind !== "spread" || !f.inp) return false;
-      const half = ax ? g.r.By / 2 : g.r.Bx / 2, d = Math.abs(f.p[ax] - g.p[ax]), Lmax = Math.floor((2 * (d - half - gapMin)) * 10 + 1e-9) / 10;
+    // squeeze footing i along axis ax so it clears EVERY footing it clashes with along that axis (both sides — a column between two close
+    // neighbours, user 2026-11-24 "ทำไมฐานรากยังซ้อนกัน"), then lengthen the other side until every check passes; the thickness may grow
+    // (tt.growT) because a narrow strip cantilevers further than the type's square
+    const reshape = (i, ax) => {
+      const f = footings[i]; if (f.kind !== "spread" || !f.inp) return false;
+      let Lmax = Infinity;
+      footings.forEach((g, j) => { if (j === i || !g.r?.Bx) return; const o = gapOf(f, g); if (o.gap >= gapMin - 1e-9 || o.ax !== ax) return;
+        const half = ax ? g.r.By / 2 : g.r.Bx / 2; Lmax = Math.min(Lmax, 2 * (Math.abs(f.p[ax] - g.p[ax]) - half - gapMin)); });
+      if (!Number.isFinite(Lmax)) return false;
+      Lmax = Math.floor(Lmax * 10 + 1e-9) / 10;
       const pierDim = (ax ? f.inp.by : f.inp.bx) + 0.2; if (Lmax < pierDim) return false;
-      const A = f.r.Bx * f.r.By, w0 = Math.ceil((A / Lmax) * 10 - 1e-9) / 10;
-      for (let w = w0; w <= w0 + 1.5 + 1e-9; w = Math.round((w + 0.1) * 10) / 10) {
+      const A = f.r.Bx * f.r.By, w0 = Math.max(ax ? f.r.Bx : f.r.By, Math.ceil((A / Lmax) * 10 - 1e-9) / 10);
+      for (let w = w0; w <= w0 + 2.0 + 1e-9; w = Math.round((w + 0.1) * 10) / 10) {
         const Bx = ax ? w : Lmax, By = ax ? Lmax : w;
         if (Math.max(Bx, By) / Math.min(Bx, By) > 3) break; // a strip, not a footing any more
-        const tt = { name: f.type, t: f.inp.t, Df: f.inp.Df, bar: f.inp.longBar, barS: f.inp.shortBar, s: f.inp.sLong, sS: f.inp.sShort, Bx, By };
+        const tt = { name: f.type, t: f.inp.t, Df: f.inp.Df, bar: f.inp.longBar, barS: f.inp.shortBar, s: f.inp.sLong, sS: f.inp.sShort, Bx, By, growT: true };
         const r = designSpread(tt, f.inp.P, { Bx: f.inp.bx * 100, By: f.inp.by * 100, mainBar: f.inp.dowelBar, n: f.inp.dowelN }, mat, foS, f.inp.Mx ?? 0, f.inp.My ?? 0);
         const cand = { ...f, ...r, p: f.p, stack: f.stack, P: f.P, Mx: f.Mx, My: f.My, combo: f.combo, minP: f.minP, reshaped: true, type: null, typeFrom: f.type ?? null }; // not the type's size any more → its own mark on the plan
-        if (r.ok && clear(cand, i)) { footings[i] = cand; return true; }
+        if (!r.ok) continue;
+        if (clear(cand, i)) { footings[i] = cand; return true; }
+        // passes but still too close to a neighbour on the OTHER side: a wider strip only makes it worse there
+        const other = footings.some((g, j) => j !== i && g.r?.Bx && gapOf(cand, g).gap < gapMin - 1e-9 && gapOf(cand, g).ax !== ax);
+        if (other) break;
       }
       return false;
     };
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; pass < 4; pass++) {
       let moved = false;
       for (let i = 0; i < footings.length; i++) for (let j = i + 1; j < footings.length; j++) {
         const a = footings[i], b = footings[j]; if (!a.r?.Bx || !b.r?.Bx) continue;
         const { gap, ax } = gapOf(a, b); if (gap >= gapMin - 1e-9) continue;
         const [lo, hi] = (a.P ?? 0) <= (b.P ?? 0) ? [i, j] : [j, i];
-        if (reshape(lo, hi, ax) || reshape(hi, lo, ax)) moved = true;
+        if (reshape(lo, ax) || reshape(hi, ax)) moved = true;
       }
       if (!moved) break;
     }
