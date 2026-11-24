@@ -7,6 +7,7 @@
 //     anchored in or through the support)
 //   bottom bars of both beams: into the column ≥ 15 cm (12.11.1); at different bottom levels each ends with a hook up
 // Primitives as engine/stairDetail.js (metres, y up): rendered by src/stairSvg.js and the DXF writer.
+import { dimItem } from "./dimParts.js";
 import { BARS } from "./tables.js";
 import { devLength, hookFit, parseBars } from "./floor.js";
 
@@ -56,10 +57,9 @@ export function jointDetailModel(r, mat = {}, o = {}) {
   const poly = (pts, layer = "C-CONC", closed = false, fill = null) => P.push({ t: "poly", pts, layer, closed, fill });
   const text = (x, y, h, s, layer = "C-TEXT", ha = 0, va = 0, rot = 0) => P.push({ t: "text", x, y, h, s, layer, ha, va, rot });
   const bar = (pts, d, layer) => P.push({ t: "poly", pts, layer, closed: false, bar: d });
-  const dimH = (x1, x2, y, label, above = true) => { line(x1, y, x2, y, "C-DIM"); for (const x of [x1, x2]) { line(x, y - 0.03, x, y + 0.03, "C-DIM"); line(x - 0.012, y - 0.012, x + 0.012, y + 0.012, "C-DIM"); }
-    text((x1 + x2) / 2, y + (above ? 0.015 : -0.015), TH * 0.9, label, "C-DIM", 1, above ? 1 : 3); };
-  const dimV = (x, y1, y2, label) => { line(x, y1, x, y2, "C-DIM"); for (const y of [y1, y2]) { line(x - 0.03, y, x + 0.03, y, "C-DIM"); line(x - 0.012, y - 0.012, x + 0.012, y + 0.012, "C-DIM"); }
-    text(x - 0.015, (y1 + y2) / 2, TH * 0.9, label, "C-DIM", 1, 1, 90); };
+  // real dimensions (engine/dimParts.js → DIMENSION in the DXF); the dimension line runs through y (x), short extension lines
+  const dimH = (x1, x2, y, label, above = true) => P.push(dimItem(Math.min(x1, x2), y - 0.03, Math.max(x1, x2), y - 0.03, 0.03, label, TH * 0.9, { below: !above }));
+  const dimV = (x, y1, y2, label) => P.push(dimItem(x + 0.03, Math.min(y1, y2), x + 0.03, Math.max(y1, y2), 0.03, label, TH * 0.9));
   // leader: a dot on the bar, straight up / down to the text level, then the underline the text sits on (no slanted lines crossing)
   let maxX = -Infinity; // right end of the leader texts (box)
   const leader = (bx, by, ty, s, ha = 0, s2 = "") => { const w = Math.max(String(s).length, String(s2).length * 0.9) * TH * 0.52 + 0.03, ex = ha === 0 ? bx + w : bx - w; maxX = Math.max(maxX, ex);
@@ -158,10 +158,9 @@ export function depthDetailModel(r, mat = {}, o = {}) {
   const poly = (pts, layer = "C-CONC", closed = false) => P.push({ t: "poly", pts, layer, closed });
   const text = (x, y, h, s, layer = "C-TEXT", ha = 0, va = 0, rot = 0) => P.push({ t: "text", x, y, h, s, layer, ha, va, rot });
   const bar = (pts, d, layer) => P.push({ t: "poly", pts, layer, closed: false, bar: d });
-  const dimH = (x1, x2, y, label, above = true) => { line(x1, y, x2, y, "C-DIM"); for (const x of [x1, x2]) { line(x, y - 0.03, x, y + 0.03, "C-DIM"); line(x - 0.012, y - 0.012, x + 0.012, y + 0.012, "C-DIM"); }
-    text((x1 + x2) / 2, y + (above ? 0.015 : -0.015), TH * 0.9, label, "C-DIM", 1, above ? 1 : 3); };
-  const dimV = (x, y1, y2, label) => { line(x, y1, x, y2, "C-DIM"); for (const y of [y1, y2]) { line(x - 0.03, y, x + 0.03, y, "C-DIM"); line(x - 0.012, y - 0.012, x + 0.012, y + 0.012, "C-DIM"); }
-    text(x - 0.015, (y1 + y2) / 2, TH * 0.9, label, "C-DIM", 1, 1, 90); };
+  // real dimensions (engine/dimParts.js → DIMENSION in the DXF); the dimension line runs through y (x), short extension lines
+  const dimH = (x1, x2, y, label, above = true) => P.push(dimItem(Math.min(x1, x2), y - 0.03, Math.max(x1, x2), y - 0.03, 0.03, label, TH * 0.9, { below: !above }));
+  const dimV = (x, y1, y2, label) => P.push(dimItem(x + 0.03, Math.min(y1, y2), x + 0.03, Math.max(y1, y2), 0.03, label, TH * 0.9));
   const leader = (bx, by, ty, s, s2 = "") => { const w = Math.max(String(s).length, String(s2).length * 0.9) * TH * 0.52 + 0.03;
     P.push({ t: "disk", x: bx, y: by, r: 0.008, layer: "C-TEXT" }); poly([[bx, by], [bx, ty], [bx + w, ty]], "C-TEXT");
     text(bx + 0.015, ty + 0.012, TH, s, "C-TEXT", 0, 1); if (s2) text(bx + 0.015, ty - 0.015, TH * 0.82, s2, "C-DIM", 0, 3); };

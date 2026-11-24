@@ -14,6 +14,7 @@
 // METRES, x from the outer face of the foot support (first riser) to the right, y up from the foot floor level. Output = primitives
 // (line / poly with bulges / circle / disk / tri / text) so the SVG (app, report) and the DXF draw the same thing. Drawing only.
 
+import { dimItem, dimBox } from "./dimParts.js";
 const BAR_D = { "RB 6": 0.006, "RB 9": 0.009, "DB 10": 0.01, "DB 12": 0.012, "DB 16": 0.016, "DB 20": 0.02, "DB 25": 0.025 };
 export function parseBarText(s, fallback = "DB 12 @ 0.20") {
   const rx = /^\s*((?:RB|DB)\s*\d+)\s*@\s*([\d.]+)/i, m = rx.exec(s ?? "") ?? rx.exec(fallback);
@@ -37,17 +38,7 @@ export function stairDetailModel(o) {
   const TH = o.th ?? 0.0625, DH = 0.0625;
 
   // aligned dimension p1 → p2, dimension line `off` to the LEFT of p1→p2, 45° ticks, text above the line, reading upwards
-  const dim = (x1, y1, x2, y2, off, label) => {
-    const L = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / L, uy = (y2 - y1) / L, nx = -uy, ny = ux, sg = Math.sign(off) || 1;
-    const a = [x1 + nx * off, y1 + ny * off], b = [x2 + nx * off, y2 + ny * off], g = 0.012;
-    if (Math.abs(off) > 0.02) { line(x1 + nx * g * sg, y1 + ny * g * sg, a[0] + nx * 0.03 * sg, a[1] + ny * 0.03 * sg, "C-DIM"); line(x2 + nx * g * sg, y2 + ny * g * sg, b[0] + nx * 0.03 * sg, b[1] + ny * 0.03 * sg, "C-DIM"); }
-    line(a[0] - ux * 0.03, a[1] - uy * 0.03, b[0] + ux * 0.03, b[1] + uy * 0.03, "C-DIM");
-    const tk = 0.016; for (const q of [a, b]) line(q[0] - (ux + nx) * tk * 0.7, q[1] - (uy + ny) * tk * 0.7, q[0] + (ux + nx) * tk * 0.7, q[1] + (uy + ny) * tk * 0.7, "C-DIM");
-    let rot = (Math.atan2(uy, ux) * 180) / Math.PI, flip = false; if (rot > 90.01 || rot <= -90.01) { rot += rot > 0 ? -180 : 180; flip = true; }
-    const r = (rot * Math.PI) / 180, up = [-Math.sin(r), Math.cos(r)]; // the text's "up" direction
-    text((a[0] + b[0]) / 2 + up[0] * 0.012, (a[1] + b[1]) / 2 + up[1] * 0.012, DH, label, "C-DIM", 1, 1, rot);
-    void flip;
-  };
+  const dim = (x1, y1, x2, y2, off, label) => P.push(dimItem(x1, y1, x2, y2, off, label, DH)); // real DIMENSION in the DXF (engine/dimParts.js)
   // leader as on the sheet: a tick at the bar, a line to the text level, and an underline the text sits on (ha 0 → text to the right)
   const leader = (bx, by, ty, tx, s, ha = 0, viaX = null) => {
     const w = textW(s, TH) + 0.04, ex = ha === 0 ? tx + w : tx - w, vx = viaX ?? bx;
@@ -233,6 +224,7 @@ function bbox(P, pad) {
   for (const p of P) {
     if (p.t === "line") { add(p.x1, p.y1); add(p.x2, p.y2); }
     else if (p.t === "poly") p.pts.forEach((q) => add(q[0], q[1]));
+    else if (p.t === "dim") { const [x0, y0, x1, y1] = dimBox(p); add(x0, y0); add(x1, y1); }
     else if (p.t === "text") { const w = p.rot ? 0 : textW(p.s, p.h), x0 = p.x - w * [0, 0.5, 1][p.ha ?? 0]; add(x0, p.y - p.h * 0.4); add(x0 + w, p.y + p.h * 1.2); }
     else add(p.x, p.y);
   }

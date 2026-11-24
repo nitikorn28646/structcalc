@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import { analyzeFrame } from "../web/engine/frame.js";
 import { footingSheetsDxf, footingDetailModels, footingGroups } from "../web/src/footingDxf.js";
+import { dimText } from "../web/engine/dimParts.js";
 
 let bad = 0, n = 0;
 const ok = (name, c, info = "") => { n++; if (!c) bad++; if (!c || process.env.V) console.log(`${c ? "ok  " : "FAIL"} ${name}${info ? ` — ${info}` : ""}`); };
@@ -24,7 +25,7 @@ for (const file of files) {
     ok(`${tag} ${g.mark}: section shows every Y bar as a dot`, dots === f.r.nShort, `${dots}`);
     const txt = items.filter((p) => p.t === "text").map((p) => p.s).join(" | "), num = (s) => (/^(\d+)-/.exec(s ?? "") ?? [])[1];
     ok(`${tag} ${g.mark}: bar texts from the design`, txt.includes(`${num(f.r.longText)}-${f.inp.longBar}`) && txt.includes(`${num(f.r.shortText)}-${f.inp.shortBar}`));
-    const wTxt = items.filter((p) => p.t === "text" && p.layer === "C-DIM").map((p) => p.s);
+    const wTxt = items.filter((p) => p.t === "dim").map((p) => dimText(p));
     ok(`${tag} ${g.mark}: overall dims ${f.r.Bx.toFixed(2)} × ${f.r.By.toFixed(2)}`, wTxt.includes(f.r.Bx.toFixed(2)) && wTxt.includes(f.r.By.toFixed(2)));
     if (f.kind !== "spread" && f.n > 0) ok(`${tag} ${g.mark}: piles drawn (${f.n})`, items.filter((p) => p.layer === "C-PILE").length >= f.n);
     ok(`${tag} ${g.mark}: no pier bar callout (user 2026-11-24)`, !/ตอม่อ|เดือย|ปลอก RB/.test(txt));
@@ -35,6 +36,13 @@ for (const file of files) {
   ok(`${tag}: plan tags ≥ footings (${tags})`, labels >= tags, `${labels}`);
   ok(`${tag}: schedule lists every mark`, groups.every((g) => o.dxf.includes(`\n1\n${g.mark}\n`)));
   ok(`${tag}: no NaN / undefined in the file`, !/NaN|undefined|Infinity/.test(o.dxf));
+  // one entity per grid line / pile outline (line types, user 2026-11-24 "ให้เส้นเป็นเส้นเดียวกัน"); line types defined in the LTYPE table
+  const body = o.dxf.slice(o.dxf.indexOf("\n  2\nENTITIES")), ents = body.split(/\n0\n(?=LINE|LWPOLYLINE|CIRCLE|ARC|TEXT|DIMENSION)/);
+  const gridLines = ents.filter((e) => /\n8\nC-GRID\n/.test(e) && e.startsWith("LINE")), axes = (() => { const G = fr.floors[0].grid ?? {}; return (G.dx?.length ?? 0) + (G.dy?.length ?? 0) + 2; })();
+  ok(`${tag}: grid lines are single CENTER2 lines (${gridLines.length})`, gridLines.length > 0 && gridLines.every((e) => /\n6\nCENTER2\n/.test(e)) && (!fr.floors[0].grid?.dx?.length || gridLines.length === axes), `axes ${axes}`);
+  const nDim = ents.filter((e) => e.startsWith("DIMENSION")).length, nBlk = (o.dxf.match(/\n  2\n\*D\d+\n/g) ?? []).length;
+  ok(`${tag}: dimensions are DIMENSION entities, each with its block (${nDim})`, nDim > 50 && nBlk === 2 * nDim, `blocks ${nBlk / 2}`);
+  ok(`${tag}: LTYPE table has CENTER2 + HIDDEN2`, /\nLTYPE\n[\s\S]*?\n  2\nCENTER2\n/.test(o.dxf) && /\n  2\nHIDDEN2\n/.test(o.dxf));
 }
 console.log(`footingdxf-check: ${n - bad}/${n}${bad ? ` · ${bad} FAILED` : " all ok"}`);
 process.exit(bad ? 1 : 0);

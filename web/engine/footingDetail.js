@@ -11,6 +11,7 @@
 import { BARS } from "./tables.js";
 import { PILES } from "./footing.js";
 import { faceBars } from "./floor.js";
+import { dimItem, dimBox } from "./dimParts.js";
 
 const BD = (bar, def = 0.012) => (BARS[bar]?.d ?? def * 100) / 100;
 const f2 = (v) => Number(v).toFixed(2);
@@ -37,12 +38,10 @@ export function footingDetailModel(f, o = {}) {
   };
   const tick = (x, y) => line(x - 0.014, y - 0.014, x + 0.014, y + 0.014, "C-DIM");
   // dimensions: extension lines from the object (gap g) to the dimension line, 45° ticks, text above / left of the line
-  const dimH = (xa, xb, yObj, y, label) => { const s = Math.sign(y - yObj) || 1; for (const x of [xa, xb]) { line(x, yObj + s * 0.015, x, y + s * 0.03, "C-DIM"); P.at(-1).ext = true; }
-    line(xa - 0.03, y, xb + 0.03, y, "C-DIM"); tick(xa, y); tick(xb, y); text((xa + xb) / 2, y + 0.014, DH, label, "C-DIM", 1, 1); };
-  const dimV = (ya, yb, xObj, x, label) => { const s = Math.sign(x - xObj) || 1; for (const y of [ya, yb]) { line(xObj + s * 0.015, y, x + s * 0.03, y, "C-DIM"); P.at(-1).ext = true; }
-    line(x, ya - 0.03, x, yb + 0.03, "C-DIM"); tick(x, ya); tick(x, yb);
-    if (Math.abs(yb - ya) < tw(label, DH) + 0.02) text(x + s * 0.03, (ya + yb) / 2, DH * 0.9, label, "C-DIM", s > 0 ? 0 : 2, 2); // too short: text beside, horizontal
-    else text(x - 0.014, (ya + yb) / 2, DH, label, "C-DIM", 1, 1, 90); };
+  // real dimensions (engine/dimParts.js → DIMENSION entities in the DXF), user 2026-11-24
+  const dimPush = (q) => { P.push(q); const [a, b, c2, e] = dimBox(q); ext(a, b); ext(c2, e); };
+  const dimH = (xa, xb, yObj, y, label) => dimPush(dimItem(xa, yObj, xb, yObj, y - yObj, label, DH));
+  const dimV = (ya, yb, xObj, x, label) => dimPush(dimItem(xObj, ya, xObj, yb, xObj - x, label, DH));
   // chain of dimensions along x at y (pts sorted), labels = widths
   const chainH = (xs, yObj, y) => { for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > 1e-6) dimH(xs[i - 1], xs[i], yObj, y, f2(xs[i] - xs[i - 1])); };
   const chainV = (ys, xObj, x) => { for (let i = 1; i < ys.length; i++) if (ys[i] - ys[i - 1] > 1e-6) dimV(ys[i - 1], ys[i], xObj, x, f2(ys[i] - ys[i - 1])); };
@@ -79,8 +78,9 @@ export function footingDetailModel(f, o = {}) {
   // piles (dashed)
   for (const [px, py] of r.piles ?? []) {
     if (!pile) break;
-    if (pile.round) { const n = 16; for (let k = 0; k < n; k += 2) { const a0 = (k / n) * 2 * Math.PI, a1 = ((k + 1) / n) * 2 * Math.PI; line(px + (pile.b / 2) * Math.cos(a0), py + (pile.b / 2) * Math.sin(a0), px + (pile.b / 2) * Math.cos(a1), py + (pile.b / 2) * Math.sin(a1), "C-PILE"); } }
-    else { const h = pile.b / 2; for (const [a, b] of [[[-h, -h], [h, -h]], [[h, -h], [h, h]], [[h, h], [-h, h]], [[-h, h], [-h, -h]]]) line(px + a[0], py + a[1], px + b[0], py + b[1], "C-PILE", true); }
+    // hidden outline = one entity with the HIDDEN2 line type (user 2026-11-24: one line, not dash pieces)
+    if (pile.round) { circle(px, py, pile.b / 2, "C-PILE"); Object.assign(P.at(-1), { lt: "HIDDEN2", lts: 0.4 }); }
+    else { const h = pile.b / 2; poly([[px - h, py - h], [px + h, py - h], [px + h, py + h], [px - h, py + h]], "C-PILE", true); Object.assign(P.at(-1), { lt: "HIDDEN2", lts: 0.4, dashed: true }); }
     line(px - 0.04, py, px + 0.04, py, "C-PILE"); line(px, py - 0.04, px, py + 0.04, "C-PILE");
   }
   // pier: outline, tie, bars (faceBars layout of the dowels)
@@ -93,7 +93,7 @@ export function footingDetailModel(f, o = {}) {
   // dimensions: chains (pier offsets) + overall on top and on the left; cover at the top right
   chainH([X0, -bx / 2, bx / 2, X1], Y1, Y1 + 0.16); dimH(X0, X1, Y1, Y1 + 0.32, f2(Bx));
   chainV([Y0, -by / 2, by / 2, Y1], X0, X0 - 0.16); dimV(Y0, Y1, X0, X0 - 0.32, f2(By));
-  { const yc = Y1 - 0.02; line(X1 - c, Y1 + 0.02, X1 - c, Y1 - c - 0.03, "C-DIM"); line(X1 - c - 0.05, Y1 + 0.06, X1 + 0.05, Y1 + 0.06, "C-DIM"); tick(X1 - c, Y1 + 0.06); tick(X1, Y1 + 0.06); text(X1 - c / 2, Y1 + 0.075, DH * 0.85, cTxt, "C-DIM", 1, 1); void yc; }
+  dimH(X1 - c, X1, Y1 - c, Y1 + 0.06, cTxt);
   // pile positions from the centre
   if (pile && (r.piles?.length ?? 0) > 1) { const xs = [...new Set(r.piles.map((p) => +p[0].toFixed(3)))].sort((a, b) => a - b); if (xs.length > 1) chainH([X0, ...xs, X1], Y0, Y0 - 0.16); }
   // section cut ก–ก along X through the centre
@@ -128,7 +128,7 @@ export function footingDetailModel(f, o = {}) {
   for (const [xa, xb] of [[X0 - 0.45, -bx / 2], [bx / 2, X1 + 0.45]]) { line(xa, yg, xb, yg, "C-CONC"); for (let x = xa + 0.05; x < xb - 0.04; x += 0.1) line(x, yg, x - 0.05, yg - 0.05, "C-HATCH"); }
   // piles under the footing (one per distinct x of the cut), top 5 cm into the footing, broken below
   if (pile) { const xs = [...new Set((r.piles ?? []).map((p) => +p[0].toFixed(3)))]; const pb = pile.b, yp = ys - 0.55;
-    for (const px of xs) { line(px - pb / 2, yb + 0.05, px - pb / 2, yp); line(px + pb / 2, yb + 0.05, px + pb / 2, yp); line(px - pb / 2, yb + 0.05, px + pb / 2, yb + 0.05, "C-CONC", true);
+    for (const px of xs) { line(px - pb / 2, yb + 0.05, px - pb / 2, yp); line(px + pb / 2, yb + 0.05, px + pb / 2, yp); line(px - pb / 2, yb + 0.05, px + pb / 2, yb + 0.05, "C-CONC", true); Object.assign(P.at(-1), { lt: "HIDDEN2", lts: 0.4 });
       poly([[px - pb / 2 - 0.03, yp], [px - 0.02, yp], [px, yp + 0.035], [px + 0.02, yp - 0.035], [px + 0.04, yp], [px + pb / 2 + 0.03, yp]]); } }
   // bottom mat: X bar with 90° hooks up (12db, inside the footing), Y bars as dots on top of it
   const yBL = yb + c + dL / 2, hk = Math.min(Math.max(12 * dL, 0.15), t - c - 0.06), yBS = yb + c + dL + dS / 2;
@@ -148,7 +148,7 @@ export function footingDetailModel(f, o = {}) {
   chainV([yb, yt, yg], X0, X0 - 0.16); dimV(yb, yg, X0, X0 - 0.32, f2(Df));
   dimV(yb, yb + c, X1, X1 + 0.16, cTxt);
   // foot length of the pier bars (on the left foot)
-  { const y = yFoot + 0.09; line(-xb - foot, y - 0.02, -xb - foot, y + 0.02, "C-DIM"); line(-xb, y - 0.02, -xb, y + 0.02, "C-DIM"); line(-xb - foot, y, -xb, y, "C-DIM"); tick(-xb - foot, y); tick(-xb, y); text(-xb - foot / 2, y + 0.012, DH * 0.85, f2(foot), "C-DIM", 1, 1); }
+  dimH(-xb - foot, -xb, yFoot, yFoot + 0.09, f2(foot));
   // levels
   const lvl = (y, s) => { const w = tw(s, DH) + 0.08, x = X0 - 0.45 - w; P.push({ t: "tri", x: x + 0.04, y, s: 0.04, layer: "C-DIM" }); line(x, y, X0 - 0.4, y, "C-DIM"); text(x + 0.09, y + 0.012, DH, s, "C-DIM", 0, 1); };
   lvl(yg, "±0.00 ระดับดิน"); lvl(yb, "VARY ท้องฐานราก");
@@ -167,7 +167,8 @@ export function footingDetailModel(f, o = {}) {
   text(-0.2, yST - 0.11, DH, `มาตราส่วน 1:25 · ระยะหุ้ม ${Math.round(c * 1000) / 10} ซม.${o.colName ? ` · เสา ${o.colName}` : ""}`, "C-DIM", 0, 2);
 
   const COL = { "C-CONC": 2, "C-STIRRUP": 2, "C-BAR": 3, "C-BAR-EXTRA": 3, "C-DIM": 1, "C-TEXT": 2, "C-TITLE": 3, "C-HATCH": 8, "C-PILE": 2, "C-TAG": 5 };
-  for (const p of P) if (p.c == null) p.c = p.t === "text" ? (p.layer === "C-TAG" ? 4 : 3) : p.t === "disk" && p.layer !== "C-TEXT" ? 8 : p.ext ? 8 : p.t === "tri" ? 3 : COL[p.layer] ?? 7;
+  for (const p of P) if (p.t === "dim") Object.assign(p, { cd: p.cd ?? 1, ce: p.ce ?? 8, ct: p.ct ?? 3 });
+  for (const p of P) if (p.c == null && p.t !== "dim") p.c = p.t === "text" ? (p.layer === "C-TAG" ? 4 : 3) : p.t === "disk" && p.layer !== "C-TEXT" ? 8 : p.ext ? 8 : p.t === "tri" ? 3 : COL[p.layer] ?? 7;
   const pad = 0.05;
   return { items: P, box: [x0 - pad, y0 - pad, x1 + pad, y1 + pad] };
 }

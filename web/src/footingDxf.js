@@ -9,6 +9,7 @@
 import { Dxf, frame, emitModel, modelSheets, SW, SH, BX0, BY0, BY1, TX } from "./beamDetailDxf.js";
 import { footingDetailModel, footingScheduleRow } from "../engine/footingDetail.js";
 import { footingMarks } from "./footingMarks.js";
+import { dimItem } from "../engine/dimParts.js";
 import { gridAxes } from "./planKit.js";
 import { PILES } from "../engine/footing.js";
 
@@ -60,16 +61,15 @@ function planSheet(d, X0, k, frameData, res, project, title) {
   const P = (x, y) => [ox + x, oy + y];
   const L = (x1, y1, x2, y2, l = "C-CONC", c = 0) => { const [a, b] = P(x1, y1), [e, g] = P(x2, y2); d.line(a, b, e, g, l, c); };
   const T = (x, y, h, s, l = "C-TEXT", ha = 0, va = 0, rot = 0, c = 0) => { const [a, b] = P(x, y); d.text(a, b, h, s, l, ha, va, rot, c); };
-  const tick = (x, y) => L(x - 0.06 * u, y - 0.06 * u, x + 0.06 * u, y + 0.06 * u, "C-DIM", 1);
-  // colours as on the user's sheet: dimension line red, extension lines gray, text green
-  const dimH = (xa, xb, y, label, yObj = null, c = 0) => { if (yObj != null) for (const x of [xa, xb]) L(x, yObj, x, y + Math.sign(y - yObj) * 0.1 * u, "C-DIM", 8);
-    L(xa - 0.1 * u, y, xb + 0.1 * u, y, "C-DIM", 1); tick(xa, y); tick(xb, y); T((xa + xb) / 2, y + 0.06 * u, 0.15 * u, label, "C-DIM", 1, 1, 0, c || 3); };
-  const dimV = (ya, yb, x, label, xObj = null, c = 0) => { if (xObj != null) for (const y of [ya, yb]) L(xObj, y, x + Math.sign(x - xObj) * 0.1 * u, y, "C-DIM", 8);
-    L(x, ya - 0.1 * u, x, yb + 0.1 * u, "C-DIM", 1); tick(x, ya); tick(x, yb); T(x - 0.06 * u, (ya + yb) / 2, 0.15 * u, label, "C-DIM", 1, 1, 90, c || 3); };
+  // REAL dimensions (DIMENSION entities, user 2026-11-24): line red, extension lines gray, text green (red for a clashing footing);
+  // without an object point the extension lines are short (the dimension line runs 0.1·u from the measured points)
+  const dimO = { th: 0.15 * u, cd: 1, ce: 8 };
+  const dimH = (xa, xb, y, label, yObj = null, c = 0) => d.dimension(dimItem(xa, yObj ?? y - 0.1 * u, xb, yObj ?? y - 0.1 * u, y - (yObj ?? y - 0.1 * u), label, dimO.th, { ...dimO, ct: c || 3 }), ox, oy);
+  const dimV = (ya, yb, x, label, xObj = null, c = 0) => { const xo = xObj ?? x - 0.1 * u; d.dimension(dimItem(xo, ya, xo, yb, xo - x, label, dimO.th, { ...dimO, ct: c || 3 }), ox, oy); };
   // ---- grid: dash-dot lines, bubbles, chains
   const gx0 = mx0 - 0.8 * u, gx1 = mx1 + 0.9 * u, gy0 = my0 - 0.8 * u, gy1 = my1 + 0.9 * u;
-  const dashDot = (x1, y1, x2, y2) => { const len = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / len, uy = (y2 - y1) / len, pat = [0.8 * u, 0.15 * u, 0.06 * u, 0.15 * u]; let s = 0, i = 0;
-    while (s < len - 1e-9) { const e = Math.min(len, s + pat[i % 4]); if (i % 2 === 0) L(x1 + ux * s, y1 + uy * s, x1 + ux * e, y1 + uy * e, "C-GRID", 8); s = e; i++; } };
+  // grid line = ONE line with the CENTER2 line type (1.125 m pattern at 1:100), user 2026-11-24 "ให้เส้นเป็นเส้นเดียวกัน"
+  const dashDot = (x1, y1, x2, y2) => d.withLt("CENTER2", u, () => L(x1, y1, x2, y2, "C-GRID", 8));
   for (const x of GX) dashDot(x, gy0, x, gy1 + 1.4 * u);
   for (const y of GY) dashDot(gx0, y, gx1 + 1.6 * u, y);
   const rB = 0.25 * u;
@@ -94,8 +94,8 @@ function planSheet(d, X0, k, frameData, res, project, title) {
     const wSide = up >= need + (up < Infinity ? tagH : 0) ? 1 : dn >= need + tagH + (dn < Infinity ? need : 0) ? -1 : 0, dSide = rt >= need ? 1 : lf >= need ? -1 : 0;
     // outline, piles, column
     { const [a, b] = P(cx - B / 2, cy - D / 2), [e, g] = P(cx + B / 2, cy + D / 2); d.poly([[a, b], [e, b], [e, g], [a, g]], "C-CONC", true, red ? 0.04 * u : 0, red || 3); }
-    for (const [px, py] of f.r.piles ?? []) { if (f.kind === "spread" || !f.n) break; const h = (PILES[f.pile]?.b ?? 0.2) / 2, q = [[-h, -h], [h, -h], [h, h], [-h, h]];
-      for (let j = 0; j < 4; j++) { const [a, b] = q[j], [e, g] = q[(j + 1) % 4]; for (let s = 0; s < 1; s += 0.5) L(cx + px + a + (e - a) * s, cy + py + b + (g - b) * s, cx + px + a + (e - a) * (s + 0.3), cy + py + b + (g - b) * (s + 0.3), "C-PILE", 2); } }
+    for (const [px, py] of f.r.piles ?? []) { if (f.kind === "spread" || !f.n) break; const h = (PILES[f.pile]?.b ?? 0.2) / 2;
+      d.withLt("HIDDEN2", 0.5 * u, () => d.poly([[-h, -h], [h, -h], [h, h], [-h, h]].map(([a, b]) => P(cx + px + a, cy + py + b)), "C-PILE", true, 0, 2)); }
     const col = colAt(f.p), cB = (col?.lv?.Bx ?? 20) / 100, cD = (col?.lv?.By ?? 20) / 100;
     { const [a, b] = P(cx - cB / 2, cy), [e] = P(cx + cB / 2, cy); d.poly([[a, b], [e, b]], "C-COL", false, cD, 3); }
     if (wSide) dimH(cx - B / 2, cx + B / 2, wSide > 0 ? cy + D / 2 + 0.22 * u : cy - D / 2 - 0.22 * u, f2(B), wSide > 0 ? cy + D / 2 : cy - D / 2, red);

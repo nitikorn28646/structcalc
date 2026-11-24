@@ -1,5 +1,6 @@
 // Primitives of engine/stairDetail.js → one SVG string (app panel, report, tests). Model units = metres, y up; SVG y down.
 // poly points may carry a DXF bulge as the third value (arc to the next point, + = counter-clockwise in y-up).
+import { dimParts } from "../engine/dimParts.js";
 const COL = {
   "C-CONC": "#1f2937", "C-STIRRUP": "#0f766e", "C-BAR": "#b91c1c", "C-BAR-EXTRA": "#1d4ed8", "C-DIM": "#4b5563",
   "C-TEXT": "#111827", "C-TITLE": "#111827", "C-ELEV": "#6b7280", "C-FRAME2": "#9ca3af",
@@ -24,13 +25,13 @@ export function stairSvgString(model, { px = 190, mono = false } = {}) {
   };
   const hatchId = "sh" + Math.random().toString(36).slice(2, 7);
   out.push(`<defs><pattern id="${hatchId}" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#9ca3af" stroke-width="0.6"/></pattern></defs>`);
-  for (const p of model.items) {
+  for (const p of model.items.flatMap((q) => (q.t === "dim" ? dimParts(q) : [q]))) { // dimensions drawn from their parts (engine/dimParts.js)
     const c = col(p.layer);
     if (p.t === "line") out.push(`<line x1="${X(p.x1)}" y1="${Y(p.y1)}" x2="${X(p.x2)}" y2="${Y(p.y2)}" stroke="${c}" stroke-width="${sw(p.layer)}"${p.dash ? ' stroke-dasharray="6 3 1.5 3"' : ""}/>`);
     else if (p.t === "poly") {
       const fill = p.fill ? `url(#${hatchId})` : "none";
-      out.push(`<path d="${path(p.pts, p.closed)}" fill="${fill}" stroke="${c}" stroke-width="${sw(p.layer, p.bar)}" stroke-linejoin="round" stroke-linecap="round"/>`);
-    } else if (p.t === "circle") out.push(`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${Math.max(1.6, p.r * k).toFixed(2)}" fill="none" stroke="${c}" stroke-width="1"/>`);
+      out.push(`<path d="${path(p.pts, p.closed)}" fill="${fill}" stroke="${c}" stroke-width="${sw(p.layer, p.bar)}" stroke-linejoin="round" stroke-linecap="round"${p.lt ? ' stroke-dasharray="4 2.5"' : ""}/>`);
+    } else if (p.t === "circle") out.push(`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${Math.max(1.6, p.r * k).toFixed(2)}" fill="none" stroke="${c}" stroke-width="1"${p.lt ? ' stroke-dasharray="4 2.5"' : ""}/>`);
     else if (p.t === "disk") out.push(`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${Math.max(1.5, p.r * k).toFixed(2)}" fill="${c}"/>`);
     else if (p.t === "arrow") { const nx = -p.dy, ny = p.dx, bx = p.x + p.dx * p.L, by = p.y + p.dy * p.L, h = p.w / 2;
       out.push(`<path d="M${X(p.x)} ${Y(p.y)} L${X(bx + nx * h)} ${Y(by + ny * h)} L${X(bx - nx * h)} ${Y(by - ny * h)} Z" fill="${c}"/>`); }

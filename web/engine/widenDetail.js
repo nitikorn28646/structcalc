@@ -3,6 +3,7 @@
 // closed stirrup(s) (red) running past the joint to enclose the beam's corner bars — size H × W written as on the sheet ("ขนาด 35 × 15 ซม."):
 // H = h − 2·cover_to_stirrup, W = w + the beam's cover + bar (≈ 5 cm) for the first set; a second set (sets 2) is 10 cm wider.
 // Primitives as engine/stairDetail.js (metres, y up) → src/stairSvg.js and the DXF writer. Drawing only (checks: floor.js widen).
+import { dimItem } from "./dimParts.js";
 import { BARS, STIRRUPS } from "./tables.js";
 import { parseBars } from "./floor.js";
 
@@ -42,10 +43,8 @@ export function widenDetailModel(t, wt, mat = {}, o = {}) {
   const rowW = (n, y) => { const m = Math.max(1, n); for (let k = 0; k < m; k++) circle(m === 1 ? xw1 : xw0 + ((xw1 - xw0) * k) / (m - 1), y, rW, "C-BAR"); };
   rowW(tw?.n ?? 1, h - c - sdW - rW); rowW(bw?.n ?? 1, c + sdW + rW);
   // dims: strip width on top, beam depth on the left
-  const dim = (x1, y1, x2, y2, label, vert) => { line(x1, y1, x2, y2, "C-DIM"); for (const [x, y] of [[x1, y1], [x2, y2]]) line(x - 0.012, y - 0.012, x + 0.012, y + 0.012, "C-DIM");
-    if (vert) text(x1 - 0.012, (y1 + y2) / 2, TH, label, "C-DIM", 1, 1, 90); else text((x1 + x2) / 2, y1 + 0.012, TH, label, "C-DIM", 1, 1); };
-  dim(b, h + 0.08, b + w, h + 0.08, w.toFixed(2)); line(b, h + 0.02, b, h + 0.1, "C-DIM"); line(b + w, h + 0.02, b + w, h + 0.1, "C-DIM");
-  dim(-0.08, 0, -0.08, h, h.toFixed(2), true); line(-0.1, 0, -0.02, 0, "C-DIM"); line(-0.1, h, -0.02, h, "C-DIM");
+  // real dimensions (engine/dimParts.js → DIMENSION in the DXF): strip width on top, beam depth on the left
+  P.push(dimItem(b, h, b + w, h, 0.08, w.toFixed(2), TH)); P.push(dimItem(0, 0, 0, h, 0.08, h.toFixed(2), TH));
   // notes (leader: straight from the bar / stirrup to the right, text on the line)
   const n = widenNotes(t, wt, mat), tx = b + w + 0.1;
   const lead = (bx, by, ty, s) => { poly([[bx, by], [tx - 0.04, ty], [tx - 0.015, ty]], "C-TEXT"); text(tx, ty, TH, s, "C-TEXT", 0, 2); };

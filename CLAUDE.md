@@ -909,3 +909,14 @@ filled arrowheads (Dxf.arrow = tapered LWPOLYLINE, model primitive "arrow", SVG 
 `c`, emitModel passes it; footing files only): concrete / ties / leaders 2 yellow, mat bars 3 green, column bars 1 red, bar dots + hatch 8,
 lean/sand lines 1, dimension line 1 / extension 8 / text 3, texts 3, title bubble 5 + text 4; plan: grid 8, bubbles 3 + text 6, footings /
 columns / tags 3 (clash 1), piles 2.
+DXF ONE-ENTITY RULE (2026-11-24, user "ให้เส้นเป็นเส้นเดียวกัน" + "ไดเมนชั่นต้องเป็นไดเมนชั่นจริงๆ ไม่ใช่แปะเส้นและข้อความ"): every sheet file (beam,
+stair, footing): (1) dashed lines are ONE entity with a line type — EXTRA_LTYPES CENTER2 / HIDDEN2 (acad.lin patterns) appended to the LTYPE
+table; Dxf.withLt(name, scale, fn) sets group 6 / 48; footing grid CENTER2 × u, piles HIDDEN2, model `dash` lines CENTER2 × 0.18 (or the item's
+lt / lts), beam elevation HIDDEN2 / CENTER2 as in the user's drawing (the old "no LTYPE → Thai ???" note was the R12 file; R2010 is fine).
+(2) Dimensions are REAL DIMENSION entities: engine/dimParts.js dimItem (measured points + dimension line) is the one dim primitive of every
+model (footing / stair (aligned) / level + depth joints / planted columns / widening); Dxf.dimension writes DIMENSION (rotated 0/90°, else
+aligned, flags 32 + 128 = text where we put it) + its anonymous block *Dn (BLOCK_RECORD + BLOCKS, the same lines / ticks / text as dimParts)
++ a DIMSTYLE per text height and colours (SD<th·1e4>_<clrd>_<clre>_<clrt>: tick DIMTSZ, text style T5, 2 decimals, "." separator, text above);
+text override only when the label ≠ the measured length (e.g. 0.075, "เสา 30 ซม."); Dxf.dim (beam sections) and the footing plan sheet use it
+too; SVG (stairSvg) draws dimParts. footingdxf-check 223 (grid lines single CENTER2, every dim a DIMENSION with its block); ezdxf audit 0
+errors on beam / stair / footing files of 5 projects. Not opened in AutoCAD here.

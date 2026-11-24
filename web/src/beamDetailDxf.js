@@ -10,6 +10,7 @@ import { STIRRUPS } from "../engine/tables.js";
 import { sectionBarSpec, sectionNotes, extraFootnote, hasExtras, cantNote } from "../engine/beamDetail.js";
 import { ELEVATION_SAMPLE } from "./elevationSample.js";
 import { DXF2010 } from "./dxfTemplate2010.js";
+import { dimItem, dimParts, dimText } from "../engine/dimParts.js";
 
 // sheets (user 2026-11-18, their A3 sheet EN-08 "แบบขยายคาน" as the model): A3 at 1:25 drawn in metres = 10.50 × 7.425, drawing area
 // inside the red border, title column on the right (fields filled from the project data, logo area left empty, Dwg / Sheet No. empty —
@@ -20,9 +21,13 @@ const f = (v) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(4);
 // modelspace owner, appended to the ezdxf-made skeleton (src/dxfTemplate2010.js); text in UTF-8 as is
 const OWNER = "17";
 const EXTRA_LAYERS = [["C-HATCH", 8], ["C-PILE", 4], ["C-GRID", 1], ["C-COL", 7]];
+// line types appended to the LTYPE table (AutoCAD acad.lin patterns, drawing units): one dashed entity instead of dash pieces
+const EXTRA_LTYPES = [["CENTER2", "Center (.5x) ____ _ ____ _ ____", [0.75, -0.125, 0.125, -0.125]], ["HIDDEN2", "Hidden (.5x) _ _ _ _ _ _ _ _ _", [0.125, -0.0625]]];
 export class Dxf {
-  constructor() { this.e = []; this.h = 0x1000; }
-  head(type, l, color) { return `0\n${type}\n5\n${(this.h++).toString(16).toUpperCase()}\n330\n${OWNER}\n100\nAcDbEntity\n8\n${l}${color ? `\n62\n${color}` : ""}`; }
+  constructor() { this.e = []; this.h = 0x1000; this.own = OWNER; this.brec = []; this.blocks = []; this.dstyles = new Map(); }
+  // this.lt = { name, scale } while drawing a dashed entity (one entity with a line type, user 2026-11-24 "ให้เส้นเป็นเส้นเดียวกัน")
+  head(type, l, color) { const lt = this.lt; return `0\n${type}\n5\n${(this.h++).toString(16).toUpperCase()}\n330\n${this.own}\n100\nAcDbEntity\n8\n${l}${lt ? `\n6\n${lt.name}` : ""}${color ? `\n62\n${color}` : ""}${lt && lt.scale !== 1 ? `\n48\n${f(lt.scale)}` : ""}`; }
+  withLt(name, scale, fn) { const o = this.lt; this.lt = name ? { name, scale } : null; try { fn(); } finally { this.lt = o; } }
   line(x1, y1, x2, y2, l, color = 0) { this.e.push(`${this.head("LINE", l, color)}\n100\nAcDbLine\n10\n${f(x1)}\n20\n${f(y1)}\n30\n0\n11\n${f(x2)}\n21\n${f(y2)}\n31\n0`); }
   arc(x, y, r, a0, a1, l, color = 0) { this.e.push(`${this.head("ARC", l, color)}\n100\nAcDbCircle\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}\n100\nAcDbArc\n50\n${f(a0)}\n51\n${f(a1)}`); }
   circle(x, y, r, l, color = 0) { this.e.push(`${this.head("CIRCLE", l, color)}\n100\nAcDbCircle\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}`); }
@@ -40,19 +45,45 @@ export class Dxf {
     const txt = String(s).replace(/[\r\n]+/g, " ");
     this.e.push(`${this.head("TEXT", l, color)}\n100\nAcDbText\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(h)}\n1\n${txt}${rot ? `\n50\n${f(rot)}` : ""}${wf !== 1 ? `\n41\n${f(wf)}` : ""}\n7\nT5${al}\n100\nAcDbText${va ? `\n73\n${va}` : ""}`);
   }
-  // dimension drawn with lines + ticks + text (no DIMENSION entity: same look in every CAD program)
+  // dimension (x1, y1 → x2, y2 measured, dimension line `off` away): a REAL DIMENSION entity (user 2026-11-24 "ไดเมนชั่นต้องเป็นไดเมนชั่นจริงๆ")
   dim(x1, y1, x2, y2, off, label, h) {
-    const vert = Math.abs(x1 - x2) < 1e-9, t = h * 0.6;
-    if (!vert) { const y = y1 + off; this.line(x1, y1, x1, y + Math.sign(off) * t, "C-DIM"); this.line(x2, y2, x2, y + Math.sign(off) * t, "C-DIM"); this.line(x1 - t, y, x2 + t, y, "C-DIM");
-      for (const x of [x1, x2]) this.line(x - t * 0.6, y - t * 0.6, x + t * 0.6, y + t * 0.6, "C-DIM"); this.text((x1 + x2) / 2, y + h * 0.5, h, label, "C-DIM", 1, 0); }
-    else { const x = x1 + off; this.line(x1, y1, x + Math.sign(off) * t, y1, "C-DIM"); this.line(x2, y2, x + Math.sign(off) * t, y2, "C-DIM"); this.line(x, y1 - t, x, y2 + t, "C-DIM");
-      for (const y of [y1, y2]) this.line(x - t * 0.6, y - t * 0.6, x + t * 0.6, y + t * 0.6, "C-DIM"); this.text(x - h * 0.5, (y1 + y2) / 2, h, label, "C-DIM", 1, 0, 90); }
+    const vert = Math.abs(x1 - x2) < 1e-9;
+    this.dimension(vert ? dimItem(x1, Math.min(y1, y2), x1, Math.max(y1, y2), -off, label, h) : dimItem(Math.min(x1, x2), y1, Math.max(x1, x2), y1, off, label, h));
+  }
+  // p = engine/dimParts.js item (+ offset ox, oy): DIMENSION (rotated 0° / 90°, else aligned) + its anonymous block *Dn with the drawn lines / text
+  // + a dim style per text height and colours (tick marks DIMTSZ, text style T5, 2 decimals, "." separator, text above the line)
+  dimension(p0, ox = 0, oy = 0) {
+    const p = { ...p0, x1: p0.x1 + ox, y1: p0.y1 + oy, x2: p0.x2 + ox, y2: p0.y2 + oy, ax: p0.ax + ox, ay: p0.ay + oy, bx: p0.bx + ox, by: p0.by + oy };
+    const col = (c) => (c ? c : 256), sname = `SD${Math.round(p.th * 10000)}_${col(p.cd)}_${col(p.ce)}_${col(p.ct)}`;
+    if (!this.dstyles.has(sname)) this.dstyles.set(sname, { th: p.th, cd: col(p.cd), ce: col(p.ce), ct: col(p.ct) });
+    const n = this.brec.length + 1, name = `*D${n}`, hR = (this.h++).toString(16).toUpperCase(), hB = (this.h++).toString(16).toUpperCase();
+    // block content = the same parts the SVG draws
+    const keep = this.e, ownKeep = this.own; this.e = []; this.own = hR;
+    let tpos = null;
+    for (const q of dimParts(p)) { if (q.t === "line") this.line(q.x1, q.y1, q.x2, q.y2, q.layer, q.c); else { this.text(q.x, q.y, q.h, q.s, q.layer, q.ha, q.va, q.rot, q.c); const r = (q.rot * Math.PI) / 180; tpos = [q.x - Math.sin(r) * q.h / 2, q.y + Math.cos(r) * q.h / 2]; } }
+    const body = this.e.join("\n"); this.e = keep; this.own = ownKeep;
+    const hE = (this.h++).toString(16).toUpperCase();
+    this.brec.push(`  0\nBLOCK_RECORD\n  5\n${hR}\n330\n9\n100\nAcDbSymbolTableRecord\n100\nAcDbBlockTableRecord\n  2\n${name}\n340\n0\n 70\n0\n280\n1\n281\n0\n`);
+    this.blocks.push(`  0\nBLOCK\n  5\n${hB}\n330\n${hR}\n100\nAcDbEntity\n  8\n0\n100\nAcDbBlockBegin\n  2\n${name}\n 70\n1\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  3\n${name}\n  1\n\n${body ? `${body}\n` : ""}  0\nENDBLK\n  5\n${hE}\n330\n${hR}\n100\nAcDbEntity\n  8\n0\n100\nAcDbBlockEnd\n`);
+    const L = Math.hypot(p.bx - p.ax, p.by - p.ay), ux = (p.bx - p.ax) / (L || 1), uy = (p.by - p.ay) / (L || 1);
+    const rotd = Math.abs(uy) < 1e-9 ? 0 : Math.abs(ux) < 1e-9 ? 90 : null, typ = rotd == null ? 1 : 0, s = dimText(p), meas = L;
+    const over = s === meas.toFixed(2) ? "" : s;
+    this.e.push(`${this.head("DIMENSION", p.layer ?? "C-DIM", 0)}\n100\nAcDbDimension\n280\n0\n2\n${name}\n10\n${f(p.bx)}\n20\n${f(p.by)}\n30\n0\n11\n${f(tpos[0])}\n21\n${f(tpos[1])}\n31\n0\n70\n${typ + 32 + 128}\n71\n5\n42\n${f(meas)}\n1\n${over}\n3\n${sname}\n100\nAcDbAlignedDimension\n13\n${f(p.x1)}\n23\n${f(p.y1)}\n33\n0\n14\n${f(p.x2)}\n24\n${f(p.y2)}\n34\n0${rotd == null ? "" : `\n50\n${rotd}\n100\nAcDbRotatedDimension`}`);
   }
   toString() {
     const ents = this.e.join("\n");
     // layers the skeleton does not have (footing sheets 2026-11-24): records appended to the LAYER table with fresh handles
     const lay = EXTRA_LAYERS.map(([n, col]) => `  0\nLAYER\n  5\n${(this.h++).toString(16).toUpperCase()}\n330\n1\n100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord\n  2\n${n}\n 70\n0\n 62\n${col}\n  6\nContinuous\n370\n-3\n390\n13\n347\n21\n`).join("");
-    return DXF2010.replace("  0\nENDTAB\n  0\nTABLE\n  2\nSTYLE", `${lay}  0\nENDTAB\n  0\nTABLE\n  2\nSTYLE`).replace(/(\n  2\nLAYER\n  5\n1\n330\n0\n100\nAcDbSymbolTable\n 70\n)(\d+)/, (_, a, n) => `${a}${+n + EXTRA_LAYERS.length}`).replace("\n  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n", `\n  0\nSECTION\n  2\nENTITIES\n${ents}\n  0\nENDSEC\n`)
+    const dsts = [...this.dstyles].map(([n, o]) => { const z = { tsz: 0.28 * o.th, exo: 0.3 * o.th, exe: 0.6 * o.th, dle: 0.6 * o.th, gap: 0.28 * o.th };
+      return `  0\nDIMSTYLE\n105\n${(this.h++).toString(16).toUpperCase()}\n330\n4\n100\nAcDbSymbolTableRecord\n100\nAcDbDimStyleTableRecord\n  2\n${n}\n 70\n0\n 40\n1.0\n 41\n${f(z.tsz)}\n 42\n${f(z.exo)}\n 44\n${f(z.exe)}\n 46\n${f(z.dle)}\n140\n${f(o.th)}\n142\n${f(z.tsz)}\n147\n${f(z.gap)}\n 73\n0\n 74\n0\n 77\n1\n 78\n0\n176\n${o.cd}\n177\n${o.ce}\n178\n${o.ct}\n271\n2\n277\n2\n278\n46\n279\n2\n340\n3A\n`; }).join("");
+    const lts = EXTRA_LTYPES.map(([n, desc, pat]) => `  0\nLTYPE\n  5\n${(this.h++).toString(16).toUpperCase()}\n330\n2\n100\nAcDbSymbolTableRecord\n100\nAcDbLinetypeTableRecord\n  2\n${n}\n 70\n0\n  3\n${desc}\n 72\n65\n 73\n${pat.length}\n 40\n${f(pat.reduce((a, v) => a + Math.abs(v), 0))}${pat.map((v) => `\n 49\n${f(v)}\n 74\n0`).join("")}\n`).join("");
+    return DXF2010.replace(/(\n  2\nLTYPE\n  5\n2\n330\n0\n100\nAcDbSymbolTable\n 70\n)(\d+)/, (_, a, n) => `${a}${+n + EXTRA_LTYPES.length}`)
+      .replace(/(  0\nENDTAB\n  0\nTABLE\n  2\nLAYER)/, `${lts}$1`)
+      .replace(/(\n  2\nBLOCK_RECORD\n  5\n9\n330\n0\n100\nAcDbSymbolTable\n 70\n)(\d+)/, (_, a, n) => `${a}${+n + this.brec.length}`)
+      .replace("  0\nENDTAB\n  0\nENDSEC\n  0\nSECTION\n  2\nBLOCKS", `${this.brec.join("")}  0\nENDTAB\n  0\nENDSEC\n  0\nSECTION\n  2\nBLOCKS`)
+      .replace("  0\nENDSEC\n  0\nSECTION\n  2\nENTITIES", `${this.blocks.join("")}  0\nENDSEC\n  0\nSECTION\n  2\nENTITIES`)
+      .replace(/(\n  2\nDIMSTYLE\n  5\n4\n330\n0\n100\nAcDbSymbolTable\n 70\n)(\d+)([\s\S]*?)(  0\nENDTAB)/, (_, a, n, mid, end) => `${a}${+n + this.dstyles.size}${mid}${dsts}${end}`)
+      .replace("  0\nENDTAB\n  0\nTABLE\n  2\nSTYLE", `${lay}  0\nENDTAB\n  0\nTABLE\n  2\nSTYLE`).replace(/(\n  2\nLAYER\n  5\n1\n330\n0\n100\nAcDbSymbolTable\n 70\n)(\d+)/, (_, a, n) => `${a}${+n + EXTRA_LAYERS.length}`).replace("\n  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n", `\n  0\nSECTION\n  2\nENTITIES\n${ents}\n  0\nENDSEC\n`)
       .replace(/(\$HANDSEED\n\s*5\n)[0-9A-F]+/, `$1${this.h.toString(16).toUpperCase()}`);
   }
 }
@@ -131,10 +162,8 @@ function elevation(d, X, x0, y0) {
   // dashed line types of the original (HIDDEN2, CENTER2) drawn as dash pieces; PHANTOM2 there has 15.9 m dashes = continuous at this size
   const pat = (lt) => (lt === "HIDDEN2" || lt === "CENTER2" ? E.ltypes?.[lt]?.pattern : null);
   for (const [a, b, c, e, col, lt] of E.lines) {
-    const [p1x, p1y] = P(a, b), [p2x, p2y] = P(c, e), pp = pat(lt), L = Math.hypot(p2x - p1x, p2y - p1y);
-    if (!pp || L < 1e-6) { d.line(p1x, p1y, p2x, p2y, "C-ELEV", col); continue; }
-    const ux = (p2x - p1x) / L, uy = (p2y - p1y) / L; let t = 0, k = 0;
-    while (t < L - 1e-9) { const seg = Math.max(pp[k % pp.length], 1e-3); if (k % 2 === 0) { const t2 = Math.min(L, t + seg); d.line(p1x + ux * t, p1y + uy * t, p1x + ux * t2, p1y + uy * t2, "C-ELEV", col); } t += seg; k++; }
+    const [p1x, p1y] = P(a, b), [p2x, p2y] = P(c, e), pp = pat(lt);
+    d.withLt(pp ? lt : null, 1, () => d.line(p1x, p1y, p2x, p2y, "C-ELEV", col));
   }
   for (const [x, y, r, col] of E.circles) { const [px, py] = P(x, y); d.circle(px, py, r, "C-ELEV", col); }
   for (const [x, y, r, a0, a1, col] of E.arcs) { const [px, py] = P(x, y); d.arc(px, py, r, a0, a1, "C-ELEV", col); }
@@ -285,14 +314,14 @@ export function emitModel(d, m, ox, oy) {
   for (const p of m.items) {
     const c = p.c ?? 0; // colour per entity (footing sheets, as on the user's drawing); 0 = by layer
     if (p.t === "line") {
+      // dashed = ONE line with a line type (dash-dot CENTER2 ≈ 0.2 m pattern at 1:25, or the item's own lt / lts)
       if (!p.dash) { d.line(ox + p.x1, oy + p.y1, ox + p.x2, oy + p.y2, p.layer, c); continue; }
-      const L = Math.hypot(p.x2 - p.x1, p.y2 - p.y1), ux = (p.x2 - p.x1) / (L || 1), uy = (p.y2 - p.y1) / (L || 1);
-      for (let s0 = 0; s0 < L; s0 += 0.2) { const s1 = Math.min(L, s0 + 0.12); d.line(ox + p.x1 + ux * s0, oy + p.y1 + uy * s0, ox + p.x1 + ux * s1, oy + p.y1 + uy * s1, p.layer, c);
-        if (s1 + 0.04 < L) { const sd = s1 + 0.04; d.line(ox + p.x1 + ux * sd, oy + p.y1 + uy * sd, ox + p.x1 + ux * Math.min(L, sd + 0.005), oy + p.y1 + uy * Math.min(L, sd + 0.005), p.layer, c); } }
-    } else if (p.t === "poly") d.poly(p.pts.map(P), p.layer, !!p.closed, 0, c);
-    else if (p.t === "circle") d.circle(ox + p.x, oy + p.y, p.r, p.layer, c);
+      d.withLt(p.lt ?? "CENTER2", p.lts ?? 0.18, () => d.line(ox + p.x1, oy + p.y1, ox + p.x2, oy + p.y2, p.layer, c));
+    } else if (p.t === "poly") d.withLt(p.lt, p.lts ?? 1, () => d.poly(p.pts.map(P), p.layer, !!p.closed, 0, c));
+    else if (p.t === "circle") d.withLt(p.lt, p.lts ?? 1, () => d.circle(ox + p.x, oy + p.y, p.r, p.layer, c));
     else if (p.t === "disk") { const r = p.r / 2; d.poly([[ox + p.x - r, oy + p.y, 1], [ox + p.x + r, oy + p.y, 1]], p.layer, true, p.r, c); }
     else if (p.t === "solid") { const w = p.y1 - p.y0, ym = (p.y0 + p.y1) / 2; d.poly([[ox + p.x0, oy + ym], [ox + p.x1, oy + ym]], p.layer, false, w, c); }
+    else if (p.t === "dim") d.dimension(p, ox, oy);
     else if (p.t === "arrow") d.arrow(ox + p.x, oy + p.y, p.dx, p.dy, p.L, p.w, p.layer, c);
     else if (p.t === "tri") d.poly([[ox + p.x, oy + p.y], [ox + p.x - p.s * 0.6, oy + p.y + p.s], [ox + p.x + p.s * 0.6, oy + p.y + p.s]], p.layer, true, 0, c);
     else if (p.t === "text") d.text(ox + p.x, oy + p.y, p.h, p.s, p.layer, p.ha ?? 0, p.va ?? 0, p.rot ?? 0, c);
