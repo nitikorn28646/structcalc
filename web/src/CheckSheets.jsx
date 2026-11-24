@@ -118,7 +118,11 @@ export function FootingSheet({ f, mark, count }) {
       checks={[sp ? ["แรงดันดินสูงสุด (มุมฐาน) ≤ qa", r.qCorner ?? Math.max(r.qmaxX, r.qmaxY), inp.qa, "กก./ม.²", r.qOk && r.qCornerOk !== false] : ["แรงต่อเข็ม ≤ น้ำหนักปลอดภัย", r.Ptmax, r.Pallow, "กก.", r.pileOk],
         ["ความลึก d ต้องการ ≤ ที่มี", Math.max(r.dReqX ?? 0, r.dReqY ?? 0), Math.min(r.dLong ?? 0, r.dShort ?? 0), "ซม.", r.dOk], ["แรงเฉือนทางเดียว", vX, r.vc, "กก./ซม.²", r.vOk], ["แรงเฉือนทะลุ", vp, r.vcp, "กก./ซม.²", r.vpOk], ...(sp && r.vpFull != null ? [["แรงเฉือนทะลุ (แรงเต็ม)", r.vpFull, r.vcp, "กก./ซม.²", r.vpFullOk]] : []),
         ["เหล็กแนวยาว As ต้องการ ≤ ที่ใส่", Math.max(r.AsReqL ?? 0, r.AsMinL ?? 0), r.AsProvL, "ซม.²", r.AsOkL], ["เหล็กแนวสั้น As ต้องการ ≤ ที่ใส่", Math.max(r.AsReqS ?? 0, r.AsMinS ?? 0), r.AsProvS, "ซม.²", r.AsOkS],
-        r.bearing != null && ["หน่วยแรงแบกทาน", r.bearing, r.fnb1, "กก./ซม.²", r.bearingOk]].filter(Boolean)}
+        r.bearing != null && ["หน่วยแรงแบกทาน", r.bearing, r.fnb1, "กก./ซม.²", r.bearingOk],
+        // spread footings (2026-11-24, ACI 318-11 15.7 / 10.5.4 / 7.12.2.1): kept once the economical size may go thinner than 0.30 m
+        sp && r.d15Ok != null && ["ความลึกเหนือเหล็กล่าง ≥ 15 ซม. (15.7)", 15, Math.min(r.dLong ?? 0, r.dShort ?? 0), "ซม.", r.d15Ok],
+        sp && r.AsTempL != null && ["เหล็กกันร้าว ρ·b·h (10.5.4) แนวยาว / สั้น", Math.max(r.AsTempL / (r.AsProvL || 1), r.AsTempS / (r.AsProvS || 1)), 1, "อัตราส่วน", r.AsTempOk],
+        sp && r.sMaxF != null && ["ระยะเหล็ก ≤ min(3h, 45 ซม.)", Math.max(inp.sLong ?? 0, inp.sShort ?? 0) * 100, r.sMaxF * 100, "ซม.", r.sMaxOk]].filter(Boolean)}
       note={!f.ok && f.r?.limOk === false ? "เกินขีดจำกัดการใช้ดิน / เข็มที่กำหนด" : undefined} />
   );
 }

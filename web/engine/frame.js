@@ -71,9 +71,13 @@ export const PILE_SAFE = { "I-18": 18000, "I-22": 22000, "I-26": 26000, "I-30": 
 // among the types (lightest first: piles × pile area, then cap thickness); neither = the built-in options (as before 2026-11-03).
 // spread footing on soil (footing type kind "spread"): every check of the diff-tested engine; Bx/By 0 = sized from qa in 0.10 m steps
 const spreadOk = (r) => r.qOk && r.qminOk && r.dOk && r.vOk && r.vpOk && r.AsOkL && r.AsOkS && r.perimOkL && r.perimOkS && r.ancOkL && r.ancOkS && r.perimOkD && r.bearingOk;
+// thinnest spread footing allowed: depth above the bottom bars ≥ 15 cm (ACI 318-11 15.7) → t ≥ 15 + cover + 2·db, in 0.05 m steps, ≥ 0.20 m
+export const spreadTMin = (mat, bar = "DB 12") => Math.max(0.2, Math.round(Math.ceil((15 + (mat?.coverFoot ?? 7.5) + 2 * (BARS[bar]?.d ?? 1.2)) / 5 - 1e-9) * 5) / 100);
 function designSpread(tt, P, pier, mat, fo, Mx, My) {
   // soil: one value for the site (frame.soil → fo.soil); a per-type qa / gamma of older files is used only when no site value is set
-  const t0 = tt.t ?? 0.4, qa = fo.soil?.qa ?? tt.qa ?? 10000, gamma = fo.soil?.gamma ?? tt.gamma ?? 1800, Df0 = Math.max(tt.Df ?? 1.2, t0), r10 = (x) => Math.ceil(x * 10 - 1e-9) / 10;
+  // tt.tAuto (auto sizes, user 2026-11-24 "ความหนาทำไมเป็น 30 เท่ากันหมด ทำไมไม่ออกแบบเอาประหยัดที่สุดและปลอดภัย"): start from the thinnest
+  // footing the code allows instead of the type's t, and keep the CHEAPEST passing (concrete + steel) at the smallest plan size that works
+  const t0 = tt.tAuto ? spreadTMin(mat, tt.bar ?? "DB 12") : tt.t ?? 0.4, qa = fo.soil?.qa ?? tt.qa ?? 10000, gamma = fo.soil?.gamma ?? tt.gamma ?? 1800, Df0 = Math.max(tt.Df ?? 1.2, t0), r10 = (x) => Math.ceil(x * 10 - 1e-9) / 10;
   // first size: soil pressure of P + footing + soil above on a square, then grow both sides until every check passes (or +1.5 m);
   // at each size the thickness may grow from the type's t in 0.05 m steps (+0.40 m) when depth / shear governs, and bars given by
   // spacing may close up to @0.125 / @0.10 (minimum steel grows with d) — auto size only
@@ -81,14 +85,19 @@ function designSpread(tt, P, pier, mat, fo, Mx, My) {
   const fixed = tt.Bx > 0 && tt.By > 0, ts = Array.from({ length: 9 }, (_, i) => Math.round((t0 + i * 0.05) * 100) / 100);
   // tt.growT (a footing squeezed into a rectangle by its neighbours, 2026-11-24): fixed plan size, but the thickness may grow and the bars close
   // up like the auto size — the long cantilever of a narrow strip needs more depth than the type's square did
-  const sizes = fixed ? (tt.growT ? ts.flatMap((t) => [1, 0.125, 0.1].map((k) => [tt.Bx, tt.By, t, k])) : [[tt.Bx, tt.By, t0]]) : Array.from({ length: 16 }, (_, i) => Math.round((Math.max(B0, 0.6) + i / 10) * 10) / 10).flatMap((b) => ts.flatMap((t) => [1, 0.125, 0.1].map((k) => [b, b, t, k])));
-  let best = null;
+  // spacings tried: the type's own, then closer (as before); the economical search (tAuto) also tries WIDER ones — the checks below
+  // (strength, development, minimum and shrinkage steel, ≤ min(3h, 45 cm)) decide; the cost picks among the passing ones
+  const KS = tt.tAuto ? [0.25, 0.2, 0.175, 0.15, 0.125, 0.1] : [1, 0.125, 0.1];
+  const sizes = fixed ? (tt.growT ? ts.flatMap((t) => KS.map((k) => [tt.Bx, tt.By, t, k])) : [[tt.Bx, tt.By, t0]]) : Array.from({ length: 16 }, (_, i) => Math.round((Math.max(B0, 0.6) + i / 10) * 10) / 10).flatMap((b) => ts.flatMap((t) => KS.map((k) => [b, b, t, k])));
+  let best = null, pick = null, pickB = null;
+  const cheapest = !!(tt.tAuto || tt.growT);
   for (const [Bx, By, t, sk = 1] of sizes) {
+    if (pickB != null && Bx * By > pickB + 1e-9) break; // a bigger plan only costs more concrete
     const Df = Math.max(tt.Df ?? 1.2, t);
     const bar = tt.bar ?? "DB 12", barS = tt.barS ?? bar;
     // bar count ("6-DB 12"): the engine counts floor(B/s + 1) bars over the full width
     const okS = (x) => (x > 0.03 ? x : 0.15); // a spacing typed as 0 / left empty (user 2026-11-04: page crashed) → 0.15
-    const tight = (x) => (sk < 1 ? Math.min(okS(x), sk) : okS(x)); // sk 1 = the type's own spacing
+    const tight = (x) => (tt.tAuto ? sk : sk < 1 ? Math.min(okS(x), sk) : okS(x)); // sk 1 = the type's own spacing; auto: sk is the spacing itself
     const sL = tt.nb > 1 ? (By / (tt.nb - 1)) * (1 - 1e-9) : tight(tt.s ?? 0.15), sS = tt.nbS > 1 ? (Bx / (tt.nbS - 1)) * (1 - 1e-9) : tight(tt.sS ?? tt.s ?? 0.15);
     const inp = { fcPrime: mat.fcFoot ?? mat.fcPrime, F: mat.F ?? 0.45, capFc: mat.capFc, Es: mat.Es, fy: tt.fy ?? fo.fy, cover: mat.coverFoot ?? fo.cover, t, Bx, By, Df, P, Mx, My, qa, gamma,
       pier: "rect", bx: pier.Bx / 100, by: pier.By / 100, D: 0.3, longBar: bar, shortBar: barS, sLong: sL, sShort: sS, dowelBar: pier.mainBar ?? "DB 12", dowelN: pier.n ?? 4 };
@@ -102,16 +111,31 @@ function designSpread(tt, P, pier, mat, fo, Mx, My) {
       Object.assign(r, punchingFull(r, P, A)); // conventional punching (engine/footingExtra.js), stricter than the sheet
       const util = Math.max(Math.max(r.qmaxX, r.qmaxY, r.qCorner) / qa, r.vpFull / r.vcp);
       r.limOk = Math.max(r.qmaxX, r.qmaxY, r.qCorner) / qa <= (fo.utilMax ?? 1) + 1e-9;
-      const ok = spreadOk(r) && r.qCornerOk && r.vpFullOk && r.limOk;
+      // outside the frozen sheet (ACI 318-11, ว.ส.ท. text not checked): depth above the bottom bars ≥ 15 cm (15.7); footings of uniform
+      // thickness: As ≥ shrinkage steel ρ·b·h by grade (10.5.4 → 7.12.2.1; SR24 0.0025 · SD30 0.0020 · SD40 0.0018 as the slabs) and bar
+      // spacing ≤ min(3h, 45 cm) each way — these matter once the auto size may go thinner than 0.30 m
+      const rho = (b) => (String(b).startsWith("RB") ? 0.0025 : (inp.fy ?? mat.fy ?? 4000) >= 4000 ? 0.0018 : 0.002);
+      r.d15Ok = Math.min(r.dLong, r.dShort) >= 15 - 1e-9;
+      r.AsTempL = rho(bar) * By * 100 * t * 100; r.AsTempS = rho(barS) * Bx * 100 * t * 100;
+      r.AsTempOk = r.AsProvL >= r.AsTempL - 1e-9 && r.AsProvS >= r.AsTempS - 1e-9;
+      r.sMaxF = Math.min(3 * t, 0.45); r.sMaxOk = sL <= r.sMaxF + 1e-9 && sS <= r.sMaxF + 1e-9;
+      const ok = spreadOk(r) && r.qCornerOk && r.vpFullOk && r.limOk && r.d15Ok && r.AsTempOk && r.sMaxOk;
       r.Bx = Bx; r.By = By; r.piles = [];
       if (tt.nb > 1) r.longText = `${r.nLong}-${bar} @ ${sL.toFixed(3)}`;
       if (tt.nbS > 1) r.shortText = `${r.nShort}-${barS} @ ${sS.toFixed(3)}`;
       const out = { n: 0, pile: "ฐานแผ่", kind: "spread", r, ok, util, inp, type: tt.name ?? null };
-      if (ok) return out;
+      if (ok) {
+        if (!cheapest) return out; // the type's own thickness / spacing: the first that passes, as before
+        // auto: concrete 2,500 ฿/m³ + steel 28 ฿/kg; every thickness / spacing at this plan size, then stop at the next size
+        out.cost = Bx * By * t * 2500 + (((BARS[bar]?.A ?? 0) * (r.nLong ?? 0) * Bx + (BARS[barS]?.A ?? 0) * (r.nShort ?? 0) * By) * 7850 / 1e4) * 28;
+        if (!pick || out.cost < pick.cost - 1e-6) pick = out;
+        pickB ??= Bx * By;
+        continue;
+      }
       best ??= out;
     } catch (e) { best ??= { n: 0, pile: "ฐานแผ่", kind: "spread", error: e.message, ok: false, util: 9, type: tt.name ?? null }; }
   }
-  return best;
+  return pick ?? best;
 }
 
 export function designFooting(P, pier, mat, fo = DEFAULT_FOOTING, Mx = 0, My = 0) {
@@ -180,10 +204,11 @@ export function autoFootingFor(frame, res, stack, start = null) {
   const kg = (bar, n, L) => ((BARS[bar]?.A ?? 0) * n * L * 7850) / 1e4;
   const cost = (d) => d.r.Bx * d.r.By * (d.inp?.t ?? 0.4) * 2500 + (kg(d.inp.longBar, d.r.nLong ?? 0, d.r.Bx) + kg(d.inp.shortBar, d.r.nShort ?? 0, d.r.By)) * 28 + (d.n ?? 0) * 3000;
   if (f.kind === "spread") {
-    const tt = { kind: "spread", t: cur?.t ?? f.inp?.t ?? 0.3, Df: cur?.Df ?? f.inp?.Df ?? 1.2, bar: cur?.bar ?? "DB 12", barS: cur?.barS ?? cur?.bar ?? "DB 12", s: 0.15, sS: 0.15, Bx: 0, By: 0 };
+    const tt = { kind: "spread", t: cur?.t ?? f.inp?.t ?? 0.3, tAuto: true, Df: cur?.Df ?? f.inp?.Df ?? 1.2, bar: cur?.bar ?? "DB 12", barS: cur?.barS ?? cur?.bar ?? "DB 12", s: 0.15, sS: 0.15, Bx: 0, By: 0 };
     const d = run(tt);
     if (!d?.r) return { type: null, f: d, note: d?.error ?? "หาขนาดไม่ได้" };
-    return { type: { ...tt, Bx: d.r.Bx, By: d.r.By, t: d.inp?.t ?? tt.t, nb: d.r.nLong, nbS: d.r.nShort }, f: d, note: d.ok ? "" : "ยังไม่ผ่าน" };
+    const { tAuto, ...keep } = tt; // the type keeps the thickness found (fixed from now on)
+    return { type: { ...keep, Bx: d.r.Bx, By: d.r.By, t: d.inp?.t ?? tt.t, nb: d.r.nLong, nbS: d.r.nShort }, f: d, note: d.ok ? "" : "ยังไม่ผ่าน" };
   }
   const pile = cur?.pile ?? f.pile ?? "I-18", Df = cur?.Df ?? f.inp?.Df ?? 1.2, k = cur?.k ?? 3, n0 = Math.max(1, cur?.n ?? f.n ?? 1);
   const bars = ["DB 12", "DB 16", "DB 20"].flatMap((bar) => [0.2, 0.175, 0.15, 0.125, 0.1].map((s) => ({ bar, s, w: (BARS[bar]?.A ?? 1) / s }))).sort((a, b) => a.w - b.w);

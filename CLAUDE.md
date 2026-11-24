@@ -877,3 +877,13 @@ touches a neighbour on the other axis, designSpread tt.growT = fixed plan size w
 size, 4 passes. User's house: B-3 → 1.90 × 0.90 × 0.30 (F6), 0.10 clear, 18/18 footings, beams 41/41, columns 54/54. Pairs that separate footings
 cannot serve remain flagged (e.g. Yasothon with qa 6 t/m²: columns 1.0 m apart, 28 t + 6 t) → COMBINED FOOTING not built yet (proposed).
 frame-check: reshape test also requires that only such 1.0 m pairs stay touching. verify20 40/40, E2E 47/47, regress identical.
+ECONOMICAL SPREAD FOOTINGS (2026-11-24, user "ความหนาฐานรากทำไมเป็น 30 เท่ากันหมด ทำไมไม่ออกแบบเอาประหยัดที่สุดและปลอดภัย"): every type came out t 0.30 because
+the size search started at the type's t (default 0.30), could only grow, and took the first passing. frame.js designSpread tt.tAuto (auto types:
+FootingTypes spreadBase / "เพิ่ม type อัตโนมัติ" / "↻ จัดขนาดใหม่", autoFootingFor per column): t starts at spreadTMin(mat, bar) = max(0.20, ⌈15 + cover +
+2db⌉ to 5 cm) (ACI 318-11 15.7 depth above the bottom bars ≥ 15 cm → 0.25 m with DB12 / cover 7.5, 0.30 with DB16), spacings 0.25 → 0.10 tried,
+the CHEAPEST passing (concrete 2,500 ฿/m³ + steel 28 ฿/kg) at the smallest plan size kept; the type stores that t (typeAt drops tAuto). New checks for
+every spread footing (outside the frozen sheet): d ≥ 15 cm, As ≥ ρ·b·h each way (10.5.4 → 7.12.2.1, SR24 0.0025 · SD30 0.0020 · SD40 0.0018),
+spacing ≤ min(3h, 45 cm) — r.d15Ok / AsTempOk / sMaxOk in ok, rows in the footing check sheet. Thickness still grows when punching / dowel
+development / depth need it (15 t on a 20×20 pier → 0.30; 40 t → 0.35). User's house (_anucha, "↻ จัดขนาดใหม่" simulated): F1–F5 all t 0.25,
+footing concrete 10.49 → 8.74 m³, cost −17 %, 18/18 pass, audit-detail F1 18/18. Existing fixed types unchanged until re-sized. frame-check: economical
+row (never dearer than the t 0.30 start, all checks, tMin values).

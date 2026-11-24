@@ -43,11 +43,12 @@ export function FootingTypes({ frame, set, res }) {
   // spread types filled from the real column loads: each column's smallest passing square size (engine auto size); every press of
   // the auto button adds one type and re-spreads all of them: columns sorted by size split into k groups of about equal count,
   // each type = the largest size of its group, with the bar counts of that size → editable like any type
-  const spreadBase = () => { const t0 = types.find((t) => t.kind === "spread"); return { kind: "spread", t: t0?.t ?? 0.3, Df: t0?.Df ?? 1.2, bar: t0?.bar ?? "DB 12", s: 0.15, barS: t0?.barS ?? t0?.bar ?? "DB 12", sS: 0.15 }; };
+  // tAuto (2026-11-24): the size search starts at the thinnest footing the code allows and keeps the cheapest passing one — the type gets that t
+  const spreadBase = () => { const t0 = types.find((t) => t.kind === "spread"); return { kind: "spread", t: t0?.t ?? 0.3, tAuto: true, Df: t0?.Df ?? 1.2, bar: t0?.bar ?? "DB 12", s: 0.15, barS: t0?.barS ?? t0?.bar ?? "DB 12", sS: 0.15 }; };
   const sizeRun = (f, tt) => { const c = (res.columns ?? []).find((x) => x.floor === 0 && x.stack === f.stack); return c ? designFooting(f.P, c.lv, frame.mat, { ...(frame.footing ?? DEFAULT_FOOTING), soil: frame.soil, utilMax: frame.footUtil, fixed: tt }, f.Mx ?? 0, f.My ?? 0) : null; };
   const needed = (base) => foots.map((f) => ({ f, d: sizeRun(f, { ...base, Bx: 0, By: 0 }) })).filter((x) => x.d?.ok).map((x) => ({ ...x, B: x.d.r.Bx })).sort((a, b) => a.B - b.B);
   // the group's governing column already passed at this size: its thickness and bar counts become the type
-  const typeAt = (base, x, name) => ({ ...base, name, Bx: x.B, By: x.B, t: x.d.inp?.t ?? base.t, nb: x.d.r.nLong, nbS: x.d.r.nShort });
+  const typeAt = ({ tAuto, ...base }, x, name) => ({ ...base, name, Bx: x.B, By: x.B, t: x.d.inp?.t ?? base.t, nb: x.d.r.nLong, nbS: x.d.r.nShort });
   const nextName = (k = 0) => { let i = types.length + 1 + k; while (types.some((t) => t.name === `F${i}`)) i++; return `F${i}`; };
   const firstSpread = () => { if (!spreadRows.length && frame.baseFixity == null) set("baseFixity", "fixed"); };
   const addSpread = () => { firstSpread(); const base = spreadBase(), list = needed(base), big = list.at(-1);

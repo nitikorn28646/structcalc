@@ -44,6 +44,17 @@ const re = rr.footings.filter((f) => f.reshaped), ok4 = re.length > 0 && re.ever
   // what is left touching must be a pair that separate footings cannot serve (columns 1.0 m apart, 28 t + 6 t) — a combined footing case
   && rr.footings.every((f) => (f.clash ?? []).every((j) => Math.hypot(f.p[0] - rr.footings[j].p[0], f.p[1] - rr.footings[j].p[1]) <= 1.0 + 1e-6));
 console.log(`${ok4 ? "ok  " : "FAIL"} clashing spread footings reshaped to rectangles, only 1.0 m pairs left touching (combined footing): ${re.map((f) => `${f.r.Bx}x${f.r.By}`).join(", ")}`);
+// economical spread footings (user 2026-11-24 "ทำไมไม่ออกแบบเอาประหยัดที่สุดและปลอดภัย"): tAuto starts at the code's thinnest (d ≥ 15 cm, ACI 15.7)
+// and keeps the cheapest passing — never dearer than the old t 0.30 start, every check passes, shrinkage steel and spacing limits kept
+{ const { designFooting, DEFAULT_FOOTING, spreadTMin } = await import("../web/engine/frame.js");
+  const lv = { Bx: 20, By: 20, n: 4, mainBar: "DB 12" }, fo = { ...DEFAULT_FOOTING, soil: { qa: 8000, gamma: 1800 } }, base = { kind: "spread", t: 0.3, Df: 1.2, bar: "DB 12", s: 0.15, Bx: 0, By: 0 };
+  const cost = (d) => d.r.Bx * d.r.By * d.inp.t * 2500 + ((1.131 * d.r.nLong * d.r.Bx + 1.131 * d.r.nShort * d.r.By) * 7850 / 1e4) * 28;
+  const pier = (P) => (P > 16000 ? { Bx: 40, By: 40, n: 8, mainBar: "DB 16" } : lv); // a 20×20 pier cannot bear 25 t whatever the footing
+  const rows = [3000, 8000, 15000, 25000, 40000].map((P) => ({ P, o: designFooting(P, pier(P), mat, { ...fo, fixed: base }), e: designFooting(P, pier(P), mat, { ...fo, fixed: { ...base, tAuto: true } }) }));
+  const okE = rows.every(({ o, e }) => e.ok && o.ok && e.inp.t >= spreadTMin(mat) - 1e-9 && Math.min(e.r.dLong, e.r.dShort) >= 15 - 1e-9 && e.r.AsTempOk && e.r.sMaxOk && cost(e) <= cost(o) + 1e-6)
+    && spreadTMin({ coverFoot: 7.5 }) === 0.25 && spreadTMin({ coverFoot: 7.5 }, "DB 16") === 0.30 && spreadTMin({ coverFoot: 7.5 }, "DB 20") === 0.30;
+  console.log(`${okE ? "ok  " : "FAIL"} economical spread footings: ${rows.map(({ P, o, e }) => `${P / 1000}t ${e.r.Bx}×${e.inp.t} @${e.inp.sLong.toFixed(3)} ฿${Math.round(cost(e))} (was ฿${Math.round(cost(o))})`).join(" · ")}`);
+  if (!okE) process.exitCode = 1; }
 // stair with a landing on a beam inside the storey (user 2026-11-04): foot on the floor below, landing on the landing beam (lvl 1.5),
 // head on this floor — three beams loaded; the 3D frame puts the landing beam at +1.5 on the columns (split) and balances
 let okS = false, okS3 = false;
