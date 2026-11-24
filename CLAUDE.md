@@ -13,6 +13,9 @@ User data lives in project files (.json from "บันทึกโครงก�
 
 ## User preferences (important)
 - Reply in Thai, short; save tokens (filter command output, no long recaps).
+- Save context (user 2026-11-24): grep before reading a whole file, read only the needed part; for a whole-project view send a
+  subagent and bring back only a summary; show diffs, not whole files; don't restate decisions already made in the session;
+  suggest /compact or a new session when the task changes; short answers by default.
 - Think the whole request through before coding; confirm big UX changes with a short plan first.
 - UI: TailAdmin look, dark/light toggle, one screen at 1920 px; every module shows a chart + 3D at all times.
 - Reports: Thai-first, plain explanations, professional. NO "must be certified by a licensed engineer" sentence.
