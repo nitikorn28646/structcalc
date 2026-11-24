@@ -10,7 +10,8 @@ export { footingMarks };
 
 export default function FootingPlan({ floor, footings, columns = [], colTypes = [], marks = null, dark = false, className = "", print = false }) {
   const M = marks ?? footingMarks(footings), G = floor.grid ?? { x0: 0, y0: 0, dx: [], dy: [] }, { GX, GY, xName, yName } = gridAxes(G);
-  const pts = [...footings.flatMap((f) => [[f.p[0] - (f.r?.Bx ?? 0.6) / 2, f.p[1] - (f.r?.By ?? 0.6) / 2], [f.p[0] + (f.r?.Bx ?? 0.6) / 2, f.p[1] + (f.r?.By ?? 0.6) / 2]]),
+  const ctr = (f) => f.center ?? f.p; // combined footings: the rectangle is centred on the pair, not on the column
+  const pts = [...footings.flatMap((f) => [[ctr(f)[0] - (f.r?.Bx ?? 0.6) / 2, ctr(f)[1] - (f.r?.By ?? 0.6) / 2], [ctr(f)[0] + (f.r?.Bx ?? 0.6) / 2, ctr(f)[1] + (f.r?.By ?? 0.6) / 2]]),
     ...GX.map((x) => [x, GY[0] ?? 0]), ...GY.map((y) => [GX[0] ?? 0, y])];
   if (!pts.length) return null;
   const x0 = Math.min(...pts.map((p) => p[0])), x1 = Math.max(...pts.map((p) => p[0])), y0 = Math.min(...pts.map((p) => p[1])), y1 = Math.max(...pts.map((p) => p[1]));
@@ -38,15 +39,17 @@ export default function FootingPlan({ floor, footings, columns = [], colTypes = 
       {GY.length > 1 && dimV(GY[0], GY[GY.length - 1], ex.x1 + 7 * u, fmt(GY[GY.length - 1] - GY[0], 2), grid)}
       {/* footings */}
       {footings.map((f, i) => {
-        const B = f.r?.Bx ?? 0.6, D = f.r?.By ?? 0.6, [cx, cy] = f.p, col = f.clash?.length ? "#d92d20" : M.color(f), c = columns.find((x) => Math.hypot(x.p[0] - cx, x.p[1] - cy) < 0.05);
-        const cB = (c?.lv?.Bx ?? 20) / 100, cD = (c?.lv?.By ?? 20) / 100, ct = c ? colTypes[c.typeIdx]?.name : "";
+        const B = f.r?.Bx ?? 0.6, D = f.r?.By ?? 0.6, [cx, cy] = ctr(f), col = f.clash?.length ? "#d92d20" : M.color(f), c = columns.find((x) => Math.hypot(x.p[0] - f.p[0], x.p[1] - f.p[1]) < 0.05);
+        const colRect = <rect x={f.p[0] - (c?.lv?.Bx ?? 20) / 200} y={-(f.p[1] + (c?.lv?.By ?? 20) / 200)} width={(c?.lv?.Bx ?? 20) / 100} height={(c?.lv?.By ?? 20) / 100} fill={ink} />;
+        if (f.dup) return <g key={i}>{colRect}</g>; // second column of a combined footing: the footing is drawn with the first
+        const ct = c ? colTypes[c.typeIdx]?.name : "";
         // free room around this footing (to the next footing, m): the dimensions / tag go where there is room (user: text overlapped)
-        const room = (dir) => Math.min(Infinity, ...footings.filter((g) => g !== f).map((g) => {
-          const gB = g.r?.Bx ?? 0.6, gD = g.r?.By ?? 0.6, ox = Math.abs(g.p[0] - cx) < (B + gB) / 2 + 2 * u, oy = Math.abs(g.p[1] - cy) < (D + gD) / 2 + 2 * u;
-          if (dir === "up" && ox && g.p[1] > cy) return g.p[1] - gD / 2 - (cy + D / 2);
-          if (dir === "down" && ox && g.p[1] < cy) return cy - D / 2 - (g.p[1] + gD / 2);
-          if (dir === "right" && oy && g.p[0] > cx) return g.p[0] - gB / 2 - (cx + B / 2);
-          if (dir === "left" && oy && g.p[0] < cx) return cx - B / 2 - (g.p[0] + gB / 2);
+        const room = (dir) => Math.min(Infinity, ...footings.filter((g) => g !== f && !g.dup && !(g.combined && g.combined === f.combined)).map((g) => {
+          const gp = ctr(g), gB = g.r?.Bx ?? 0.6, gD = g.r?.By ?? 0.6, ox = Math.abs(gp[0] - cx) < (B + gB) / 2 + 2 * u, oy = Math.abs(gp[1] - cy) < (D + gD) / 2 + 2 * u;
+          if (dir === "up" && ox && gp[1] > cy) return gp[1] - gD / 2 - (cy + D / 2);
+          if (dir === "down" && ox && gp[1] < cy) return cy - D / 2 - (gp[1] + gD / 2);
+          if (dir === "right" && oy && gp[0] > cx) return gp[0] - gB / 2 - (cx + B / 2);
+          if (dir === "left" && oy && gp[0] < cx) return cx - B / 2 - (gp[0] + gB / 2);
           return Infinity;
         }));
         const up = room("up"), dn = room("down"), rt = room("right"), lf = room("left"), need = 2.6 * u, tag = 2 * u;
@@ -62,7 +65,7 @@ export default function FootingPlan({ floor, footings, columns = [], colTypes = 
           <g key={i}>
             <rect x={cx - B / 2} y={-(cy + D / 2)} width={B} height={D} fill={col} fillOpacity={0.12} stroke={col} strokeWidth={(f.clash?.length ? 0.16 : 0.09) * u} />
             {(f.r?.piles ?? []).map(([px, py], k) => <circle key={k} cx={cx + px} cy={-(cy + py)} r={(PILES[f.pile]?.b ?? 0.2) / 2} fill="none" stroke={col} strokeWidth={0.07 * u} strokeDasharray={`${0.3 * u} ${0.2 * u}`} />)}
-            <rect x={cx - cB / 2} y={-(cy + cD / 2)} width={cB} height={cD} fill={ink} />
+            {colRect}{f.combined && <text x={cx} y={-(cy - D / 2 + 0.6 * u)} fontSize={0.9 * u} textAnchor="middle" fill={col}>ฐานรากร่วม</text>}
             {wSide !== 0 && dimH(cx - B / 2, cx + B / 2, wSide === 1 ? cy + D / 2 + 1.2 * u : cy - D / 2 - 1.2 * u, fmt(B, 2), col)}
             {dSide !== 0 && dimV(cy - D / 2, cy + D / 2, dSide === 1 ? cx + B / 2 + 1.2 * u : cx - B / 2 - 1.2 * u, fmt(D, 2), col)}
             {T(tx, ty, label, { a: ta, c: col, w: 600, size: 1.15 * u })}

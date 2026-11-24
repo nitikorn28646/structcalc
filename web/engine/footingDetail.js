@@ -176,8 +176,107 @@ export function footingDetailModel(f, o = {}) {
 // one line per mark for the schedule (plan sheet / UI)
 export function footingScheduleRow(f, mark, count) {
   const r = f.r ?? {}, inp = f.inp ?? {};
-  const pile = f.kind !== "spread" && (f.n ?? 0) > 0 ? `${f.n} × ${f.pile}` : "ฐานแผ่";
+  const pile = f.kind === "combined" ? "ฐานร่วม 2 เสา" : f.kind !== "spread" && (f.n ?? 0) > 0 ? `${f.n} × ${f.pile}` : "ฐานแผ่";
   const bt = (s) => barTxt(s ?? "").replace(/@\s*([\d.]+)/, (_, v) => `@ ${f2(v)}`);
   return [mark, String(count), `${f2(r.Bx ?? 0)} × ${f2(r.By ?? 0)} × ${f2(inp.t ?? 0)}`, f2(Math.max(inp.Df ?? 0, inp.t ?? 0)), pile,
-    bt(r.longText ?? `${inp.longBar} @${inp.sLong}`), bt(r.shortText ?? `${inp.shortBar} @${inp.sShort}`), `${f2(inp.bx ?? 0)} × ${f2(inp.by ?? 0)}`, `${inp.dowelN ?? "-"}-${barTxt(inp.dowelBar ?? "")}`];
+    f.kind === "combined" ? `ล่าง ${bt(r.longText)} · บน ${bt(r.topText)}` : bt(r.longText ?? `${inp.longBar} @${inp.sLong}`), bt(r.shortText ?? `${inp.shortBar} @${inp.sShort}`), `${f2(inp.bx ?? 0)} × ${f2(inp.by ?? 0)}`, `${inp.dowelN ?? "-"}-${barTxt(inp.dowelBar ?? "")}`];
+}
+
+// ---------------------------------------------------------------- combined footing (2026-11-24)
+// Drawn with the long side horizontal whatever the plan direction: PLAN (outline, both piers, bottom bars along the length, top bars dashed,
+// transverse bands under the columns + distribution bars, dims: chain end / column / column / end, width, cover) and SECTION ก–ก along
+// the length (footing, both piers broken above ground, bottom bars hooked up at the ends, top bars hooked down at the ends, transverse bars
+// as dots, lean concrete + sand, ground, ▼ ±0.00 / VARY, dims, leaders straight up as on the user's sheet). Colours as the single footing.
+export function combinedDetailModel(f, o = {}) {
+  const C = f.combined; if (!C?.ok) return null;
+  const P = [], TH = 0.05, DH = 0.05;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const ext = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
+  const line = (xa, ya, xb, yb, layer = "C-CONC", o2 = {}) => { P.push({ t: "line", x1: xa, y1: ya, x2: xb, y2: yb, layer, ...o2 }); ext(xa, ya); ext(xb, yb); };
+  const poly = (pts, layer = "C-CONC", closed = false, o2 = {}) => { P.push({ t: "poly", pts, layer, closed, ...o2 }); pts.forEach((p) => ext(p[0], p[1])); };
+  const rect = (xa, ya, xb, yb, layer = "C-CONC", o2) => poly([[xa, ya], [xb, ya], [xb, yb], [xa, yb]], layer, true, o2);
+  const bar = (pts, d, layer = "C-BAR", o2 = {}) => { P.push({ t: "poly", pts, layer, closed: false, bar: d, ...o2 }); pts.forEach((p) => ext(p[0], p[1])); };
+  const disk = (x, y, rr, layer = "C-BAR-EXTRA") => { P.push({ t: "disk", x, y, r: Math.max(rr, 0.005), layer }); ext(x - rr, y - rr); ext(x + rr, y + rr); };
+  const tw = (s, h) => String(s).length * h * 0.52;
+  const text = (x, y, h, s, layer = "C-TEXT", ha = 0, va = 0, rot = 0) => { P.push({ t: "text", x, y, h, s, layer, ha, va, rot }); const w = tw(s, h), xa = ha === 1 ? x - w / 2 : ha === 2 ? x - w : x; ext(xa, y - h * 0.3); ext(xa + w, y + h * 1.2); };
+  const dimPush = (q) => { P.push(q); const [a, b, c2, e] = dimBox(q); ext(a, b); ext(c2, e); };
+  const dimH = (xa, xb, yObj, y, label) => dimPush(dimItem(xa, yObj, xb, yObj, y - yObj, label, DH));
+  const dimV = (ya, yb, xObj, x, label) => dimPush(dimItem(xObj, ya, xObj, yb, xObj - x, label, DH));
+  const arrow = (x, y, ux, uy) => { const L = Math.hypot(ux, uy) || 1; P.push({ t: "arrow", x, y, dx: -ux / L, dy: -uy / L, L: 0.045, w: 0.016, layer: "C-TEXT" }); };
+  const upLeader = (bx, by, ty, s) => { const w = tw(s, TH) + 0.05; arrow(bx, by, 0, -1); poly([[bx, by], [bx, ty], [bx + w, ty]], "C-TEXT"); text(bx + 0.02, ty + 0.012, TH, s, "C-TEXT", 0, 1); };
+  const sideLeader = (bx, by, kx, ry, LX, s) => { const w = tw(s, TH) + 0.04; arrow(bx, by, bx - kx, by - ry || 0); if (Math.abs(by - ry) < 1e-9) Object.assign(P.at(-1), { dx: 1, dy: 0 });
+    poly([[bx, by], [kx, ry], [LX + w, ry]], "C-TEXT"); text(LX + 0.02, ry + 0.012, TH, s, "C-TEXT", 0, 1); };
+  const bubble = (x, y, s) => { P.push({ t: "circle", x, y, r: 0.075, layer: "C-TAG" }); ext(x - 0.08, y - 0.08); ext(x + 0.08, y + 0.08); text(x, y, 0.065, s, "C-TAG", 1, 2); };
+  const f2c = (v) => Number(v).toFixed(2), bt = (b) => String(b).replace(/^(RB|DB)\s*/, "$1 ");
+  const [A, B] = C.cols, L = C.L, Bw = C.B, t = C.t, Df = Math.max(C.Df, t), c = 0.075, cTop = 0.05;
+  const uA = -C.uL, uB = uA + C.s, cu = (k) => (C.ax ? k.by : k.bx), cv = (k) => (C.ax ? k.bx : k.by);
+  const dbL = (BARS[C.barL]?.d ?? 1.2) / 100, dbT = (BARS[C.barT]?.d ?? 1.2) / 100;
+  // ===== PLAN (x along the footing 0..L, y across −B/2..B/2)
+  rect(0, -Bw / 2, L, Bw / 2);
+  const yBars = (n) => Array.from({ length: n }, (_, i) => -Bw / 2 + c + ((Bw - 2 * c) * i) / Math.max(1, n - 1));
+  yBars(C.bot.n).forEach((y) => bar([[c, y], [L - c, y]], dbL));
+  yBars(C.top.n).forEach((y, i) => { if (i % 2 === 0) { bar([[c, y + 0.01], [L - c, y + 0.01]], dbL, "C-BAR"); Object.assign(P.at(-1), { lt: "HIDDEN2", lts: 0.4, c: 1 }); } });
+  const transX = [];
+  C.trans.forEach((tb) => { for (let i = 0; i < tb.n; i++) transX.push(tb.u0 + tb.w * (i + 0.5) / tb.n); });
+  const bandEnds = C.trans.map((tb) => [tb.u0, tb.u0 + tb.w]);
+  for (let x = c + 0.05; x < L - c; x += C.sDist) if (!bandEnds.some(([a, b]) => x > a - 0.02 && x < b + 0.02)) transX.push(x);
+  transX.sort((a, b) => a - b).forEach((x) => bar([[x, -Bw / 2 + c], [x, Bw / 2 - c]], dbT, "C-BAR-EXTRA"));
+  for (const [k, u] of [[A, uA], [B, uB]]) { rect(u - cu(k) / 2, -cv(k) / 2, u + cu(k) / 2, cv(k) / 2); P.at(-1).c = 2; }
+  for (const [a, b] of bandEnds) { line(a, -Bw / 2 - 0.05, a, Bw / 2 + 0.05, "C-DIM", { dash: true, lt: "CENTER2", lts: 0.18 }); line(b, -Bw / 2 - 0.05, b, Bw / 2 + 0.05, "C-DIM", { dash: true, lt: "CENTER2", lts: 0.18 }); }
+  // dims: chain along, overall, width, cover
+  const chain = [0, uA - cu(A) / 2, uA + cu(A) / 2, uB - cu(B) / 2, uB + cu(B) / 2, L];
+  for (let i = 1; i < chain.length; i++) if (chain[i] - chain[i - 1] > 1e-6) dimH(chain[i - 1], chain[i], Bw / 2, Bw / 2 + 0.16, f2c(chain[i] - chain[i - 1]));
+  dimH(0, L, Bw / 2, Bw / 2 + 0.32, f2c(L)); dimH(uA, uB, -Bw / 2, -Bw / 2 - 0.16, `ศูนย์เสา ${f2c(C.s)}`);
+  dimV(-Bw / 2, Bw / 2, 0, -0.18, f2c(Bw));
+  C.trans.forEach((tb, i) => dimH(tb.u0, tb.u0 + tb.w, -Bw / 2, -Bw / 2 - 0.32 - (i % 2) * 0.0, `แถบ ${f2c(tb.w)}`));
+  // leaders (right side), rows evenly spread, level from the object to a knee then along the text
+  const LX = L + 0.3, kx = L + 0.2, labels = [
+    [L - c - 0.08, yBars(C.bot.n).reduce((a, v) => (Math.abs(v - (Bw / 2 - 0.05)) < Math.abs(a - (Bw / 2 - 0.05)) ? v : a)), `ล่างแนวยาว ${C.bot.n}-${bt(C.barL)} มม. @ ${f2c(C.bot.s)} ม.`],
+    [L - c - 0.16, Bw / 2 - 0.2, `บนแนวยาว ${C.top.n}-${bt(C.barL)} มม. @ ${f2c(C.top.s)} ม. (เส้นประ)`],
+    [transX.filter((x) => x > L / 2).slice(-1)[0] ?? L - 0.2, -Bw / 2 + 0.25, `ตามขวางในแถบใต้เสา ${C.trans.map((x) => `${x.n}-${bt(C.barT)}`).join(" / ")} มม.`],
+    [transX.filter((x) => !bandEnds.some(([a, b]) => x > a && x < b)).slice(-1)[0] ?? L - 0.3, -Bw / 2 + 0.12, `ตามขวางนอกแถบ ${bt(C.barT)} มม. @ ${f2c(C.sDist)} ม.`]];
+  const gap = Math.max(0.14, (Bw - 0.1) / (labels.length - 1));
+  labels.forEach(([bx, by, s], i) => { const ry = Bw / 2 - 0.05 - i * gap; sideLeader(bx, Math.abs(by - ry) < 0.3 ? ry : by, kx, ry, LX, s); });
+  // section cut
+  for (const [x, sgn] of [[-0.5, -1], [L + 0.08, 1]]) { line(x - sgn * 0.08, 0, x, 0, "C-TITLE"); line(x, 0, x, 0.06, "C-TITLE"); poly([[x, 0.11], [x - 0.02, 0.06], [x + 0.02, 0.06]], "C-TITLE", true); text(x - sgn * 0.01, -0.03, 0.065, "ก", "C-TITLE", 1, 3); }
+  const yTitle = -Bw / 2 - 0.55;
+  bubble(L / 2 - 0.6, yTitle, o.mark ?? "F"); text(L / 2 - 0.48, yTitle, 0.075, `แปลนฐานรากร่วม ${o.mark ?? ""} (เสา ${A.stack} + ${B.stack})`, "C-TITLE", 0, 2);
+  // ===== SECTION ก–ก along the length
+  const yg = yTitle - 0.5 - 0.45 - 0.6, yb = yg - Df, yt = yb + t, colTop = yg + 0.45;
+  rect(0, yb, L, yt);
+  for (const [k, u] of [[A, uA], [B, uB]]) { const h = cu(k) / 2;
+    poly([[u - h, yt], [u - h, colTop]]); poly([[u + h, yt], [u + h, colTop]]);
+    poly([[u - h - 0.03, colTop], [u - 0.03, colTop], [u, colTop + 0.04], [u + 0.02, colTop - 0.04], [u + 0.05, colTop], [u + h + 0.03, colTop]]);
+    const xb = h - 0.03 - 0.006 - dbL / 2; for (const sg of [-1, 1]) { bar([[u + sg * (xb + 0.25), yb + c + dbL + dbT + dbL / 2], [u + sg * xb, yb + c + dbL + dbT + dbL / 2], [u + sg * xb, colTop - 0.02]], dbL); P.at(-1).c = 1; }
+    for (let y = yt + 0.05; y < colTop - 0.03; y += 0.15) line(u - h + 0.03, y, u + h - 0.03, y, "C-STIRRUP"); }
+  const lean = 0.05, sand = 0.05, yl = yb - lean, ys = yl - sand;
+  rect(-0.05, yl, L + 0.05, yb, "C-HATCH"); P.at(-1).c = 1; rect(-0.05, ys, L + 0.05, yl, "C-HATCH"); P.at(-1).c = 1;
+  { let k = 0; for (let x = -0.03; x < L + 0.04; x += 0.045, k++) { disk(x, yl + 0.012 + ((k * 37) % 7) * 0.004, 0.003, "C-HATCH"); } }
+  for (let x = 0; x < L + 0.03; x += 0.08) { line(x, ys + 0.008, x - 0.03, ys + 0.04, "C-HATCH"); line(x + 0.025, ys + 0.008, x - 0.005, ys + 0.04, "C-HATCH"); }
+  const gl = [[-0.45, uA - cu(A) / 2], [uA + cu(A) / 2, uB - cu(B) / 2], [uB + cu(B) / 2, L + 0.45]];
+  for (const [xa, xb] of gl) { if (xb - xa < 0.02) continue; line(xa, yg, xb, yg); for (let x = xa + 0.05; x < xb - 0.04; x += 0.1) line(x, yg, x - 0.05, yg - 0.05, "C-HATCH"); }
+  const yBot = yb + c + dbL / 2, yTop = yt - cTop - dbL / 2, hk = Math.min(Math.max(12 * dbL, 0.15), t - c - cTop - 0.02);
+  bar([[c, yBot + hk], [c, yBot], [L - c, yBot], [L - c, yBot + hk]], dbL);
+  bar([[c, yTop - hk], [c, yTop], [L - c, yTop], [L - c, yTop - hk]], dbL); P.at(-1).c = 3;
+  transX.forEach((x) => disk(x, yBot + dbL / 2 + dbT / 2, dbT / 2));
+  // dims + levels
+  for (let i = 1; i < chain.length; i++) if (chain[i] - chain[i - 1] > 1e-6) dimH(chain[i - 1], chain[i], ys, ys - 0.14, f2c(chain[i] - chain[i - 1]));
+  dimH(0, L, ys, ys - 0.28, f2c(L));
+  dimV(yb, yt, 0, -0.16, f2c(t)); dimV(yt, yg, 0, -0.16, f2c(Df - t)); dimV(yb, yg, 0, -0.32, f2c(Df));
+  const lvl = (y, s) => { const w = tw(s, DH) + 0.08, x = -0.45 - w; P.push({ t: "tri", x: x + 0.04, y, s: 0.04, layer: "C-DIM" }); line(x, y, -0.4, y, "C-DIM"); text(x + 0.09, y + 0.012, DH, s, "C-DIM", 0, 1); };
+  lvl(yg, "±0.00 ระดับดิน"); lvl(yb, "VARY ท้องฐานราก");
+  // leaders straight up, inside the right half, the top row leftmost
+  const xa = uB + cu(B) / 2 + 0.08 < L - 0.2 ? uB + cu(B) / 2 + 0.08 : L * 0.6, xc = L - c - 0.04, row = (i) => yt + 0.1 + i * 0.13;
+  upLeader(xa, yTop, row(2), `บนแนวยาว ${C.top.n}-${bt(C.barL)} มม. @ ${f2c(C.top.s)} ม.`);
+  upLeader((xa + xc) / 2, yBot + dbL / 2 + dbT, row(1), `ตามขวาง ${bt(C.barT)} มม. (แถบใต้เสา / @ ${f2c(C.sDist)} ม.)`);
+  upLeader(xc, yBot, row(0), `ล่างแนวยาว ${C.bot.n}-${bt(C.barL)} มม. @ ${f2c(C.bot.s)} ม.`);
+  for (const [y, ty, s] of [[yb - lean / 2, yb - lean / 2 + 0.035, `คอนกรีตหยาบ หนา ${f2c(lean)} ม.`], [yl - sand / 2, yl - sand / 2 - 0.045, `ทรายอัดแน่น หนา ${f2c(sand)} ม.`]]) {
+    const w = tw(s, TH * 0.9) + 0.04; arrow(L + 0.05, y, -1, 0); poly([[L + 0.05, y], [L + 0.38, ty], [L + 0.42 + w, ty]], "C-TEXT"); text(L + 0.44, ty + 0.01, TH * 0.9, s, "C-TEXT", 0, 1); }
+  const yST = ys - 0.5;
+  bubble(L / 2 - 0.6, yST, o.mark ?? "F"); text(L / 2 - 0.48, yST, 0.075, "รูปตัด ก–ก (ตามยาว)", "C-TITLE", 0, 2);
+  text(L / 2 - 0.48, yST - 0.11, DH, `มาตราส่วน 1:25 · ระยะหุ้มล่าง 7.5 ซม. บน 5 ซม. · เหล็กแนวยาวยาวตลอดฐาน งอฉากที่ปลาย`, "C-DIM", 0, 2);
+  const COL = { "C-CONC": 2, "C-STIRRUP": 2, "C-BAR": 3, "C-BAR-EXTRA": 3, "C-DIM": 1, "C-TEXT": 2, "C-TITLE": 3, "C-HATCH": 8, "C-PILE": 2, "C-TAG": 5 };
+  for (const p of P) if (p.t === "dim") Object.assign(p, { cd: p.cd ?? 1, ce: p.ce ?? 8, ct: p.ct ?? 3 });
+  for (const p of P) if (p.c == null && p.t !== "dim") p.c = p.t === "text" ? (p.layer === "C-TAG" ? 4 : 3) : p.t === "disk" && p.layer !== "C-TEXT" ? 8 : p.t === "tri" ? 3 : COL[p.layer] ?? 7;
+  return { items: P, box: [x0 - 0.05, y0 - 0.05, x1 + 0.05, y1 + 0.05] };
 }

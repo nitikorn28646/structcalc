@@ -9,14 +9,23 @@ import { dimText } from "../web/engine/dimParts.js";
 let bad = 0, n = 0;
 const ok = (name, c, info = "") => { n++; if (!c) bad++; if (!c || process.env.V) console.log(`${c ? "ok  " : "FAIL"} ${name}${info ? ` — ${info}` : ""}`); };
 const files = process.argv.slice(2).length ? process.argv.slice(2) : ["web/public/projects/yasothon.json", ...["_anucha2", "_user", "_big", "_roof3"].map((x) => `web/public/projects/${x}.json`).filter((p) => fs.existsSync(p))];
-for (const file of files) {
-  const raw = JSON.parse(fs.readFileSync(file)), fr = raw.frame ?? raw, res = analyzeFrame(fr), tag = file.split("/").pop();
+for (const file of [...files, "weak-soil"]) {
+  // last run: Yasothon on weak soil (qa 6 t/m²) — makes a combined footing
+  const raw = JSON.parse(fs.readFileSync(file === "weak-soil" ? "web/public/projects/yasothon.json" : file)), fr = raw.frame ?? raw, tag = file.split("/").pop();
+  if (file === "weak-soil") { fr.soil = { qa: 6000, gamma: 1800 }; fr.footTypes = [{ name: "F1", kind: "spread", Bx: 0, By: 0, t: 0.3, Df: 1.2, bar: "DB 12", s: 0.15 }]; }
+  const res = analyzeFrame(fr);
   const { groups } = footingGroups(fr, res), models = footingDetailModels(fr, res);
   ok(`${tag}: one detail per mark (${groups.length})`, models.length === groups.length && groups.length > 0);
   for (const [i, g] of groups.entries()) {
     const m = models[i].model, f = g.f, items = m.items;
     const finite = items.every((p) => Object.values(p).every((v) => typeof v !== "number" || Number.isFinite(v)) && (!p.pts || p.pts.every((q) => q.every(Number.isFinite))));
     ok(`${tag} ${g.mark}: coordinates finite`, finite && m.box.every(Number.isFinite));
+    if (f.kind === "combined") { // combined footing (engine/footingDetail.js combinedDetailModel): bar counts from the design in the notes
+      const t2 = items.filter((p) => p.t === "text").map((p) => p.s).join(" | "), C = f.combined;
+      ok(`${tag} ${g.mark}: combined — bottom / top / transverse bar texts`, t2.includes(`${C.bot.n}-${C.barL.replace(" ", " ")}`) && t2.includes(`${C.top.n}-`) && C.trans.every((x) => t2.includes(`${x.n}-`)));
+      ok(`${tag} ${g.mark}: combined — overall dims L / B`, items.some((p) => p.t === "dim" && dimText(p) === C.L.toFixed(2)) && items.some((p) => p.t === "dim" && dimText(p) === C.B.toFixed(2)));
+      continue;
+    }
     // plan bars: polylines of 2 points on C-BAR (along X) / C-BAR-EXTRA (along Y)
     const xb = items.filter((p) => p.t === "poly" && p.layer === "C-BAR" && p.pts.length === 2 && Math.abs(p.pts[0][1] - p.pts[1][1]) < 1e-9).length;
     const yb = items.filter((p) => p.t === "poly" && p.layer === "C-BAR-EXTRA" && p.pts.length === 2).length;

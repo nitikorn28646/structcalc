@@ -785,8 +785,8 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
     <SidePanel title="สรุปฐานราก" icon={Layers}>
       <Notice kind={res.footings.every((f) => f.ok) ? "ok" : "bad"}>ผ่าน {res.footings.filter((f) => f.ok).length}/{res.footings.length} ฐาน · แรงรวม {fmt(res.footings.reduce((a, f) => a + f.P, 0) / 1000, 1)} ตัน</Notice>
       <Section title="ชนิดฐานรากที่ใช้" className="mt-3"><List>
-      {[...new Set(res.footings.map((f) => f.type ?? "อัตโนมัติ"))].map((ty) => { const fs = res.footings.filter((f) => (f.type ?? "อัตโนมัติ") === ty), g = fs[0], ng = fs.filter((f) => !f.ok).length;
-        return <Row key={ty} title={ty} sub={g.kind === "spread" ? `ฐานแผ่ ${fmt(g.r?.Bx ?? 0, 2)} × ${fmt(g.r?.By ?? 0, 2)} ม.` : `${g.n} × ${g.pile}`} badge={ng > 0 && <span className="shrink-0 rounded bg-red-50 px-1 text-[10px] text-red-600">ไม่ผ่าน {ng}</span>} value={fs.length} unit="ฐาน" />; })}
+      {[...new Set(res.footings.map((f) => (f.kind === "combined" ? "ฐานรากร่วม" : f.type ?? "อัตโนมัติ")))].map((ty) => { const fs = res.footings.filter((f) => (f.kind === "combined" ? "ฐานรากร่วม" : f.type ?? "อัตโนมัติ") === ty && !f.dup), g = fs[0], ng = fs.filter((f) => !f.ok).length;
+        return <Row key={ty} title={ty} sub={g.kind === "combined" ? "ใต้ 2 เสา" : g.kind === "spread" ? `ฐานแผ่ ${fmt(g.r?.Bx ?? 0, 2)} × ${fmt(g.r?.By ?? 0, 2)} ม.` : `${g.n} × ${g.pile}`} badge={ng > 0 && <span className="shrink-0 rounded bg-red-50 px-1 text-[10px] text-red-600">ไม่ผ่าน {ng}</span>} value={fs.length} unit="ฐาน" />; })}
       </List></Section>
     </SidePanel>
     <Frame3D frame={frame} res={res} cur={cur} roof={roof} dark={dark} className="h-[300px] overflow-hidden rounded-xl border border-gray-200" />

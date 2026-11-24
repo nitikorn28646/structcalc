@@ -923,3 +923,18 @@ aligned, flags 32 + 128 = text where we put it) + its anonymous block *Dn (BLOCK
 text override only when the label ≠ the measured length (e.g. 0.075, "เสา 30 ซม."); Dxf.dim (beam sections) and the footing plan sheet use it
 too; SVG (stairSvg) draws dimParts. footingdxf-check 223 (grid lines single CENTER2, every dim a DIMENSION with its block); ezdxf audit 0
 errors on beam / stair / footing files of 5 projects. Not opened in AutoCAD here.
+COMBINED FOOTINGS (2026-11-24, user "ทำเลย"): engine/combinedFooting.js combinedFooting(cols, o) — two columns on one line (≤ 0.15 m off), WSD with the
+spread engine's constants; plan centred on the resultant when the neighbours allow (else shifted, linear pressure e ≤ L/6), L searched from the
+shortest (column faces + 0.15) up, B narrowest passing ≤ 1.5 L and ≤ o.wMax, t from max(0.30, tMin), cheapest bars DB12/16/20 @0.25–0.10; inverted
+beam M(u), V(u) in closed form (faces exact); bottom bars (cantilevers) / top bars (hogging between the columns) As = M/(fs·j·d) ≥ min(14/fy·b·d,
+4/3·As req) ≥ ρ·b·h; one-way shear at d from every face ≤ 0.29√f′c; punching per column (3-sided near an end) ≤ 0.53√f′c on the full load;
+transverse bands c + 0.75d each side (merged when they touch) M = (P/B)·((B − c)/2)²/2, bars ≥ 0.06 apart; distribution steel outside; spacing ≤
+min(3h, 45 cm); development ld (top × 1.3) or 90° hook; bearing 0.25 f′c; why-counts → error text when nothing passes. frame.js: after the reshape,
+spread pairs still < 0.10 m apart → combined (frame.combineFootings !== false, checkbox in step 8): designed free, then a footing hit along the
+line sets lo / hi, one hit from the side limits the width (wMax), ≤ 4 tries; must clear every other footing. Both column entries: kind "combined",
+combined (shared), center, dup (second), r {Bx, By, longText bottom, topText, shortText transverse}; res.notes says how many pairs. UI: FootingPlan /
+Frame3D / DXF plan draw the rectangle once at center (dup = column only), step 8 table + summary, report table / schedule / CombinedSheet
+(CheckSheets) / figure; engine/footingDetail.js combinedDetailModel (plan + longitudinal section, user-sheet colours) for step 8, report, DXF
+sheets. Pile caps are not combined (warning stays). Tests: cli/combined-check.mjs 46 (independent face moments, statics, q, As, shear, bands,
+limits, frame integration, off switch — in the gate); footingdxf-check 300 (+ weak-soil Yasothon with a combined footing). Yasothon qa 6 t/m²:
+3.50,6.90 + 3.50,7.90 → 2.80 × 3.35 × 0.30; 6.00,2.40 + 6.00,3.40 cannot (soil with the neighbours) → warning. Other projects unchanged.

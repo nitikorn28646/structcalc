@@ -12,6 +12,7 @@ import { punchingFull } from "./footingExtra.js";
 import { expandCombos, levels, seismicForces, windForces } from "./lateral.js";
 import { depthJoints, levelJoints } from "./levelDetail.js";
 import { plantedColumns } from "./plantedCol.js";
+import { combinedFooting, cfBarText } from "./combinedFooting.js";
 
 const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.05;
 export const stackKey = (p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
@@ -564,12 +565,55 @@ export function analyzeFrame(frame) {
     const nRe = footings.filter((f) => f.reshaped).length;
     if (nRe) g.warnings.push(`ฐานแผ่ ${nRe} ฐานปรับเป็นสี่เหลี่ยมผืนผ้าอัตโนมัติ เพราะชิด/ซ้อนกับฐานข้างเคียง (เว้นระยะ ≥ ${gapMin.toFixed(2)} ม.) — ดูแปลนฐานราก`);
   }
+  let cfNote = null;
+  // COMBINED FOOTINGS (2026-11-24, user "ทำเลย" after "ทำไมฐานรากยังซ้อนกัน"): two spread footings still closer than 0.10 m after the reshape
+  // → one rectangular footing under both columns (engine/combinedFooting.js), when they stand on one line (≤ 0.15 m off) and the result clears
+  // every other footing; frame.combineFootings === false keeps them separate (flagged). Both column entries carry the same design:
+  // kind "combined", combined = the design, center = the rectangle's centre, dup = the second entry (drawn / counted once).
+  {
+    const gapMin = 0.1, rectOf = (f) => ({ c: f.center ?? f.p, Bx: f.r?.Bx ?? 0, By: f.r?.By ?? 0 });
+    const gapR = (a, b) => { const A = rectOf(a), B = rectOf(b); return Math.max(Math.abs(A.c[0] - B.c[0]) - (A.Bx + B.Bx) / 2, Math.abs(A.c[1] - B.c[1]) - (A.By + B.By) / 2); };
+    const foS = { soil: frame.soil, utilMax: frame.footUtil };
+    let made = 0;
+    for (let i = 0; i < footings.length && frame.combineFootings !== false; i++) for (let j = i + 1; j < footings.length; j++) {
+      const a = footings[i], b = footings[j];
+      if (a.kind !== "spread" || b.kind !== "spread" || !a.inp || !b.inp || a.combined || b.combined) continue;
+      if (gapR(a, b) >= gapMin - 1e-9) continue;
+      const ax = Math.abs(a.p[0] - b.p[0]) >= Math.abs(a.p[1] - b.p[1]) ? 0 : 1, ay = 1 - ax, across = (a.p[ay] + b.p[ay]) / 2;
+      // design free first; a footing it then hits along the line limits that end (lo / hi) and the design is redone (≤ 4 tries);
+      // a footing hit from the side cannot be cleared by shortening → keep them separate
+      const col = (f) => ({ p: f.p, P: f.P ?? f.inp.P, Mx: f.Mx ?? 0, My: f.My ?? 0, bx: f.inp.bx, by: f.inp.by, stack: f.stack, dowelBar: f.inp.dowelBar, dowelN: f.inp.dowelN });
+      const entry = (f, dup, C) => ({ ...f, kind: "combined", pile: "ฐานร่วม", n: 0, ok: C.ok, util: C.util, combined: C, center: C.center, dup, type: null, typeFrom: f.type ?? null, reshaped: false,
+        r: { Bx: C.Bx, By: C.By, piles: [], longText: cfBarText(C.bot, C.barL), shortText: cfBarText(C.trans[0], C.barT), topText: cfBarText(C.top, C.barL) },
+        inp: { ...f.inp, t: C.t, Df: C.Df, Bx: C.Bx, By: C.By }, clash: undefined });
+      let lo = null, hi = null, wMax = null, cand = null, why = "", mid = (a.p[ax] + b.p[ax]) / 2;
+      for (let tries = 0; tries < 4; tries++) {
+        const C = combinedFooting([col(a), col(b)], { mat, qa: foS.soil?.qa ?? 10000, gamma: foS.soil?.gamma ?? 1800, Df: Math.max(a.inp.Df ?? 1.2, b.inp.Df ?? 1.2), utilMax: foS.utilMax ?? 1, lo, hi, wMax, tMin: spreadTMin(mat) });
+        if (!C || !C.ok || !C.center) { why = C?.error ?? "ไม่อยู่ในแนวเดียวกัน"; break; }
+        const c0 = [entry(a, false, C), entry(b, true, C)];
+        const hits = footings.filter((g, k) => k !== i && k !== j && g.r?.Bx && !g.dup && gapR(c0[0], g) < gapMin - 1e-9);
+        if (!hits.length) { cand = c0; break; }
+        let side = false;
+        for (const g of hits) { const R = rectOf(g), half = ax ? R.By / 2 : R.Bx / 2, gx = Math.abs(R.c[ay] - C.center[ay]) - ((ax ? R.Bx : R.By) + (ax ? C.Bx : C.By)) / 2;
+          // beside the footing (it overlaps along the line): the width across is limited to clear it, and the footing grows longer instead
+          const along = Math.abs(R.c[ax] - C.center[ax]) - ((ax ? R.By : R.Bx) + (ax ? C.By : C.Bx)) / 2;
+          if (along < gapMin - 1e-9) { const room = 2 * (Math.abs(R.c[ay] - across) - (ax ? R.Bx : R.By) / 2 - gapMin); if (room <= 0) side = true; else wMax = Math.min(wMax ?? Infinity, Math.floor(room * 20 + 1e-9) / 20); void gx; continue; }
+          if (R.c[ax] < mid) lo = Math.max(lo ?? -Infinity, R.c[ax] + half + gapMin); else hi = Math.min(hi ?? Infinity, R.c[ax] - half - gapMin); }
+        if (side) { why = "ชิดฐานอื่นด้านข้าง"; break; }
+        why = "ฐานข้างเคียงไม่เหลือที่พอ";
+      }
+      if (!cand) { g.warnings.push(`ฐานรากร่วม ${a.stack} + ${b.stack}: ทำไม่ได้ (${why}) — คงเป็นฐานแยกที่ชิดกัน`); continue; }
+      footings[i] = cand[0]; footings[j] = cand[1]; made++;
+    }
+    if (made) cfNote = `ฐานแผ่ที่ชิด/ซ้อนกัน ${made} คู่ ออกแบบเป็นฐานรากร่วมอัตโนมัติ (ปิดได้ที่ขั้นฐานราก)`;
+  }
   // footings overlapping or too close (user 2026-11-04: "ฐานรากเดี่ยวไม่ค่อยติดหรือซ้อนกัน"): clear gap between plan rectangles
   // < 0.10 m (room for the formwork / excavation) → combined footing or resize; each pair flagged on the footing plan (f.clash)
   const gapMin = 0.1, clash = [];
   for (let i = 0; i < footings.length; i++) for (let j = i + 1; j < footings.length; j++) {
-    const a = footings[i], b = footings[j]; if (!a.r?.Bx || !b.r?.Bx) continue;
-    const gx = Math.abs(a.p[0] - b.p[0]) - (a.r.Bx + b.r.Bx) / 2, gy = Math.abs(a.p[1] - b.p[1]) - (a.r.By + b.r.By) / 2, gap = Math.max(gx, gy);
+    const a = footings[i], b = footings[j]; if (!a.r?.Bx || !b.r?.Bx || (a.combined && a.combined === b.combined)) continue;
+    const ca = a.center ?? a.p, cb = b.center ?? b.p;
+    const gx = Math.abs(ca[0] - cb[0]) - (a.r.Bx + b.r.Bx) / 2, gy = Math.abs(ca[1] - cb[1]) - (a.r.By + b.r.By) / 2, gap = Math.max(gx, gy);
     if (gap < gapMin - 1e-6) { clash.push(`(${a.p[0].toFixed(2)}, ${a.p[1].toFixed(2)})–(${b.p[0].toFixed(2)}, ${b.p[1].toFixed(2)}) ${gap < 0 ? `ซ้อนกัน ${(-gap).toFixed(2)}` : `ห่าง ${gap.toFixed(2)}`} ม.`); (a.clash ??= []).push(j); (b.clash ??= []).push(i); }
   }
   if (clash.length) g.warnings.push(`ฐานรากซ้อน/ชิดกันเกินไป ${clash.length} คู่ (ระยะห่างน้อยกว่า ${gapMin.toFixed(2)} ม.): ${clash.slice(0, 3).join(" · ")}${clash.length > 3 ? " …" : ""} — ใช้ฐานรากร่วม หรือปรับขนาด / ตำแหน่งฐาน`);
@@ -577,7 +621,7 @@ export function analyzeFrame(frame) {
   // "beam end lifted" (floor.js, continuous model: pinned joints) checked in the 3D frame (user 2026-11-20): when every column under that
   // point is still in compression in the monolithic frame (D + L), the end is not pulled up for real — the warning becomes a note (anchor
   // the short span's top bars into the column); still in tension → the warning stays. Continuous mode: one gravity 3D solve just for this.
-  const notes = [];
+  const notes = cfNote ? [cfNote] : [];
   const upl = g.an.flatMap((an, k) => (an.lines ?? []).flatMap((ln) => (ln.uplift ?? []).map((u) => ({ k, ln, u }))));
   if (upl.length) {
     let m3 = f3;

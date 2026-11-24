@@ -77,7 +77,7 @@ export function FootingTypes({ frame, set, res, project = {} }) {
   const foots = res.footings ?? [], shown = foots.find((f) => f.stack === selStack);
   const governing = [...new Set(foots.map((f) => f.type ?? null))].map((ty) => foots.filter((f) => (f.type ?? null) === ty).reduce((a, f) => ((f.util ?? 0) > (a.util ?? 0) ? f : a)));
   // construction-drawing detail (plan + section) and a 3D cage on demand (one at a time)
-  const draw = (f) => f?.inp && f.r ? (cage3 === f.stack ? <FootingCage3D f={f} className="h-[260px] overflow-hidden rounded-lg" /> : <FootingDrawing frame={frame} res={res} f={f} mark={marks?.mark?.(f) ?? ""} className="h-[110mm]" />) : <p className="text-gray-400">ไม่มีรูป ({f?.error ?? "ยังไม่ได้ออกแบบ"})</p>;
+  const draw = (f) => f?.inp && f.r ? (cage3 === f.stack && f.kind !== "combined" ? <FootingCage3D f={f} className="h-[260px] overflow-hidden rounded-lg" /> : <FootingDrawing frame={frame} res={res} f={f} mark={marks?.mark?.(f) ?? ""} className="h-[110mm]" />) : <p className="text-gray-400">ไม่มีรูป ({f?.error ?? "ยังไม่ได้ออกแบบ"})</p>;
   const marks = footingMarks(res.footings);
   // per footing auto size (user 2026-11-06): the cheapest passing footing for this column → its own type (the picked type is changed in place
   // when no other column uses it, else a new type F… is added and picked for this column only)
@@ -106,6 +106,10 @@ export function FootingTypes({ frame, set, res, project = {} }) {
         <FootingLegend footings={res.footings} marks={marks} />
       </section>
       <section>
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:bg-white/[0.03]">
+          <label className="flex items-center gap-2 font-medium text-gray-600"><input type="checkbox" checked={frame.combineFootings !== false} onChange={(e) => set("combineFootings", e.target.checked)} />ฐานแผ่ที่ชิด/ซ้อนกันจนแยกไม่ได้ → ออกแบบเป็นฐานรากร่วม</label>
+          <span className="text-[11px] text-gray-400">ทำหลังจากปรับเป็นผืนผ้าแล้วยังห่างกันไม่ถึง 0.10 ม. · เสา 2 ต้นในแนวเดียวกัน · ฐานยาวตามแนวเสา วางกึ่งกลางแรงลัพธ์ (ถ้าฐานข้างเคียงยอม) · ตรวจแรงดันดิน โมเมนต์/แรงเฉือนตามยาว แรงเฉือนทะลุ เหล็กบน-ล่าง และแถบตามขวางใต้เสา</span>
+        </div>
         <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:bg-white/[0.03]">
           <span className="font-medium text-gray-600">ใช้กำลังรับไม่เกิน</span>
           <Num v={Math.round((frame.footUtil ?? 1) * 100)} on={(v) => set("footUtil", Math.min(100, Math.max(50, v)) / 100)} step="5" w="w-16" /><span>%</span>
@@ -165,12 +169,12 @@ export function FootingTypes({ frame, set, res, project = {} }) {
               <option value="">อัตโนมัติ</option>{types.map((t, i) => <option key={i} value={i}>{t.name}</option>)}</select></td>
             <td className={td}>{f.reshaped ? <span title={`ปรับจาก ${f.typeFrom ?? "อัตโนมัติ"} เป็นผืนผ้าเพราะชิดฐานข้างเคียง`}>{marks.mark(f)} (ผืนผ้า)</span> : f.type ?? "-"}</td>
             <td className={td}>{fmt(f.P / 1000, 2)}</td><td className={td}>{fmt(f.Mx ?? 0, 0)} / {fmt(f.My ?? 0, 0)}</td><td className={td}>{f.combo ?? "D+L"}</td>
-            <td className={td}>{f.kind === "spread" ? "ฐานแผ่" : `${f.n} × ${f.pile}`}</td><td className={td}>{f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp?.t ?? 0.4, 2)}` : "-"}</td>
-            <td className={td}>{!f.r ? "-" : f.kind === "spread" ? `q ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`}</td>
-            <td className={td}>{f.r ? [f.r.longText, f.r.shortText].filter(Boolean).join(" · ") : f.error}{f.r?.bore && <span className="block text-[11px] text-[#0e9384]">เข็มเจาะ: {f.r.bore.text}</span>}</td>
+            <td className={td}>{f.kind === "combined" ? <span title="ฐานรากร่วมใต้ 2 เสา — ฐานแยกวางไม่ได้เพราะชิดกัน">ฐานร่วม + {f.combined.cols.find((c) => c.stack !== f.stack)?.stack}</span> : f.kind === "spread" ? "ฐานแผ่" : `${f.n} × ${f.pile}`}</td><td className={td}>{f.r ? `${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp?.t ?? 0.4, 2)}` : "-"}</td>
+            <td className={td}>{!f.r ? "-" : f.kind === "combined" ? `q ${fmt(f.combined.qMax / 1000, 2)} / qa ${fmt(f.combined.qa / 1000, 2)} ตัน/ม.²` : f.kind === "spread" ? `q ${fmt(Math.max(f.r.qmaxX, f.r.qmaxY) / 1000, 2)} / qa ${fmt(f.inp.qa / 1000, 2)} ตัน/ม.²` : `${fmt(f.r.Ptmax / 1000, 2)} / ${fmt(f.r.Pallow / 1000, 2)}`}</td>
+            <td className={td}>{f.r ? [f.r.longText, f.r.topText && `บน ${f.r.topText}`, f.r.shortText].filter(Boolean).join(" · ") : f.error}{f.r?.bore && <span className="block text-[11px] text-[#0e9384]">เข็มเจาะ: {f.r.bore.text}</span>}</td>
             <td className={`${td} ${f.ok ? "text-green-600" : "font-semibold text-red-600"}`}>{f.ok ? "ผ่าน" : "ไม่ผ่าน"}</td>
             <td className={`${td} text-red-600`}>{f.ok ? "" : <>{f.noType && <b>ไม่มี type ไหนผ่าน — แสดง {f.type ?? "ตัว"}ที่ใกล้ผ่านที่สุด · </b>}{why(f)}{f.suggest && <span className="block text-[#b54708]">แนะนำเพิ่ม type: {f.suggest}</span>}</>}{autoMsg[f.stack] && <span className={`block ${autoMsg[f.stack].ok ? "text-green-600" : "text-[#b54708]"}`}>{autoMsg[f.stack].text}</span>}</td>
-            <td className={td} onClick={(e) => e.stopPropagation()}><button onClick={() => autoOne(f)} title="หาขนาดฐาน (จำนวนเข็ม หนา กว้าง ยาว) และเหล็ก/ระยะ ที่ประหยัดที่สุดที่ผ่าน สำหรับเสานี้ — สร้าง / แก้ type ของฐานนี้" className="whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ปรับอัตโนมัติ</button></td>
+            <td className={td} onClick={(e) => e.stopPropagation()}><button disabled={f.kind === "combined"} onClick={() => autoOne(f)} title="หาขนาดฐาน (จำนวนเข็ม หนา กว้าง ยาว) และเหล็ก/ระยะ ที่ประหยัดที่สุดที่ผ่าน สำหรับเสานี้ — สร้าง / แก้ type ของฐานนี้" className="whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50">ปรับอัตโนมัติ</button></td>
           </tr>)}</tbody></table>
       </section>
       <section>

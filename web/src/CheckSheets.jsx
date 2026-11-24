@@ -127,6 +127,39 @@ export function FootingSheet({ f, mark, count }) {
   );
 }
 
+// combined footing under two columns (engine/combinedFooting.js, 2026-11-24): plan, soil pressure, inverted-beam moments / shears along the
+// footing, punching per column, longitudinal top / bottom steel, transverse bands, development, shrinkage steel and spacing
+export function CombinedSheet({ f, mark }) {
+  const C = f.combined, [A, B] = C.cols, bar = (x, b) => (x ? `${x.n}-${b} @ ${n2(x.s)}` : "-"), axTxt = C.ax ? "แกน Y" : "แกน X";
+  const vp = C.punch ?? [];
+  return (
+    <CheckSheet id={`F-${mark}`} title={`การตรวจสอบฐานรากร่วม — ${mark}`} sub={`ฐานรากร่วม 2 เสา ${n2(C.L)} × ${n2(C.B)} × ${n2(C.t)} ม. (ยาวตาม${axTxt})`}
+      info={[["แบบ", mark], ["ชนิด", "ฐานรากร่วม (ฐานแผ่ใต้ 2 เสา)"], ["ยาว L × กว้าง B × หนา t", `${n2(C.L)} × ${n2(C.B)} × ${n2(C.t)}`, "ม."], ["ลึก Df", n2(C.Df), "ม."],
+        ["เสา", `${A.stack} · ${B.stack}`], ["ระยะเสา s", n2(C.s), "ม."], ["เหล็กล่างแนวยาว", bar(C.bot, C.barL)], ["เหล็กบนแนวยาว", bar(C.top, C.barL)],
+        ["เหล็กล่างตามขวางใต้เสา", C.trans.map((x) => `${x.n}-${C.barT} ในแถบ ${n2(x.w)} ม.`).join(" · ")], ["เหล็กกันร้าวตามขวาง", `${C.barT} @ ${n2(C.sDist)}`]]}
+      input={[["f′c", n0(f.inp?.fcPrime ?? 240), "กก./ซม.²"], ["fc · fs · j", `${n0(C.fc)} · ${n0(C.fs)} · ${n2(C.j)}`, "กก./ซม.²"], ["qa ดิน (× ขีดจำกัด)", n2(C.qa / 1000), "ตัน/ม.²"],
+        ["ระยะหุ้ม ล่าง / บน", "7.5 / 5", "ซม."]]}
+      forces={[["P เสา 1 / เสา 2", `${n0(A.P)} / ${n0(B.P)}`, "กก."], ["ผลรวม R", n0(C.R), "กก."], ["ตำแหน่งแรงลัพธ์จากเสา 1", n2(C.xr), "ม."], ["เยื้องจากกึ่งกลางฐาน e", n2(C.e), "ม."],
+        ["M ล่าง (ช่วงยื่น) / M บน (ระหว่างเสา)", `${n0(C.Mbot)} / ${n0(C.Mtop)}`, "กก.-ม."]]}
+      eqs={[["แรงดันดิน (รวมน้ำหนักฐาน + ดิน)", "q = (R + Wf + Ws)/(B·L) · (1 + 6e/L)", `(${n0(C.R)} + ${n0(C.Wf)} + ${n0(C.Ws)}) / (${n2(C.B)} × ${n2(C.L)})`, n0(C.qMax), "กก./ม.²"],
+        ["แรงแผ่ใต้ฐาน (สุทธิ)", "w = R/L", `${n0(C.R)} / ${n2(C.L)}`, n0(C.R / C.L), "กก./ม."],
+        ["โมเมนต์ตามยาว", "M(u) = ∫w·(u − ξ)dξ − ΣP·(u − uP)  (คานกลับหัว)", "", `${n0(C.Mbot)} / ${n0(C.Mtop)}`, "กก.-ม."],
+        ["เหล็กล่างแนวยาว", "As = M/(fs·j·d) ≥ min(14/fy·b·d, 4/3·As) ≥ ρ·b·h", `${n0(C.Mbot)}×100 / (${n0(C.fs)} × ${n2(C.j)} × ${n2(C.dB * 100)})`, n2(C.AsBotReq), "ซม.²"],
+        ["เหล็กบนแนวยาว", "As = M/(fs·j·d)", `${n0(C.Mtop)}×100 / (${n0(C.fs)} × ${n2(C.j)} × ${n2(C.dTop * 100)})`, n2(C.AsTopReq), "ซม.²"],
+        ["แรงเฉือนทางเดียวที่ระยะ d จากหน้าเสา", "v = V/(B·d) ≤ 0.29√f′c", `${n0(C.vMax)} / (${n0(C.B * 100)} × ${n2(C.dB * 100)})`, n2(C.v), "กก./ซม.²"],
+        ...vp.map((x, i) => ["แรงเฉือนทะลุ เสา " + (i + 1) + (x.three ? " (3 ด้าน)" : ""), "vp = (P − qn·a₁·a₂)/(b₀·d) ≤ 0.53√f′c", `${n0(x.Vp)} / (${n0(x.b0 * 100)} × ${n2(C.dB * 100)})`, n2(x.v), "กก./ซม.²"]),
+        ...C.trans.map((x, i) => ["เหล็กตามขวางแถบ " + (i + 1), "M = Σ(P/B)·((B − c)/2)²/2 ; As = M/(fs·j·d)", `M ${n0(x.M)}`, `${n2(x.AsReq)} → ${x.n}-${C.barT}`, "ซม.²"])]}
+      checks={[["แรงดันดินสูงสุด ≤ qa", C.qMax, C.qa, "กก./ม.²", C.qMax <= C.qa + 1e-6], ["แรงดันดินต่ำสุด ≥ 0", 0, C.qMin, "กก./ม.²", C.qMin >= -1e-6, 0],
+        ["เหล็กล่างแนวยาว As ต้องการ ≤ ที่ใส่", C.AsBotReq, C.bot.As, "ซม.²", C.bot.As >= C.AsBotReq - 1e-9], ["เหล็กบนแนวยาว As ต้องการ ≤ ที่ใส่", C.AsTopReq, C.top.As, "ซม.²", C.top.As >= C.AsTopReq - 1e-9],
+        ["แรงเฉือนทางเดียว", C.v, C.vc, "กก./ซม.²", C.v <= C.vc + 1e-9], ["แรงเฉือนทะลุ (เสาวิกฤต)", C.vp, C.vcp, "กก./ซม.²", C.vp <= C.vcp + 1e-9],
+        ["หน่วยแรงแบกทานใต้เสา ≤ 0.25f′c", C.bearing, C.fbr, "กก./ซม.²", C.bearing <= C.fbr + 1e-9],
+        ["ระยะเหล็ก ≤ min(3h, 45 ซม.)", Math.max(C.bot.s, C.top.s) * 100, C.sMax * 100, "ซม.", true],
+        ["ระยะฝังเหล็กล่าง (ปลายฐาน)", C.devB === "straight" ? C.ldB * 100 : C.ldhL * 100, C.availB * 100, "ซม.", true],
+        ["ความลึกเหนือเหล็กล่าง ≥ 15 ซม. (15.7)", 15, C.dB * 100 - (C.dB - C.dTr) * 50, "ซม.", C.dB * 100 - (C.dB - C.dTr) * 50 >= 15 - 1e-9, 0]]}
+      note={`ACI 318-11 (ฐานของ ว.ส.ท. — เลขข้อยังไม่ได้ตรวจกับต้นฉบับ ว.ส.ท.): 10.5.3 · 7.12.2.1 · 15.4.4 (แถบเหล็กตามขวางกว้าง c + 0.75d สองข้าง) · 12.5.2 · 15.7 — เหล็กแนวยาวยาวตลอดฐาน งอฉากที่ปลาย${C.devB === "hook" ? " (ปลายล่างต้องงอขอ)" : ""}`} />
+  );
+}
+
 // steel roof member (one group or one span): bending + deflection (+ axial for posts)
 export function RoofSheet({ id, title, x, secText, f }) {
   const r = x.r, k = x.count > 1 ? 2 : 1, s = r.section ?? {}, dd = r.d ?? r.dy, da = r.dAllow ?? r.dyAllow;

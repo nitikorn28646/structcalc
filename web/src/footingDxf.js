@@ -7,7 +7,7 @@
 //   sheets 2… = one DETAIL per footing mark (engine/footingDetail.js: plan + section ก–ก, 1:25), packed two or more per sheet.
 // Metres in model space; everything goes through the R2010 writer of src/beamDetailDxf.js (Thai text style T5 = AngsanaUPC).
 import { Dxf, frame, emitModel, modelSheets, SW, SH, BX0, BY0, BY1, TX } from "./beamDetailDxf.js";
-import { footingDetailModel, footingScheduleRow } from "../engine/footingDetail.js";
+import { footingDetailModel, footingScheduleRow, combinedDetailModel } from "../engine/footingDetail.js";
 import { footingMarks } from "./footingMarks.js";
 import { dimItem } from "../engine/dimParts.js";
 import { gridAxes } from "./planKit.js";
@@ -39,6 +39,7 @@ export function footingGroups(frame, res) {
 export function footingDetailModels(frame, res) {
   const { groups, colAt } = footingGroups(frame, res), mat = frame.mat ?? {};
   return groups.map((g) => { const c = colAt(g.f.p);
+    if (g.f.kind === "combined") return { mark: g.mark, model: combinedDetailModel(g.f, { mark: g.mark }) };
     return { mark: g.mark, model: footingDetailModel(g.f, { mark: g.mark, count: g.list.length, lv: c?.lv, colName: [...g.cols].join(", "), coverCol: mat.coverPier ?? mat.coverCol ?? mat.cover ?? 3 }) }; })
     .filter((x) => x.model);
 }
@@ -52,7 +53,7 @@ function planSheet(d, X0, k, frameData, res, project, title) {
   const uniq = (vs) => [...new Set(vs.map((v) => +v.toFixed(3)))].sort((a, b) => a - b);
   const GX = ax && ax.GX.length > 1 ? ax.GX : uniq(foots.map((f) => f.p[0])), GY = ax && ax.GY.length > 1 ? ax.GY : uniq(foots.map((f) => f.p[1]));
   const xName = ax && ax.GX.length > 1 ? ax.xName : (i) => String.fromCharCode(65 + i), yName = ax && ax.GY.length > 1 ? ax.yName : (i) => String(GY.length - i);
-  const fx = foots.flatMap((f) => [f.p[0] - f.r.Bx / 2, f.p[0] + f.r.Bx / 2]), fy = foots.flatMap((f) => [f.p[1] - f.r.By / 2, f.p[1] + f.r.By / 2]);
+  const fx = foots.flatMap((f) => [(f.center ?? f.p)[0] - f.r.Bx / 2, (f.center ?? f.p)[0] + f.r.Bx / 2]), fy = foots.flatMap((f) => [(f.center ?? f.p)[1] - f.r.By / 2, (f.center ?? f.p)[1] + f.r.By / 2]);
   const mx0 = Math.min(...fx, ...GX), mx1 = Math.max(...fx, ...GX), my0 = Math.min(...fy, ...GY), my1 = Math.max(...fy, ...GY);
   // layout inside the drawing area (sheet units × k = model metres from the sheet's left / bottom)
   const AL = BX0 * k + 0.6 * u, AR = TX * k - 0.6 * u, AT = BY1 * k - 0.5 * u, AB = BY0 * k + 0.5 * u;
@@ -81,14 +82,16 @@ function planSheet(d, X0, k, frameData, res, project, title) {
   if (GY.length > 2) dimV(GY[0], GY.at(-1), gx1 + 0.95 * u, f2(GY.at(-1) - GY[0]));
   // ---- footings
   const need = 0.45 * u;
+  const ctr = (f) => f.center ?? f.p; // combined footing: its own centre (the second column's entry is drawn as a column only)
   for (const f of foots) {
-    const B = f.r.Bx, D = f.r.By, [cx, cy] = f.p, red = f.clash?.length ? 1 : 0, mark = M.mark(f);
-    const room = (dir) => Math.min(Infinity, ...foots.filter((g) => g !== f).map((g) => {
-      const ox_ = Math.abs(g.p[0] - cx) < (B + g.r.Bx) / 2 + 0.3 * u, oy_ = Math.abs(g.p[1] - cy) < (D + g.r.By) / 2 + 0.3 * u;
-      if (dir === "up" && ox_ && g.p[1] > cy) return g.p[1] - g.r.By / 2 - (cy + D / 2);
-      if (dir === "down" && ox_ && g.p[1] < cy) return cy - D / 2 - (g.p[1] + g.r.By / 2);
-      if (dir === "right" && oy_ && g.p[0] > cx) return g.p[0] - g.r.Bx / 2 - (cx + B / 2);
-      if (dir === "left" && oy_ && g.p[0] < cx) return cx - B / 2 - (g.p[0] + g.r.Bx / 2);
+    const B = f.r.Bx, D = f.r.By, [cx, cy] = ctr(f), red = f.clash?.length ? 1 : 0, mark = M.mark(f);
+    if (f.dup) { const col = colAt(f.p), cB = (col?.lv?.Bx ?? 20) / 100, cD = (col?.lv?.By ?? 20) / 100, [a, b] = P(f.p[0] - cB / 2, f.p[1]), [e] = P(f.p[0] + cB / 2, f.p[1]); d.poly([[a, b], [e, b]], "C-COL", false, cD, 3); continue; }
+    const room = (dir) => Math.min(Infinity, ...foots.filter((g) => g !== f && !g.dup && !(g.combined && g.combined === f.combined)).map((g) => {
+      const gp = ctr(g), ox_ = Math.abs(gp[0] - cx) < (B + g.r.Bx) / 2 + 0.3 * u, oy_ = Math.abs(gp[1] - cy) < (D + g.r.By) / 2 + 0.3 * u;
+      if (dir === "up" && ox_ && gp[1] > cy) return gp[1] - g.r.By / 2 - (cy + D / 2);
+      if (dir === "down" && ox_ && gp[1] < cy) return cy - D / 2 - (gp[1] + g.r.By / 2);
+      if (dir === "right" && oy_ && gp[0] > cx) return gp[0] - g.r.Bx / 2 - (cx + B / 2);
+      if (dir === "left" && oy_ && gp[0] < cx) return cx - B / 2 - (gp[0] + g.r.Bx / 2);
       return Infinity; }));
     const up = room("up"), dn = room("down"), rt = room("right"), lf = room("left"), tagH = 0.32 * u;
     const wSide = up >= need + (up < Infinity ? tagH : 0) ? 1 : dn >= need + tagH + (dn < Infinity ? need : 0) ? -1 : 0, dSide = rt >= need ? 1 : lf >= need ? -1 : 0;
@@ -97,7 +100,7 @@ function planSheet(d, X0, k, frameData, res, project, title) {
     for (const [px, py] of f.r.piles ?? []) { if (f.kind === "spread" || !f.n) break; const h = (PILES[f.pile]?.b ?? 0.2) / 2;
       d.withLt("HIDDEN2", 0.5 * u, () => d.poly([[-h, -h], [h, -h], [h, h], [-h, h]].map(([a, b]) => P(cx + px + a, cy + py + b)), "C-PILE", true, 0, 2)); }
     const col = colAt(f.p), cB = (col?.lv?.Bx ?? 20) / 100, cD = (col?.lv?.By ?? 20) / 100;
-    { const [a, b] = P(cx - cB / 2, cy), [e] = P(cx + cB / 2, cy); d.poly([[a, b], [e, b]], "C-COL", false, cD, 3); }
+    { const [a, b] = P(f.p[0] - cB / 2, f.p[1]), [e] = P(f.p[0] + cB / 2, f.p[1]); d.poly([[a, b], [e, b]], "C-COL", false, cD, 3); }
     if (wSide) dimH(cx - B / 2, cx + B / 2, wSide > 0 ? cy + D / 2 + 0.22 * u : cy - D / 2 - 0.22 * u, f2(B), wSide > 0 ? cy + D / 2 : cy - D / 2, red);
     if (dSide) dimV(cy - D / 2, cy + D / 2, dSide > 0 ? cx + B / 2 + 0.22 * u : cx - B / 2 - 0.22 * u, f2(D), dSide > 0 ? cx + B / 2 : cx - B / 2, red);
     const ct = col ? frameData.colTypes?.[col.typeIdx]?.name : "", label = `${mark}${ct ? `,${ct}` : ""}${!wSide || !dSide ? ` ${f2(B)}x${f2(D)}` : ""}`;
@@ -109,7 +112,7 @@ function planSheet(d, X0, k, frameData, res, project, title) {
   const heads = ["ฐาน", "จำนวน", "กว้าง × ยาว × หนา (ม.)", "ลึก Df (ม.)", "เข็ม / ฐานแผ่", "เหล็กล่างแนว X", "เหล็กล่างแนว Y", "ตอม่อ (ม.)", "เดือย"];
   const cw = [0.8, 0.8, 2.3, 1.1, 1.6, 2.6, 2.6, 1.3, 1.2].map((v) => v * u), rh = 0.36 * u, tX = X0 + AL, tY = AB + tabH - 0.35 * u, tw = cw.reduce((a, b) => a + b, 0);
   d.text(tX, tY + 0.12 * u, 0.22 * u, "ตารางฐานราก", "C-TITLE", 0, 1, 0, 3);
-  const rows = [heads, ...groups.map((g) => footingScheduleRow(g.f, g.mark, g.list.length))];
+  const rows = [heads, ...groups.map((g) => footingScheduleRow(g.f, g.mark, g.list.filter((x) => !x.dup).length))];
   rows.forEach((row, i) => { const y = tY - i * rh; d.line(tX, y, tX + tw, y, i ? "C-FRAME2" : "C-FRAME"); let x = tX; row.forEach((s, j) => { d.text(x + 0.08 * u, y - rh / 2, (i ? 0.14 : 0.15) * u, s, "C-TEXT", 0, 2, 0, 3); x += cw[j]; }); });
   { const yE = tY - rows.length * rh; d.line(tX, yE, tX + tw, yE, "C-FRAME"); let x = tX; for (let j = 0; j <= cw.length; j++) { d.line(x, tY, x, yE, "C-FRAME2"); x += cw[j] ?? 0; } }
   const qa = frameData.soil?.qa, pileF = groups.find((g) => g.f.kind !== "spread" && g.f.n);
@@ -127,7 +130,7 @@ function planSheet(d, X0, k, frameData, res, project, title) {
 export function footingSheetsDxf(frameData, res, project = {}) {
   const foots = (res.footings ?? []).filter((f) => f.r && f.inp);
   if (!foots.length) return { dxf: "", sheets: 0, error: "ยังไม่มีฐานรากที่ออกแบบแล้ว" };
-  const fx = foots.flatMap((f) => [f.p[0] - f.r.Bx / 2, f.p[0] + f.r.Bx / 2]), fy = foots.flatMap((f) => [f.p[1] - f.r.By / 2, f.p[1] + f.r.By / 2]);
+  const fx = foots.flatMap((f) => [(f.center ?? f.p)[0] - f.r.Bx / 2, (f.center ?? f.p)[0] + f.r.Bx / 2]), fy = foots.flatMap((f) => [(f.center ?? f.p)[1] - f.r.By / 2, (f.center ?? f.p)[1] + f.r.By / 2]);
   const G = frameData.floors?.[0]?.grid ?? {}, ax = G.dx?.length ? gridAxes(G) : { GX: [], GY: [] };
   const w = Math.max(...fx, ...ax.GX) - Math.min(...fx, ...ax.GX), h = Math.max(...fy, ...ax.GY) - Math.min(...fy, ...ax.GY), nG = footingGroups(frameData, res).groups.length;
   // smallest scale where the plan (+ bubbles / dims) and the table fit the drawing area
@@ -144,5 +147,6 @@ export function footingSheetsDxf(frameData, res, project = {}) {
 export function footingDetailFor(frameData, res, f, mark = "") {
   const mat = frameData.mat ?? {}, c = (res.columns ?? []).find((x) => x.floor === 0 && Math.hypot(x.p[0] - f.p[0], x.p[1] - f.p[1]) < 0.05);
   const count = (res.footings ?? []).filter((g) => g.r && footingMarks(res.footings.filter((x) => x.r && x.inp)).mark(g) === mark).length;
+  if (f.kind === "combined") return combinedDetailModel(f, { mark });
   return footingDetailModel(f, { mark, count: mark ? count : 0, lv: c?.lv, colName: c ? frameData.colTypes?.[c.typeIdx]?.name : "", coverCol: mat.coverPier ?? mat.coverCol ?? mat.cover ?? 3 });
 }
