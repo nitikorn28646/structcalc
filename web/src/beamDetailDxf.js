@@ -19,15 +19,16 @@ const f = (v) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(4);
 // R2010 writer (user 2026-11-18: R12 could not carry the AngsanaUPC font family → Thai showed ???): entities with handles and the
 // modelspace owner, appended to the ezdxf-made skeleton (src/dxfTemplate2010.js); text in UTF-8 as is
 const OWNER = "17";
-class Dxf {
+const EXTRA_LAYERS = [["C-HATCH", 8], ["C-PILE", 4], ["C-GRID", 1], ["C-COL", 7]];
+export class Dxf {
   constructor() { this.e = []; this.h = 0x1000; }
   head(type, l, color) { return `0\n${type}\n5\n${(this.h++).toString(16).toUpperCase()}\n330\n${OWNER}\n100\nAcDbEntity\n8\n${l}${color ? `\n62\n${color}` : ""}`; }
   line(x1, y1, x2, y2, l, color = 0) { this.e.push(`${this.head("LINE", l, color)}\n100\nAcDbLine\n10\n${f(x1)}\n20\n${f(y1)}\n30\n0\n11\n${f(x2)}\n21\n${f(y2)}\n31\n0`); }
   arc(x, y, r, a0, a1, l, color = 0) { this.e.push(`${this.head("ARC", l, color)}\n100\nAcDbCircle\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}\n100\nAcDbArc\n50\n${f(a0)}\n51\n${f(a1)}`); }
   circle(x, y, r, l, color = 0) { this.e.push(`${this.head("CIRCLE", l, color)}\n100\nAcDbCircle\n10\n${f(x)}\n20\n${f(y)}\n30\n0\n40\n${f(r)}`); }
   // polyline; pts [[x, y, bulge]]
-  poly(pts, l, closed = true, w = 0) {
-    this.e.push(`${this.head("LWPOLYLINE", l, 0)}\n100\nAcDbPolyline\n90\n${pts.length}\n70\n${closed ? 1 : 0}\n43\n${w ? f(w) : 0}${pts.map(([x, y, b = 0]) => `\n10\n${f(x)}\n20\n${f(y)}${b ? `\n42\n${f(b)}` : ""}`).join("")}`);
+  poly(pts, l, closed = true, w = 0, color = 0) {
+    this.e.push(`${this.head("LWPOLYLINE", l, color)}\n100\nAcDbPolyline\n90\n${pts.length}\n70\n${closed ? 1 : 0}\n43\n${w ? f(w) : 0}${pts.map(([x, y, b = 0]) => `\n10\n${f(x)}\n20\n${f(y)}${b ? `\n42\n${f(b)}` : ""}`).join("")}`);
   }
   // h = text height (m); ha 0 left / 1 centre / 2 right, va 0 baseline / 1 bottom / 2 middle / 3 top
   text(x, y, h, s, l = "C-TEXT", ha = 0, va = 0, rot = 0, color = 0, at = null, wf = 1) {
@@ -45,7 +46,9 @@ class Dxf {
   }
   toString() {
     const ents = this.e.join("\n");
-    return DXF2010.replace("\n  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n", `\n  0\nSECTION\n  2\nENTITIES\n${ents}\n  0\nENDSEC\n`)
+    // layers the skeleton does not have (footing sheets 2026-11-24): records appended to the LAYER table with fresh handles
+    const lay = EXTRA_LAYERS.map(([n, col]) => `  0\nLAYER\n  5\n${(this.h++).toString(16).toUpperCase()}\n330\n1\n100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord\n  2\n${n}\n 70\n0\n 62\n${col}\n  6\nContinuous\n370\n-3\n390\n13\n347\n21\n`).join("");
+    return DXF2010.replace("  0\nENDTAB\n  0\nTABLE\n  2\nSTYLE", `${lay}  0\nENDTAB\n  0\nTABLE\n  2\nSTYLE`).replace(/(\n  2\nLAYER\n  5\n1\n330\n0\n100\nAcDbSymbolTable\n 70\n)(\d+)/, (_, a, n) => `${a}${+n + EXTRA_LAYERS.length}`).replace("\n  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n", `\n  0\nSECTION\n  2\nENTITIES\n${ents}\n  0\nENDSEC\n`)
       .replace(/(\$HANDSEED\n\s*5\n)[0-9A-F]+/, `$1${this.h.toString(16).toUpperCase()}`);
   }
 }
@@ -91,14 +94,14 @@ function section(d, t, mat, at, ext, ox, oy, title, th = 0.035, sub = "") {
 }
 
 // ---------------------------------------------------------------- sheet frame (A3 1:25 in metres) — the user's title block layout
-const SW = 10.5, SH = 7.425, BX0 = 0.407, BX1 = 10.15, BY0 = 0.225, BY1 = 7.2, TX = 9.057;
+export const SW = 10.5, SH = 7.425, BX0 = 0.407, BX1 = 10.15, BY0 = 0.225, BY1 = 7.2, TX = 9.057;
 const TB_LINES = [0.95, 0.957, 1.207, 1.332, 1.34, 1.715, 1.84, 1.847, 2.097, 2.222, 2.23, 2.48, 2.605, 2.612, 2.737, 3.112, 3.237, 3.245, 3.37,
   3.745, 3.87, 3.877, 4.002, 4.377, 4.502, 4.51, 4.635, 5.135, 5.26, 5.267, 5.767, 5.892, 5.9];
 const thDate = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? ""); return m ? `${m[3]} / ${m[2]} / ${+m[1] + 543}` : (iso || ""); };
 // split a long Thai line in two at a space near the middle
 const split2 = (s, max) => { s = String(s ?? "").trim(); if (s.length <= max) return [s]; const sp = [...s.matchAll(/\s+/g)].map((m) => m.index); if (!sp.length) return [s];
   const k = sp.reduce((a, b) => (Math.abs(b - s.length / 2) < Math.abs(a - s.length / 2) ? b : a)); return [s.slice(0, k).trim(), s.slice(k).trim()]; };
-function frame(d, X, p, title) {
+export function frame(d, X, p, title) {
   const L = (x1, y1, x2, y2, l = "C-FRAME2") => d.line(X + x1, y1, X + x2, y2, l), T = (x, y, h, s, ha = 0) => s && d.text(X + x, y, h, s, "C-TEXT", ha, ha ? 2 : 0);
   d.poly([[X, 0], [X + SW, 0], [X + SW, SH], [X, SH]], "Defpoints"); // sheet edge (not plotted, as in the user's frame)
   d.poly([[X + BX0, BY0], [X + BX1, BY0], [X + BX1, BY1], [X + BX0, BY1]], "C-FRAME");
@@ -245,7 +248,12 @@ export function downloadText(text, name, type = "application/dxf") {
 // metres) on the same A3 frame, packed in rows; a model primitive → DXF entity (dashed lines as dash pieces, no extra LTYPE entries —
 // see the beam sheet note; distribution / corner bars as LWPOLYLINE donuts with a constant width, as on the user's drawing)
 export function stairSheetsDxf(secs, project = {}, title = "แบบขยายบันได") {
-  const d = new Dxf(), AW = TX - BX0 - 0.3, AH = BY1 - BY0 - 0.3, sheets = [];
+  const d = new Dxf(), n = modelSheets(d, secs, project, title, 0);
+  return { dxf: d.toString(), sheets: n };
+}
+// models packed in rows on A3 1:25 sheets placed from x = X0 (stairs, footing details); returns the number of sheets
+export function modelSheets(d, secs, project, title, X0 = 0, first = 1, total = 0) {
+  const AW = TX - BX0 - 0.3, AH = BY1 - BY0 - 0.3, sheets = [];
   let sh = null, y = 0, rowH = 0, x = 0;
   for (const s of secs) {
     const [a, b, c, e] = s.model.box, w = c - a, h = e - b;
@@ -254,9 +262,10 @@ export function stairSheetsDxf(secs, project = {}, title = "แบบขยา�
     }
     sh.push({ s, x, y, w, h }); x += w + 0.25; rowH = Math.max(rowH, h + 0.25);
   }
+  const nAll = total || sheets.length;
   sheets.forEach((list, k) => {
-    const X = k * (SW + 0.5);
-    frame(d, X, project, sheets.length > 1 ? `${title} (${k + 1}/${sheets.length})` : title);
+    const X = X0 + k * (SW + 0.5);
+    frame(d, X, project, nAll > 1 ? `${title} (${first + k}/${nAll})` : title);
     // the sections of a sheet centred in the drawing area (a stair section at 1:25 often fills a sheet alone)
     const usedH = Math.max(...list.map((it) => it.y + it.h)), dy = Math.max(0, (AH - usedH) / 2);
     for (const it of list) {
@@ -265,9 +274,9 @@ export function stairSheetsDxf(secs, project = {}, title = "แบบขยา�
       emitModel(d, it.s.model, ox, oy);
     }
   });
-  return { dxf: d.toString(), sheets: sheets.length };
+  return sheets.length;
 }
-function emitModel(d, m, ox, oy) {
+export function emitModel(d, m, ox, oy) {
   const P = (p) => [ox + p[0], oy + p[1], p[2] ?? 0];
   for (const p of m.items) {
     if (p.t === "line") {
@@ -278,6 +287,7 @@ function emitModel(d, m, ox, oy) {
     } else if (p.t === "poly") d.poly(p.pts.map(P), p.layer, !!p.closed);
     else if (p.t === "circle") d.circle(ox + p.x, oy + p.y, p.r, p.layer);
     else if (p.t === "disk") { const r = p.r / 2; d.poly([[ox + p.x - r, oy + p.y, 1], [ox + p.x + r, oy + p.y, 1]], p.layer, true, p.r); }
+    else if (p.t === "solid") { const w = p.y1 - p.y0, ym = (p.y0 + p.y1) / 2; d.poly([[ox + p.x0, oy + ym], [ox + p.x1, oy + ym]], p.layer, false, w); }
     else if (p.t === "tri") d.poly([[ox + p.x, oy + p.y], [ox + p.x - p.s * 0.6, oy + p.y + p.s], [ox + p.x + p.s * 0.6, oy + p.y + p.s]], p.layer, true);
     else if (p.t === "text") d.text(ox + p.x, oy + p.y, p.h, p.s, p.layer, p.ha ?? 0, p.va ?? 0, p.rot ?? 0);
   }

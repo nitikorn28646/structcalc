@@ -887,3 +887,18 @@ spacing ≤ min(3h, 45 cm) — r.d15Ok / AsTempOk / sMaxOk in ok, rows in the fo
 development / depth need it (15 t on a 20×20 pier → 0.30; 40 t → 0.35). User's house (_anucha, "↻ จัดขนาดใหม่" simulated): F1–F5 all t 0.25,
 footing concrete 10.49 → 8.74 m³, cost −17 %, 18/18 pass, audit-detail F1 18/18. Existing fixed types unchanged until re-sized. frame-check: economical
 row (never dearer than the t 0.30 start, all checks, tMin values).
+FOOTING DXF (2026-11-24, user's new_block.dxf EN-02 plan 1:100 + EN-11…13 details 1:25 as the model, "แบบขยายไหนไม่สวยปรับได้"): step 8 button
+"ส่งออก DXF แปลน + แบบขยายฐานราก" → src/footingDxf.js footingSheetsDxf(frame, res, project) = ONE R2010 file: sheet 1 = footing plan on the same A3
+frame drawn ×(S/25) (S = 1:100, larger 125/150/200… only when the plan + table do not fit): grid dash-dot + bubbles (X letters top, Y numbers right
+as the app), spacing chains + overall, footings at true size (clash = red thick outline), width / length dims where there is room, tag "F1,C1",
+columns solid (LWPOLYLINE width) at their type size, piles dashed, schedule table (mark, count, size, Df, piles / spread, bars X / Y, pier, dowels)
++ notes (qa, pile safe loads, lean concrete), title + scale; sheets 2… = engine/footingDetail.js footingDetailModel per mark (plan: mesh drawn
+as bars (sample showed only hook dots), perimeter tie 1-RB 9 รัดรอบ (standard detail, not in the design), pier + its bars, piles dashed, chains /
+cover / section cut ก; section ก–ก: footing, pier + column break, ground, lean concrete + sand hatched, X bars with 90° hooks 12db ≥ 0.15,
+Y bars as dots above, ring near the top, pier bars to the mat with the foot max(12db, 0.25) bent out, ties in pier + 1–2 in the footing, piles
+with breaks, ▼ levels ±0.00 / −Df, leaders), packed 2 per sheet by modelSheets (stairSheetsDxf refactored onto it). User 2026-11-24: NO callout
+for the pier bars / ties ("เหล็กตอม่อไม่ต้องชี้บอก"). Bars: "long" = along X spaced across By, bottom layer (footing.js). Dxf: extra layers
+C-HATCH / C-PILE / C-GRID / C-COL appended to the template LAYER table, poly(…, color), model primitive "solid". footingMarks moved to
+src/footingMarks.js (plain JS; FootingPlan re-exports). Step 8 and the report footing figures now draw the same model (src/FootingDrawing.jsx).
+cli/footingdxf-check.mjs (in the gate): drawn bars = nLong / nShort, texts from the design, dims, piles, no pier callout, tags, schedule, no NaN
+(208 checks on 5 projects); ezdxf audit 0 errors. Drawing only — no check changed.

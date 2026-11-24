@@ -5,14 +5,16 @@
 // 3 each column: a type or auto (= the lightest type that passes, like the roof wall-plate types; no types = built-in options)
 // 4 drawings (plan + section) of the governing footing of every type in use, and of the selected column.
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Download } from "lucide-react";
+import { footingSheetsDxf } from "./footingDxf.js";
+import { downloadText } from "./beamDetailDxf.js";
 import { fmt } from "./beamModel.js";
 import Drawing from "./Drawing.jsx";
 import { footingModel, pileCapModel } from "./drawings.js";
 import { PILES } from "../engine/footing.js";
 import { DEFAULT_FOOTING, PILE_SAFE, designFooting, autoFootingFor } from "../engine/frame.js";
 import FootingPlan, { FootingLegend, footingMarks } from "./FootingPlan.jsx";
-import { FootingDetail } from "./Details.jsx";
+import { FootingDrawing } from "./FootingDrawing.jsx";
 import { FootingCage3D } from "./Cage3D.jsx";
 import { SLAB_BARS } from "../engine/tables.js";
 
@@ -29,7 +31,7 @@ const WHY_S = { vpFullOk: "เฉือนทะลุ (แรงเต็ม) �
 const why = (f) => f.kind === "spread" ? (f.error ?? Object.keys(WHY_S).filter((k) => f.r?.[k] === false).map((k) => WHY_S[k]).join(" · ")) : (f.error ? f.error : f.r ? Object.keys(WHY).filter((k) => f.r[k] === false && !(f.n === 1 && (k === "ancOk" || k === "perimOk"))).map((k) => WHY[k]).join(" · ") : "");
 const Num = ({ v, on, step = "0.05", w = "w-16" }) => <input type="number" step={step} value={v} onChange={(e) => on(Number(e.target.value))} className={`${box} ${w}`} />;
 
-export function FootingTypes({ frame, set, res }) {
+export function FootingTypes({ frame, set, res, project = {} }) {
   const types = frame.footTypes ?? [], pick = frame.footPick ?? {}, fo = frame.footing ?? {}, loads = frame.pileLoads;
   const [selStack, setSelStack] = useState(null);
   const safe = (p) => loads?.[p] ?? PILE_SAFE[p] ?? fo.Psafe ?? 18000;
@@ -75,7 +77,7 @@ export function FootingTypes({ frame, set, res }) {
   const foots = res.footings ?? [], shown = foots.find((f) => f.stack === selStack);
   const governing = [...new Set(foots.map((f) => f.type ?? null))].map((ty) => foots.filter((f) => (f.type ?? null) === ty).reduce((a, f) => ((f.util ?? 0) > (a.util ?? 0) ? f : a)));
   // construction-drawing detail (plan + section) and a 3D cage on demand (one at a time)
-  const draw = (f) => f?.inp && f.r ? (cage3 === f.stack ? <FootingCage3D f={f} className="h-[260px] overflow-hidden rounded-lg" /> : <FootingDetail f={f} mark={marks?.mark?.(f) ?? ""} className="mx-auto h-[78mm] w-full overflow-visible" />) : <p className="text-gray-400">ไม่มีรูป ({f?.error ?? "ยังไม่ได้ออกแบบ"})</p>;
+  const draw = (f) => f?.inp && f.r ? (cage3 === f.stack ? <FootingCage3D f={f} className="h-[260px] overflow-hidden rounded-lg" /> : <FootingDrawing frame={frame} res={res} f={f} mark={marks?.mark?.(f) ?? ""} className="h-[110mm]" />) : <p className="text-gray-400">ไม่มีรูป ({f?.error ?? "ยังไม่ได้ออกแบบ"})</p>;
   const marks = footingMarks(res.footings);
   // per footing auto size (user 2026-11-06): the cheapest passing footing for this column → its own type (the picked type is changed in place
   // when no other column uses it, else a new type F… is added and picked for this column only)
@@ -89,11 +91,17 @@ export function FootingTypes({ frame, set, res }) {
     else { set("footTypes", [...types, { ...o.type, name: nextName() }]); set("footPick", { ...pick, [f.stack]: types.length }); }
     setAutoMsg((m) => ({ ...m, [f.stack]: { ok: !o.note, text: txt } }));
   };
-  const [cage3, setCage3] = useState(null);
+  const [cage3, setCage3] = useState(null), [dxfMsg, setDxfMsg] = useState("");
   return (
     <div className="max-w-[1500px] space-y-5 text-[12px]">
       <section className="rounded-xl border border-gray-200 bg-white p-3 dark:bg-white/[0.03]">
-        <h3 className="mb-1 text-sm font-semibold text-gray-800">แปลนฐานราก (ใต้ {frame.floors[0]?.name}) — ขนาดจริง สีตามแบบฐาน</h3>
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-800">แปลนฐานราก (ใต้ {frame.floors[0]?.name}) — ขนาดจริง สีตามแบบฐาน</h3>
+          <button onClick={() => { const o = footingSheetsDxf(frame, res, project); setDxfMsg(o.error ?? `${o.sheets} แผ่น · แปลน 1:${o.scale} + แบบขยาย 1:25`); if (o.dxf) downloadText(o.dxf, "แปลนและแบบขยายฐานราก.dxf"); }}
+            title="แผ่นที่ 1 แปลนฐานราก (กริด ขนาด ป้าย F/C ตารางฐานราก) · แผ่นต่อไป แบบขยายแต่ละฐาน (แปลน + รูปตัด) มาตราส่วน 1:25"
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-brand-600 ring-1 ring-brand-300 hover:bg-brand-50"><Download className="h-3.5 w-3.5" />ส่งออก DXF แปลน + แบบขยายฐานราก</button>
+          {dxfMsg && <span className="text-[11px] text-gray-500">{dxfMsg}</span>}
+        </div>
         <FootingPlan floor={frame.floors[0]} footings={res.footings} columns={res.columns.filter((c) => c.floor === 0)} colTypes={frame.colTypes} marks={marks} className="h-[520px] w-full" />
         <FootingLegend footings={res.footings} marks={marks} />
       </section>

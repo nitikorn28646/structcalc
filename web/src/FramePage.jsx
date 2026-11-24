@@ -494,7 +494,7 @@ export function FramePage({ frame, set, dark, roof, res: resIn, step = "frame", 
       <BeamTypeFigures types={types} mat={frame.mat} spans={res.floors.flatMap((f) => f.spans)} onTypes={(v) => set("beamTypes", v)} project={project} joints={lvJ} planted={res.planted} widens={widenSections(widenUses(frame, res))} count={(i) => res.floors.reduce((a, f) => a + f.spans.filter((x) => x.typeIdx === i).length, 0)} />
       <LevelJointsCard rows={lvJ.rows} groups={lvJ.groups} depth={lvJ.depth} dgroups={lvJ.dgroups} mat={frame.mat} /><PlantedColsCard rows={res.planted ?? []} groups={plantedGroups(res.planted ?? [])} mat={frame.mat} /><WidenTypesCard frame={frame} set={set} res={res} /></div>
     : step === "design" && sub === "ctypes" ? <div className="space-y-4"><AutoColTypes frame={frame} set={set} res={res} /><ColTypeTable head={coverInline(["coverCol", "coverPier"])} types={cTypes} setTypes={(v) => set("colTypes", v)} res={res} floors={frame.floors} delType={(i) => { const r = deleteColType(frame, i); set("colTypes", r.colTypes); set("colPick", r.colPick); }} /><ColumnTypeFigures types={cTypes} mat={frame.mat} /><PlantedColsCard rows={res.planted ?? []} groups={plantedGroups(res.planted ?? [])} mat={frame.mat} /></div>
-    : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} /></div>
+    : step === "footing" ? <div>{coverBar(["coverFoot"])}<FootingTypes frame={frame} set={set} res={res} project={project ?? {}} /></div>
     : step === "design" && sub === "slabs" ? (() => {
       // every slab / cantilever slab / stair: this floor or all floors, bars by position, section drawing; row → flashes on the plan
       const ks = slabAll ? frame.floors.map((_, k) => k) : [cur];

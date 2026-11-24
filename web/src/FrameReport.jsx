@@ -1,7 +1,8 @@
 // Thai calculation report for the RC frame drawn on plan: loads, slab panels, continuous beams, beam / column types, schedules.
 import { PILE_SAFE } from "../engine/frame.js";
 import FootingPlan, { FootingLegend, footingMarks } from "./FootingPlan.jsx";
-import { BeamDetail, ColumnDetail, FootingDetail } from "./Details.jsx";
+import { BeamDetail, ColumnDetail } from "./Details.jsx";
+import { FootingDrawing } from "./FootingDrawing.jsx";
 import { FootingCageParts } from "./Cage3D.jsx";
 import { BeamCageParts } from "./BeamCage3D.jsx";
 import { Still3D } from "./Snapshot3D.jsx";
@@ -365,7 +366,7 @@ export function FrameReport({ frame, project, part = "all", nOf = null, res: res
           <div className="grid grid-cols-2 gap-2">{[...fNames.entries()].map(([key, name]) => {
             const f = res.footings.filter((x) => fKey(x) === key).reduce((a, x) => ((x.P ?? 0) > (a.P ?? 0) ? x : a));
             return f.inp && f.r ? <Figure key={key} caption={`${name} · ${f.kind === "spread" ? `ฐานแผ่ ${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp.t, 2)} ม.` : `เข็ม ${f.n} × ${f.pile} ฐาน ${fmt(f.r.Bx, 2)} × ${fmt(f.r.By, 2)} × ${fmt(f.inp.t, 2)} ม.`} · ${res.footings.filter((x) => fKey(x) === key).length} ฐาน`}>
-              <div className="grid grid-cols-[3fr_2fr] items-center gap-1"><FootingDetail f={f} mark={name} className="mx-auto h-[72mm] w-full overflow-visible" /><Still3D id={`ft-${name}-${fmt(f.r.Bx, 2)}x${fmt(f.r.By, 2)}-${f.n}-${f.inp?.sLong}`} node={<FootingCageParts f={f} />} className="h-[60mm] w-full" /></div></Figure> : null; })}</div></>}
+              <div className="grid grid-cols-[3fr_2fr] items-center gap-1"><FootingDrawing frame={frame} res={res} f={f} mark={name} px={150} className="h-[92mm]" /><Still3D id={`ft-${name}-${fmt(f.r.Bx, 2)}x${fmt(f.r.By, 2)}-${f.n}-${f.inp?.sLong}`} node={<FootingCageParts f={f} />} className="h-[60mm] w-full" /></div></Figure> : null; })}</div></>}
         </Sec>}
 
         {show("back", "schedules") && <Sec id="c-schedules" n={N("c-schedules")} th="ตารางหน้าตัดและเหล็กเสริม" en="Schedules" intro="ขนาดและเหล็กเสริมที่ใช้ ความยาวคานรวมวัดตามแนวศูนย์กลาง ยังไม่รวมระยะทาบและเศษเหล็ก">
